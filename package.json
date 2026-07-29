@@ -1,0 +1,22 @@
+{
+  "name": "navimower-map-card",
+  "version": "0.1.0",
+  "description": "Home Assistant dashboard map card for the Navimower integration",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node --check src/navimower-map-card.js && node --check dist/navimower-map-card.js",
+    "test": "npm run build && npm run check && npm run smoke",
+    "smoke": "node tests/smoke.mjs"
+  },
+  "keywords": [
+    "home-assistant",
+    "hacs",
+    "lovelace",
+    "navimower",
+    "navimow",
+    "robot-mower"
+  ],
+  "author": "Toomas V\u00e4hesoo",
+  "license": "MIT"
+}

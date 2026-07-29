@@ -1,5 +1,7 @@
 # Navimower Map Card
 
+![Navimower Map Card](docs/images/navimower-map-card.svg)
+
 A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo/NaviMower) custom integration.
 
 The card renders the decoded private-cloud lawn map and overlays the live MQTT mower position, heading, current mowing trail, local channels, tunnels, charging station, battery, physical zone, and mowing-session times.
@@ -17,6 +19,7 @@ The card renders the decoded private-cloud lawn map and overlays the live MQTT m
 - Current-session mowing trail
 - Battery, mower status, and current physical zone below the map
 - Session times supplied by the integration map API
+- Interactive zone labels with progress, mowing times, and cutting height
 - Automatic entity discovery from one `lawn_mower` entity
 - Visual card editor
 - Pinch zoom, mouse-wheel zoom, and pan
@@ -94,7 +97,7 @@ remember_view: false
 - `mower`
 - `dock`
 
-The reset button and a double-click reset the map to the configured initial view.
+A double-click or double-tap resets the map to the configured initial view.
 
 ## Advanced example
 
@@ -126,8 +129,6 @@ trail_color: "#43a047"
 trail_opacity: 0.4
 channel_color: "#8e24aa"
 tunnel_color: "#039be5"
-mower_body_color: "#263238"
-mower_accent_color: "#ff6d00"
 dock_color: "#37474f"
 ```
 
@@ -153,11 +154,23 @@ The `status_entity` override normally does not need to be set because the select
 - Mouse wheel: zoom at pointer position
 - Two-finger pinch: zoom on mobile
 - One-finger drag: pan while zoomed in
-- `+` and `-`: zoom around the current center
-- Reset button or double-click: configured initial view
+- Double-click or double-tap: configured initial view
 - At 1x zoom, a one-finger vertical gesture remains available for dashboard scrolling
 
 When `remember_view` is enabled, the last view is stored only in that browser's local storage. It is not written to Home Assistant.
+
+## Zone details
+
+Zone names and percentages on the map are interactive. Click or tap a zone label to view:
+
+- current or last reported coverage percentage
+- last time the zone was mowed
+- last time the zone was completed
+- cutting height
+
+The cutting height can already be read from decoded map settings. Exact last-mowed and last-completed timestamps require the Navimower integration to provide `zone_details` in the map API payload. Until then, those rows show **Not available** instead of deriving history from the browser or Home Assistant Recorder.
+
+See [docs/SESSION_API.md](docs/SESSION_API.md) for the map API fields supported by the card.
 
 ## Session times
 

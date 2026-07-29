@@ -1,0 +1,6 @@
+type: custom:navimower-map-card
+entity: lawn_mower.tont
+title: Navimower Map
+initial_zoom: 1.4
+initial_focus: mower
+remember_view: false

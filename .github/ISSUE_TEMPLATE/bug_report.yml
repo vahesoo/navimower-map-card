@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a problem with Navimower Map Card
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping test Navimower Map Card.
+  - type: input
+    id: card_version
+    attributes:
+      label: Card version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Client
+      options:
+        - Home Assistant Android app
+        - Android Chrome
+        - Desktop Chrome
+        - Desktop Firefox
+        - Safari / iOS app
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include the card configuration and browser console error when possible.
+    validations:
+      required: true

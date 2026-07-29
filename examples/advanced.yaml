@@ -25,6 +25,4 @@ trail_color: "#43a047"
 trail_opacity: 0.4
 channel_color: "#8e24aa"
 tunnel_color: "#039be5"
-mower_body_color: "#263238"
-mower_accent_color: "#ff6d00"
 dock_color: "#37474f"

@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 0.1.7 - 2026-07-30
+
+- Integrated Mow, Pause, and Dock controls into the bottom of the map card.
+- The Mow button resumes an active paused mowing job immediately; when no resumable job exists, it opens the zone-aware Mow now dialog.
+- Added ordered zone selection: selected zone numbers follow the tap order and the same ordered ID list is passed to `navimower.mow`.
+- Added the `Clear previous mowing progress` option for the integration service's `reset` parameter.
+- Bundled the Mow now dialog into the existing `navimower-map-card.js` resource; no separate frontend resource is required.
+- Removed temporary doodle rendering and its visual-editor/YAML settings until the vendor scale can be mapped reliably.
+
 ## 0.1.6 - 2026-07-30
 
 - Updated all active package and runtime version references to `0.1.6`.
@@ -9,7 +18,6 @@ All notable changes to this project are documented here.
 - Updated the README to consistently use `Off-limit`, `VF-off`, `Channel`, and `Gate area`.
 - Updated README YAML examples to use the current v0.1.5+ configuration keys and default colors.
 - Replaced the first-release-only checklist with a reusable release checklist for future versions.
-- No map rendering behavior changed from v0.1.5; this release refreshes release metadata and documentation so HACS can detect a new version cleanly.
 
 ## 0.1.5 - 2026-07-30
 

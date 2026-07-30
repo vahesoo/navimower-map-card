@@ -1,6 +1,6 @@
 # Navimower Map Card
 
-![Navimower Map Card](docs/images/navimower-map-card.svg)
+![Navimower Map Card](docs/images/navimower-map-card.svg?v=0.1)
 
 A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo/NaviMower) custom integration.
 

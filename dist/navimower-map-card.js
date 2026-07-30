@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.1.9
+ * Version 0.1.11
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.9";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.11";
 const VIEW_SIZE = 1000;
 
 // Embedded H2 mower artwork from the earlier Navimow Map Card. Keeping the
@@ -543,6 +543,7 @@ class NavimowerMapCard extends HTMLElement {
         <div class="nm-header">
           <div class="nm-title"></div>
           <button type="button" class="nm-schedule-button" aria-label="Open mowing schedule" title="Mowing schedule">
+            <span>Schedule</span>
             <ha-icon icon="mdi:calendar-clock"></ha-icon>
           </button>
         </div>
@@ -579,12 +580,13 @@ class NavimowerMapCard extends HTMLElement {
         ha-card { padding: 12px; overflow: hidden; }
         .nm-header { display: flex; align-items: center; gap: 8px; min-height: 32px; margin: 0 2px 8px; }
         .nm-title { flex: 1; min-width: 0; font-size: 1.05rem; font-weight: 600; color: var(--primary-text-color); }
-        .nm-schedule-button { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center;
-          padding: 0; border: 0; border-radius: 50%; cursor: pointer; color: var(--secondary-text-color);
-          background: transparent; }
-        .nm-schedule-button:hover, .nm-schedule-button:focus-visible { color: var(--primary-color);
-          background: color-mix(in srgb, var(--primary-color) 10%, transparent); outline: none; }
-        .nm-schedule-button ha-icon { --mdc-icon-size: 22px; }
+        .nm-schedule-button { min-height: 34px; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+          padding: 0 9px 0 11px; border: 0; border-radius: 18px; cursor: pointer; color: var(--secondary-text-color);
+          background: transparent; font: inherit; font-size: .86rem; font-weight: 600; }
+        .nm-schedule-button.active { color: #FF5A00; }
+        .nm-schedule-button:hover, .nm-schedule-button:focus-visible {
+          background: color-mix(in srgb, currentColor 10%, transparent); outline: none; }
+        .nm-schedule-button ha-icon { --mdc-icon-size: 20px; }
         .nm-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden;
           border-radius: 10px; background: var(--secondary-background-color); }
         .nm-map { width: 100%; height: 100%; display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
@@ -713,7 +715,7 @@ class NavimowerMapCard extends HTMLElement {
         .nm-session-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
         .nm-session-note { opacity: .75; }
         .nm-session-highlight { pointer-events: none; }
-        .nm-session-highlight polyline { animation: nm-session-route-pulse 600ms ease-in-out 3; }
+        .nm-session-highlight polyline { animation: nm-session-route-pulse 550ms ease-in-out 3; }
         @keyframes nm-session-route-pulse {
           0%, 100% { opacity: .06; stroke-width: var(--nm-highlight-width); filter: none; }
           50% { opacity: 1; stroke-width: var(--nm-highlight-pulse-width);
@@ -781,7 +783,13 @@ class NavimowerMapCard extends HTMLElement {
     this._titleEl.parentElement.style.display = "flex";
     if (this._scheduleButtonEl) {
       const scheduleEntity = this._resolved.schedule_entity || this._config.schedule_entity;
-      this._scheduleButtonEl.title = scheduleEntity ? `Mowing schedule · ${scheduleEntity}` : "Mowing schedule";
+      const scheduleEnabled = this._scheduleEnabled();
+      this._scheduleButtonEl.classList.toggle("active", scheduleEnabled);
+      this._scheduleButtonEl.setAttribute("aria-pressed", scheduleEnabled ? "true" : "false");
+      const stateText = scheduleEnabled ? "On" : "Off";
+      this._scheduleButtonEl.title = scheduleEntity
+        ? `Mowing schedule · ${stateText} · ${scheduleEntity}`
+        : `Mowing schedule · ${stateText}`;
     }
     this._sessionsEl.style.display = this._config.show_session_legend ? "flex" : "none";
     this._syncMowedAreaStyle();
@@ -930,7 +938,11 @@ class NavimowerMapCard extends HTMLElement {
       const payload = await this._hass.callApi("GET", path);
       const nextPayload = payload || {};
       const payloadSession = finiteNumber(nextPayload.trail_session, finiteNumber(attrs.trail_session, 0));
-      const backendTrail = this._normalizePoints(nextPayload.trail);
+      const backendSegments = this._normalizeTrailSegments(nextPayload.trail_segments, []);
+      const flatBackendTrail = backendSegments.flatMap((segment) => segment);
+      const backendTrail = this._normalizePoints(nextPayload.trail).length
+        ? this._normalizePoints(nextPayload.trail)
+        : flatBackendTrail;
       if (this._trailSession === null || payloadSession !== this._trailSession) {
         this._trail = backendTrail;
         this._trailSession = payloadSession;
@@ -967,6 +979,40 @@ class NavimowerMapCard extends HTMLElement {
       .filter((point) => Array.isArray(point) && point.length >= 2)
       .map((point) => [Number(point[0]), Number(point[1])])
       .filter((point) => point.every(Number.isFinite));
+  }
+
+  _normalizeTrailSegments(rawSegments, fallbackPoints = []) {
+    if (Array.isArray(rawSegments)) {
+      const segments = rawSegments
+        .map((segment) => this._normalizePoints(segment))
+        .filter((segment) => segment.length);
+      if (segments.length) return segments;
+    }
+    return this._trailSegments(this._normalizePoints(fallbackPoints));
+  }
+
+  _activeTrailSegments() {
+    const backendSegments = this._normalizeTrailSegments(this._mapPayload?.trail_segments, []);
+    if (!backendSegments.length) return this._trailSegments(this._trail);
+
+    const segments = backendSegments.map((segment) => segment.map((point) => [...point]));
+    const backendPointCount = segments.reduce((total, segment) => total + segment.length, 0);
+    const extraPoints = this._trail.slice(backendPointCount);
+    for (const point of extraPoints) {
+      let current = segments.at(-1);
+      if (!current) {
+        current = [];
+        segments.push(current);
+      }
+      const previous = current.at(-1);
+      if (previous && (point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2 > 25) {
+        current = [];
+        segments.push(current);
+      }
+      const last = current.at(-1);
+      if (!last || last[0] !== point[0] || last[1] !== point[1]) current.push(point);
+    }
+    return segments.filter((segment) => segment.length >= 2);
   }
 
   _loadSessionFirstSeen(payload, attrs) {
@@ -1182,14 +1228,18 @@ class NavimowerMapCard extends HTMLElement {
       const active = Boolean(session.active || session.ended_at === null && session.started_at);
       const payloadPoints = this._normalizePoints(session.points || session.trail);
       const points = active && this._trail.length > payloadPoints.length ? this._trail : payloadPoints;
+      const segments = active
+        ? this._activeTrailSegments()
+        : this._normalizeTrailSegments(session.segments, points);
       return {
         id: session.id ?? session.session_id ?? index,
         started_at: session.started_at || session.start || session.start_time || null,
         ended_at: session.ended_at || session.end || session.end_time || null,
         active,
         points,
+        segments,
       };
-    }).filter((session) => session.started_at || session.points.length);
+    }).filter((session) => session.started_at || session.points.length || session.segments.length);
     if (!normalized.length && (this._trail.length || this._mapPayload?.trail_active)) {
       normalized.push({
         id: this._trailSession ?? 0,
@@ -1197,6 +1247,7 @@ class NavimowerMapCard extends HTMLElement {
         ended_at: this._mapPayload?.trail_ended_at || null,
         active: Boolean(this._mapPayload?.trail_active ?? true),
         points: this._trail,
+        segments: this._activeTrailSegments(),
         approximate: !(this._mapPayload?.trail_started_at || this._mapPayload?.session_started_at),
       });
     }
@@ -1206,10 +1257,10 @@ class NavimowerMapCard extends HTMLElement {
   _renderHistory() {
     if (!this._historyEl || !this._layout) return;
     const sessions = this._sessionRecords();
-    const drawable = sessions.filter((session) => !session.active && session.points.length >= 2);
+    const drawable = sessions.filter((session) => !session.active && session.segments.some((segment) => segment.length >= 2));
     const width = Math.min(Math.max(.25 * this._layout.scale, 5), 28);
     this._historyEl.innerHTML = drawable.map((session) =>
-      this._trailSegments(session.points).map((segment) =>
+      session.segments.filter((segment) => segment.length >= 2).map((segment) =>
         `<polyline class="nm-session-path" data-session-id="${escapeHtml(String(session.id))}" points="${this._pointString(segment)}" fill="none" stroke="${escapeHtml(this._config.trail_color)}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`
       ).join("")
     ).join("");
@@ -1218,7 +1269,7 @@ class NavimowerMapCard extends HTMLElement {
   _pulseSessionPath(sessionId) {
     if (!this._highlightEl || !this._layout) return;
     const session = this._sessionRecords().find((item) => String(item.id) === String(sessionId));
-    if (!session || session.points.length < 2) return;
+    if (!session || !session.segments.some((segment) => segment.length >= 2)) return;
 
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
     this._highlightEl.innerHTML = "";
@@ -1227,7 +1278,7 @@ class NavimowerMapCard extends HTMLElement {
     const width = Math.min(Math.max(.25 * this._layout.scale, 5), 28);
     const pulseWidth = Math.min(width * 2.35, 48);
     const color = escapeHtml(this._config.trail_color);
-    const paths = this._trailSegments(session.points).map((segment) =>
+    const paths = session.segments.filter((segment) => segment.length >= 2).map((segment) =>
       `<polyline points="${this._pointString(segment)}" fill="none" stroke="${color}" stroke-linecap="round" stroke-linejoin="round"/>`
     ).join("");
     if (!paths) return;
@@ -1241,7 +1292,7 @@ class NavimowerMapCard extends HTMLElement {
       this._highlightEl.innerHTML = "";
       button?.classList.remove("nm-session-pulsing");
       this._pulseTimer = null;
-    }, 1900);
+    }, 1700);
   }
 
   _updateLive() {
@@ -1302,14 +1353,15 @@ class NavimowerMapCard extends HTMLElement {
       if (this._trailEl) this._trailEl.innerHTML = "";
       return;
     }
-    if (this._trail.length < 2) {
+    const segments = this._activeTrailSegments();
+    if (!segments.length) {
       this._trailEl.innerHTML = "";
       return;
     }
     const width = Math.min(Math.max(.25 * this._layout.scale, 5), 28);
     const activeSession = this._sessionRecords().find((session) => session.active);
     const sessionId = activeSession?.id ?? this._trailSession ?? 0;
-    this._trailEl.innerHTML = this._trailSegments(this._trail)
+    this._trailEl.innerHTML = segments
       .map((segment) => `<polyline class="nm-session-path" data-session-id="${escapeHtml(String(sessionId))}" points="${this._pointString(segment)}" fill="none" stroke="${escapeHtml(this._config.trail_color)}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`)
       .join("");
   }
@@ -1455,6 +1507,18 @@ class NavimowerMapCard extends HTMLElement {
 
   _scheduleState() {
     return this._state(this._scheduleEntity());
+  }
+
+  _scheduleEnabled() {
+    const state = this._scheduleState();
+    if (!state || ["unknown", "unavailable", "none", ""].includes(String(state.state || "").toLowerCase())) {
+      return false;
+    }
+    const days = state.attributes?.days;
+    if (Array.isArray(days)) {
+      return days.some((day) => Boolean(day?.enabled) && Array.isArray(day?.periods) && day.periods.length > 0);
+    }
+    return String(state.state || "").trim().toLowerCase() !== "off";
   }
 
   _openScheduleDialog() {

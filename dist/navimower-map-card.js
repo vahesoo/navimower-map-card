@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.1.11
+ * Version 0.1.12
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.11";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.12";
 const VIEW_SIZE = 1000;
 
 // Embedded H2 mower artwork from the earlier Navimow Map Card. Keeping the
@@ -1425,7 +1425,11 @@ class NavimowerMapCard extends HTMLElement {
   }
 
   _availableMowZones() {
-    const zones = Array.isArray(this._mapPayload?.zones) ? this._mapPayload.zones : [];
+    const zones = Array.isArray(this._mapPayload?.map?.zones)
+      ? this._mapPayload.map.zones
+      : Array.isArray(this._mapPayload?.zones)
+        ? this._mapPayload.zones
+        : [];
     return zones
       .filter((zone) => zone && zone.id !== undefined && zone.id !== null)
       .map((zone) => ({ id: Number(zone.id), name: zone.name || `Zone ${zone.id}` }))

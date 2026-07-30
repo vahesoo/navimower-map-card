@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 0.1.9 - 2026-07-30
+
+- Added a calendar button to the top-right corner of the map card.
+- Integrated the full weekly mowing-schedule editor into the existing `navimower-map-card.js` resource.
+- Added automatic discovery and an advanced override for the Navimower schedule sensor.
+- Preserved per-day enable/disable, multiple 15-minute periods, per-period zone selection, and per-day Save/Discard behavior.
+- Added mobile-friendly, scrollable schedule-dialog styling so the main map card keeps its compact height.
+- Added smoke-test coverage for schedule-sensor discovery, schedule parsing, 15-minute snapping, midnight end-of-day handling, and `navimower.set_schedule` service payloads.
+
 ## 0.1.8 - 2026-07-30
 
 - Unified completed-session and active mowing trails into one composited mowed-area layer.

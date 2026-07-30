@@ -1,6 +1,6 @@
 {
   "name": "navimower-map-card",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Home Assistant dashboard map card for the Navimower integration",
   "type": "module",
   "scripts": {

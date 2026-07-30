@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 0.1.3 - 2026-07-30
+
+- Added temporary doodle rendering from the Navimower map API, including sanitized vendor SVG, map-coordinate center, rotation, normalized scale, visibility control, and configurable opacity.
+- Fixed zone-label tapping after mouse-wheel zoom, pinch zoom, or pan by keeping interactive labels out of the SVG pointer-capture path.
+- Changed session and zone-detail time formatting to follow the Home Assistant user's 12/24-hour preference consistently across desktop and mobile.
+- Added YAML and visual-editor controls for `history_trail_min_opacity` and `history_trail_max_opacity`, making completed-session fading less abrupt and fully configurable.
+- Increased the default active-trail opacity and made session legend dots use the same configured fade range as the rendered routes.
+- Added configurable `map_background_color`; leaving it empty continues to use the active Home Assistant theme.
+- Added `show_doodles` and `doodle_opacity` controls to YAML and the visual editor.
+- Expanded smoke tests and documentation for the new appearance, time-format, interaction, and doodle behavior.
+
 ## 0.1.2 - 2026-07-30
 - Made each session-time entry clickable or tappable. The selected session route pulses three times in a temporary highlight layer and then returns to the unchanged normal map.
 - Kept all non-selected sessions unchanged during route highlighting; no dimming, recoloring, or persistent selection state is used.

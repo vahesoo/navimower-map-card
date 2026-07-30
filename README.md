@@ -4,7 +4,7 @@
 
 A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo/NaviMower) custom integration.
 
-The card renders the decoded private-cloud lawn map and overlays the live MQTT mower position, heading, current mowing trail, local channels, tunnels, charging station, battery, physical zone, and mowing-session times.
+The card renders the decoded private-cloud lawn map and overlays the live MQTT mower position, heading, current and completed mowing trails, temporary doodles, local channels, tunnels, charging station, battery, physical zone, and mowing-session times.
 
 > [!IMPORTANT]
 > This repository is for the new **Navimower** integration and uses the element name `custom:navimower-map-card`.
@@ -13,7 +13,7 @@ The card renders the decoded private-cloud lawn map and overlays the live MQTT m
 ## Features
 
 - Private-cloud zone geometry and zone names
-- Obstacles and no-mow areas
+- Obstacles, no-mow areas, and temporary app doodles
 - Tunnels and local channels
 - Live MQTT X/Y position and heading
 - Current-session mowing trail
@@ -21,7 +21,7 @@ The card renders the decoded private-cloud lawn map and overlays the live MQTT m
 - Session times supplied by the integration map API; click or tap a time to pulse that session route three times
 - Layered SVG rendering that keeps boundaries, obstacles, no-mow areas, tunnels, channels, the dock, and labels above mowing trails
 - Interactive zone labels with progress, mowing times, and cutting height
-- Configurable opacity for zone-name and progress labels
+- Configurable opacity for active and completed trails, doodles, zone labels, and the map background
 - Automatic entity discovery from one `lawn_mower` entity
 - Visual card editor
 - Pinch zoom, mouse-wheel zoom, and pan
@@ -114,6 +114,7 @@ show_position: false
 show_zone_labels: true
 show_channels: true
 show_tunnels: true
+show_doodles: true
 show_map_legend: true
 show_session_legend: true
 session_count: 6
@@ -125,11 +126,15 @@ max_zoom: 8
 map_legend_opacity: 0.58
 zone_label_font_size: 20
 zone_label_opacity: 0.8
+map_background_color: "#e6e6e6"
 zone_fill_color: "#81c784"
 zone_fill_opacity: 0.22
 zone_stroke_color: "#43a047"
 trail_color: "#43a047"
-trail_opacity: 0.4
+trail_opacity: 0.55
+history_trail_min_opacity: 0.28
+history_trail_max_opacity: 0.5
+doodle_opacity: 0.7
 channel_color: "#8e24aa"
 tunnel_color: "#039be5"
 dock_color: "#37474f"
@@ -171,11 +176,40 @@ The SVG is drawn from bottom to top in separate layers:
 3. current trail
 4. temporary session highlight
 5. zone boundaries, obstacles, no-mow areas, tunnels, channels, and charging station
-6. zone and channel labels
-7. live mower marker
-8. map legend and messages
+6. temporary doodles
+7. zone and channel labels
+8. live mower marker
+9. map legend and messages
 
 This keeps important map geometry visible even where a dense mowing trail crosses it.
+
+## Trail fading and map appearance
+
+The active trail and completed-session fade can be tuned independently in YAML or the visual editor:
+
+```yaml
+trail_opacity: 0.55
+history_trail_min_opacity: 0.28
+history_trail_max_opacity: 0.5
+map_background_color: "#e6e6e6"
+```
+
+`history_trail_min_opacity` is used for the oldest displayed completed session and `history_trail_max_opacity` for the newest completed session. Values are interpolated between them. Reversing the two values is safe; the card normalizes them automatically. Leaving `map_background_color` empty keeps the Home Assistant theme's `--secondary-background-color`.
+
+## Temporary doodles
+
+Temporary obstacles created in the Navimow app are rendered from the vendor SVG supplied by the Navimower map API. Their local center, direction, and scale are applied in map coordinates. Doodles can be hidden or faded independently:
+
+```yaml
+show_doodles: true
+doodle_opacity: 0.7
+```
+
+The card sanitizes the embedded SVG and clamps extreme sizes so malformed vendor dimensions cannot cover the whole map.
+
+## Time format
+
+Session and zone-detail times follow the current Home Assistant user's 12-hour or 24-hour time-format preference instead of the browser's independent locale default.
 
 ## Zone details
 

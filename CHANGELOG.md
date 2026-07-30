@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 0.1.2 - 2026-07-30
+- Made each session-time entry clickable or tappable. The selected session route pulses three times in a temporary highlight layer and then returns to the unchanged normal map.
+- Kept all non-selected sessions unchanged during route highlighting; no dimming, recoloring, or persistent selection state is used.
+- Split SVG rendering into ordered base, history, current-trail, highlight, details, labels, mower, and UI layers.
+- Moved zone boundaries, obstacles, no-mow areas, tunnels, channels, charging station, labels, and legend above mowing trails so important details are not hidden.
+- Added configurable `zone_label_opacity` in YAML and the visual editor for zone names and progress percentages.
+- Reused one trail-segmentation path for active, historical, and highlighted routes and expanded smoke tests for the new behavior.
+
 ## 0.1.1 - 2026-07-29
 
 - Replaced the generic mower marker with the embedded H2 SVG artwork from the earlier Navimow Map Card.

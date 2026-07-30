@@ -18,8 +18,10 @@ The card renders the decoded private-cloud lawn map and overlays the live MQTT m
 - Live MQTT X/Y position and heading
 - Current-session mowing trail
 - Battery, mower status, and current physical zone below the map
-- Session times supplied by the integration map API
+- Session times supplied by the integration map API; click or tap a time to pulse that session route three times
+- Layered SVG rendering that keeps boundaries, obstacles, no-mow areas, tunnels, channels, the dock, and labels above mowing trails
 - Interactive zone labels with progress, mowing times, and cutting height
+- Configurable opacity for zone-name and progress labels
 - Automatic entity discovery from one `lawn_mower` entity
 - Visual card editor
 - Pinch zoom, mouse-wheel zoom, and pan
@@ -122,6 +124,7 @@ remember_view: true
 max_zoom: 8
 map_legend_opacity: 0.58
 zone_label_font_size: 20
+zone_label_opacity: 0.8
 zone_fill_color: "#81c784"
 zone_fill_opacity: 0.22
 zone_stroke_color: "#43a047"
@@ -159,9 +162,24 @@ The `status_entity` override normally does not need to be set because the select
 
 When `remember_view` is enabled, the last view is stored only in that browser's local storage. It is not written to Home Assistant.
 
+## Map layer order
+
+The SVG is drawn from bottom to top in separate layers:
+
+1. background and zone fills
+2. completed-session trails
+3. current trail
+4. temporary session highlight
+5. zone boundaries, obstacles, no-mow areas, tunnels, channels, and charging station
+6. zone and channel labels
+7. live mower marker
+8. map legend and messages
+
+This keeps important map geometry visible even where a dense mowing trail crosses it.
+
 ## Zone details
 
-Zone names and percentages on the map are interactive. Click or tap a zone label to view:
+Zone names and percentages on the map are interactive. Their combined label opacity can be adjusted with `zone_label_opacity` from `0` to `1`. Click or tap a zone label to view:
 
 - current or last reported coverage percentage
 - last time the zone was mowed
@@ -188,7 +206,9 @@ The card supports a `sessions` list returned by the Navimower map API. A session
 
 When the integration does not yet provide `sessions` or an exact `trail_started_at`, the card displays the current session using the time when that browser first observed the current `trail_session`. Such an approximate start time is marked with `*`.
 
-Exact previous-session times and trails therefore depend on the upcoming Navimower integration session-history API. The card already supports that payload and does not reconstruct mowing history from Home Assistant Recorder.
+Click or tap any session time that has route points. The corresponding route is redrawn in a temporary highlight layer and pulses three times, then disappears so every trail returns to its normal appearance. Other sessions are not dimmed or recolored.
+
+Exact previous-session times and trails therefore depend on the Navimower integration session-history API. The card supports that payload and does not reconstruct mowing history from Home Assistant Recorder.
 
 ## Moving from the bundled card
 

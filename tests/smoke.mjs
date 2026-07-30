@@ -15,6 +15,12 @@ globalThis.Event = class {
 };
 
 await import("../src/navimower-map-card.js");
+const sourceText = await (await import("node:fs/promises")).readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
+assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.1.11";'));
+assert.ok(sourceText.includes("nm-session-route-pulse 550ms ease-in-out 3"));
+assert.ok(sourceText.includes("}, 1700);"));
+assert.ok(sourceText.includes("<span>Schedule</span>"));
+assert.ok(sourceText.includes(".nm-schedule-button.active { color: #FF5A00; }"));
 const Card = customElements.get("navimower-map-card");
 assert.equal(typeof Card, "function");
 assert.equal(window.customCards.length, 1);
@@ -62,6 +68,10 @@ assert.equal(resolved.map_entity, "sensor.tont_map_data");
 assert.equal(resolved.zone_entity, "sensor.tont_current_physical_zone");
 assert.equal(resolved.schedule_entity, "sensor.tont_schedule");
 assert.deepEqual(card._normalizePoints([[1, 2], ["3", "4"], ["bad", 5]]), [[1, 2], [3, 4]]);
+assert.deepEqual(card._normalizeTrailSegments([[[1, 2], [3, 4]], [[5, 6], [7, 8]]]), [
+  [[1, 2], [3, 4]],
+  [[5, 6], [7, 8]],
+]);
 
 card._config = {
   session_count: 6,
@@ -117,7 +127,8 @@ card._mapPayload = {
     id: "session-1",
     started_at: "2026-07-29T12:00:00+03:00",
     ended_at: "2026-07-29T13:00:00+03:00",
-    points: [[0, 0], [1, 1], [2, 2]],
+    points: [[0, 0], [1, 1], [2, 2], [3, 3]],
+    segments: [[[0, 0], [1, 1]], [[2, 2], [3, 3]]],
   }],
 };
 card._baseEl = { innerHTML: "" };
@@ -152,13 +163,16 @@ assert.equal(mowedOpacity, "0.55");
 card._historyEl = { innerHTML: "" };
 card._renderHistory();
 assert.ok(card._historyEl.innerHTML.includes("nm-session-path"));
+assert.equal((card._historyEl.innerHTML.match(/<polyline/g) || []).length, 2);
 assert.ok(!card._historyEl.innerHTML.includes("opacity="));
 
-card._trail = [[0, 0], [1, 1], [2, 2]];
+card._mapPayload.trail_segments = [[[0, 0], [1, 1]], [[2, 2], [3, 3]]];
+card._trail = [[0, 0], [1, 1], [2, 2], [3, 3]];
 card._trailSession = 2;
 card._trailEl = { innerHTML: "" };
 card._renderTrail();
 assert.ok(card._trailEl.innerHTML.includes("nm-session-path"));
+assert.equal((card._trailEl.innerHTML.match(/<polyline/g) || []).length, 2);
 assert.ok(!card._trailEl.innerHTML.includes("opacity="));
 
 card._sessionsEl = { innerHTML: "", style: {} };
@@ -169,7 +183,7 @@ card._highlightEl = { innerHTML: "" };
 card._sessionsEl = { querySelectorAll: () => [] };
 card._pulseSessionPath("session-1");
 assert.ok(card._highlightEl.innerHTML.includes("nm-session-highlight"));
-assert.ok(card._highlightEl.innerHTML.includes("polyline"));
+assert.equal((card._highlightEl.innerHTML.match(/<polyline/g) || []).length, 2);
 clearTimeout(card._pulseTimer);
 card._pulseTimer = null;
 
@@ -221,6 +235,16 @@ scheduleCard._hass = {
   },
   entities: { "lawn_mower.tont": { device_id: "device-1" } },
   callService: async (domain, service, data) => scheduleCalls.push({ domain, service, data }),
+};
+assert.equal(scheduleCard._scheduleEnabled(), true);
+scheduleCard._hass.states["sensor.tont_schedule"] = {
+  state: "Off",
+  attributes: { days: scheduleDays.map((day) => ({ ...day, enabled: false })), zones: [] },
+};
+assert.equal(scheduleCard._scheduleEnabled(), false);
+scheduleCard._hass.states["sensor.tont_schedule"] = {
+  state: "Monday",
+  attributes: { days: scheduleDays, zones: [{ id: 13, name: "Street" }, { id: 24, name: "Yard" }] },
 };
 scheduleCard._syncScheduleDraft(true);
 assert.equal(scheduleCard._scheduleDraft.length, 7);

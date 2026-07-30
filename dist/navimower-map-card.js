@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.1.3
+ * Version 0.1.4
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.3";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.5";
 const VIEW_SIZE = 1000;
 
 // Embedded H2 mower artwork from the earlier Navimow Map Card. Keeping the
@@ -126,8 +126,8 @@ const DEFAULTS = Object.freeze({
   show_battery: true,
   show_position: false,
   show_zone_labels: true,
+  show_gate_areas: true,
   show_channels: true,
-  show_tunnels: true,
   show_map_legend: true,
   show_session_legend: true,
   enable_zoom: true,
@@ -145,10 +145,10 @@ const DEFAULTS = Object.freeze({
   map_background_color: "",
   show_doodles: true,
   doodle_opacity: 0.7,
-  obstacle_color: "#616161",
-  no_mow_color: "#bdbdbd",
-  channel_color: "#8e24aa",
-  tunnel_color: "#039be5",
+  off_limit_color: "#FF5A00",
+  vf_off_color: "#2F80ED",
+  channel_color: "#686868",
+  gate_area_color: "#8e24aa",
   mower_body_color: "#263238",
   mower_accent_color: "#ff6d00",
   dock_color: "#37474f",
@@ -168,8 +168,8 @@ const LABELS = Object.freeze({
   show_battery: "Show battery",
   show_position: "Show X/Y position",
   show_zone_labels: "Show zone labels",
+  show_gate_areas: "Show gate areas",
   show_channels: "Show channels",
-  show_tunnels: "Show tunnels",
   show_map_legend: "Show map legend",
   show_session_legend: "Show session times",
   session_count: "Maximum sessions shown",
@@ -193,10 +193,10 @@ const LABELS = Object.freeze({
   map_background_color: "Map background color",
   show_doodles: "Show temporary doodles",
   doodle_opacity: "Doodle opacity",
-  obstacle_color: "Obstacle color",
-  no_mow_color: "No-mow color",
+  off_limit_color: "Off-limit color",
+  vf_off_color: "VF-off color",
   channel_color: "Channel color",
-  tunnel_color: "Tunnel color",
+  gate_area_color: "Gate area color",
   dock_color: "Dock color",
   map_entity: "Map data sensor",
   x_entity: "Position X sensor",
@@ -252,8 +252,8 @@ class NavimowerMapCard extends HTMLElement {
       show_battery: DEFAULTS.show_battery,
       show_position: DEFAULTS.show_position,
       show_zone_labels: DEFAULTS.show_zone_labels,
+      show_gate_areas: DEFAULTS.show_gate_areas,
       show_channels: DEFAULTS.show_channels,
-      show_tunnels: DEFAULTS.show_tunnels,
       show_map_legend: DEFAULTS.show_map_legend,
       show_session_legend: DEFAULTS.show_session_legend,
       session_count: DEFAULTS.session_count,
@@ -275,10 +275,10 @@ class NavimowerMapCard extends HTMLElement {
       map_background_color: DEFAULTS.map_background_color,
       show_doodles: DEFAULTS.show_doodles,
       doodle_opacity: DEFAULTS.doodle_opacity,
-      obstacle_color: DEFAULTS.obstacle_color,
-      no_mow_color: DEFAULTS.no_mow_color,
+      off_limit_color: DEFAULTS.off_limit_color,
+      vf_off_color: DEFAULTS.vf_off_color,
       channel_color: DEFAULTS.channel_color,
-      tunnel_color: DEFAULTS.tunnel_color,
+      gate_area_color: DEFAULTS.gate_area_color,
       mower_body_color: DEFAULTS.mower_body_color,
       mower_accent_color: DEFAULTS.mower_accent_color,
       dock_color: DEFAULTS.dock_color,
@@ -321,8 +321,8 @@ class NavimowerMapCard extends HTMLElement {
                 { name: "show_battery", selector: { boolean: {} } },
                 { name: "show_position", selector: { boolean: {} } },
                 { name: "show_zone_labels", selector: { boolean: {} } },
+                { name: "show_gate_areas", selector: { boolean: {} } },
                 { name: "show_channels", selector: { boolean: {} } },
-                { name: "show_tunnels", selector: { boolean: {} } },
                 { name: "show_doodles", selector: { boolean: {} } },
                 { name: "show_map_legend", selector: { boolean: {} } },
                 { name: "show_session_legend", selector: { boolean: {} } },
@@ -389,10 +389,10 @@ class NavimowerMapCard extends HTMLElement {
                 colorField("zone_fill_color"),
                 colorField("zone_stroke_color"),
                 colorField("trail_color"),
-                colorField("obstacle_color"),
-                colorField("no_mow_color"),
+                colorField("off_limit_color"),
+                colorField("vf_off_color"),
                 colorField("channel_color"),
-                colorField("tunnel_color"),
+                colorField("gate_area_color"),
                 colorField("dock_color"),
               ],
             },
@@ -855,18 +855,18 @@ class NavimowerMapCard extends HTMLElement {
     }
     const map = this._mapPayload.map || {};
     const zones = Array.isArray(map.zones) ? map.zones : [];
-    const obstacles = Array.isArray(map.obstacles) ? map.obstacles : [];
-    const noMow = Array.isArray(map.vision_off) ? map.vision_off : [];
-    const tunnels = Array.isArray(map.tunnels) ? map.tunnels : [];
-    const channels = Array.isArray(this._mapPayload.channels) ? this._mapPayload.channels : [];
+    const offLimits = Array.isArray(map.off_limit_areas) ? map.off_limit_areas : [];
+    const vfOff = Array.isArray(map.vf_off_areas) ? map.vf_off_areas : [];
+    const channels = Array.isArray(map.channels) ? map.channels : [];
+    const gateAreas = Array.isArray(this._mapPayload.gate_areas) ? this._mapPayload.gate_areas : [];
     const station = map.station || null;
     const stable = [];
     zones.forEach((zone) => (zone.polygon || []).forEach((point) => stable.push(point)));
-    obstacles.forEach((polygon) => polygon.forEach((point) => stable.push(point)));
-    noMow.forEach((polygon) => polygon.forEach((point) => stable.push(point)));
-    tunnels.forEach((tunnel) => (tunnel.points || []).forEach((point) => stable.push(point)));
-    if (this._config.show_channels) {
-      channels.forEach((channel) => {
+    offLimits.forEach((polygon) => polygon.forEach((point) => stable.push(point)));
+    vfOff.forEach((polygon) => polygon.forEach((point) => stable.push(point)));
+    channels.forEach((channel) => (channel.points || []).forEach((point) => stable.push(point)));
+    if (this._config.show_gate_areas) {
+      gateAreas.forEach((channel) => {
         stable.push([channel.x_min, channel.y_min], [channel.x_min, channel.y_max],
           [channel.x_max, channel.y_min], [channel.x_max, channel.y_max]);
       });
@@ -901,10 +901,10 @@ class NavimowerMapCard extends HTMLElement {
     this._layout = {
       map,
       zones,
-      obstacles,
-      noMow,
-      tunnels,
+      offLimits,
+      vfOff,
       channels,
+      gateAreas,
       station,
       scale,
       sx: (worldX) => offsetX + (worldX - minX) * scale,
@@ -941,7 +941,7 @@ class NavimowerMapCard extends HTMLElement {
       return;
     }
     const c = this._config;
-    const { zones, obstacles, noMow, tunnels, channels, station, scale, sx, sy } = this._layout;
+    const { zones, offLimits, vfOff, channels, gateAreas, station, scale, sx, sy } = this._layout;
     const coverage = new Map();
     for (const item of this._mapPayload?.coverage?.zones || []) {
       coverage.set(Number(item.id), item);
@@ -968,28 +968,28 @@ class NavimowerMapCard extends HTMLElement {
       }
     }
 
-    obstacles.forEach((polygon) => {
-      if (polygon.length >= 3) details.push(`<polygon points="${this._pointString(polygon)}" fill="${escapeHtml(c.obstacle_color)}" fill-opacity=".72" stroke="color-mix(in srgb, ${escapeHtml(c.obstacle_color)} 75%, black)" stroke-width="2"/>`);
+    offLimits.forEach((polygon) => {
+      if (polygon.length >= 3) details.push(`<polygon points="${this._pointString(polygon)}" fill="${escapeHtml(c.off_limit_color)}" fill-opacity=".08" stroke="${escapeHtml(c.off_limit_color)}" stroke-width="5" stroke-linejoin="round"/>`);
     });
-    noMow.forEach((polygon) => {
-      if (polygon.length >= 3) details.push(`<polygon points="${this._pointString(polygon)}" fill="${escapeHtml(c.no_mow_color)}" fill-opacity=".34" stroke="color-mix(in srgb, ${escapeHtml(c.no_mow_color)} 70%, black)" stroke-width="2" stroke-dasharray="9 6"/>`);
+    vfOff.forEach((polygon) => {
+      if (polygon.length >= 3) details.push(`<polygon points="${this._pointString(polygon)}" fill="${escapeHtml(c.vf_off_color)}" fill-opacity=".06" stroke="${escapeHtml(c.vf_off_color)}" stroke-width="5" stroke-linejoin="round"/>`);
     });
-    if (c.show_tunnels) {
-      tunnels.forEach((tunnel) => {
+    if (c.show_channels) {
+      channels.forEach((tunnel) => {
         const points = tunnel.points || [];
         if (points.length >= 2) {
-          details.push(`<polyline points="${this._pointString(points)}" fill="none" stroke="${escapeHtml(c.tunnel_color)}" stroke-width="${Math.max(4, scale * .35).toFixed(1)}" stroke-opacity=".48" stroke-linecap="round" stroke-dasharray="12 8"/>`);
+          details.push(`<polyline points="${this._pointString(points)}" fill="none" stroke="${escapeHtml(c.channel_color)}" stroke-width="${Math.max(4, scale * .35).toFixed(1)}" stroke-opacity=".48" stroke-linecap="round" stroke-dasharray="12 8"/>`);
         }
       });
     }
-    if (c.show_channels) {
-      channels.forEach((channel) => {
+    if (c.show_gate_areas) {
+      gateAreas.forEach((channel) => {
         const x1 = sx(Number(channel.x_min));
         const x2 = sx(Number(channel.x_max));
         const y1 = sy(Number(channel.y_max));
         const y2 = sy(Number(channel.y_min));
-        details.push(`<rect x="${Math.min(x1, x2).toFixed(1)}" y="${Math.min(y1, y2).toFixed(1)}" width="${Math.abs(x2 - x1).toFixed(1)}" height="${Math.abs(y2 - y1).toFixed(1)}" fill="${escapeHtml(c.channel_color)}" fill-opacity=".14" stroke="${escapeHtml(c.channel_color)}" stroke-width="3" stroke-dasharray="10 6"/>`);
-        labels.push(this._label((x1 + x2) / 2, Math.min(y1, y2) + 24, channel.name || "Channel", 19));
+        details.push(`<rect x="${Math.min(x1, x2).toFixed(1)}" y="${Math.min(y1, y2).toFixed(1)}" width="${Math.abs(x2 - x1).toFixed(1)}" height="${Math.abs(y2 - y1).toFixed(1)}" fill="${escapeHtml(c.gate_area_color)}" fill-opacity=".14" stroke="${escapeHtml(c.gate_area_color)}" stroke-width="3" stroke-dasharray="10 6"/>`);
+        labels.push(this._label((x1 + x2) / 2, Math.min(y1, y2) + 24, channel.name || "Gate area", 19));
       });
     }
     if (station && Number.isFinite(Number(station.x)) && Number.isFinite(Number(station.y))) {
@@ -1006,7 +1006,7 @@ class NavimowerMapCard extends HTMLElement {
     this._detailsEl.innerHTML = details.join("");
     this._doodlesEl.innerHTML = doodles.join("");
     this._labelsEl.innerHTML = labels.join("");
-    this._uiEl.innerHTML = c.show_map_legend ? this._legend(channels.length > 0, tunnels.length > 0) : "";
+    this._uiEl.innerHTML = c.show_map_legend ? this._legend(gateAreas.length > 0, channels.length > 0) : "";
     if (this._selectedZoneId !== null) this._openZoneInfo(this._selectedZoneId);
   }
 
@@ -1302,15 +1302,21 @@ class NavimowerMapCard extends HTMLElement {
     const y = finiteNumber(doodle.center[1]);
     if (x === null || y === null) return "";
     const vendorScale = Math.abs(finiteNumber(doodle.scale, 1)) || 1;
-    const rawScale = this._layout.scale * vendorScale;
-    const maxDimension = Math.max(parsed.width, parsed.height);
-    const minScale = 8 / maxDimension;
-    const maxScale = (VIEW_SIZE * .42) / maxDimension;
+    // Private-cloud doodle scale represents its world-space height. Convert
+    // that height from map metres to SVG units instead of scaling the raw
+    // vendor SVG directly by the map scale.
+    const rawScale = this._layout.scale * vendorScale / parsed.height;
+    const minScale = 8 / Math.max(parsed.width, parsed.height);
+    const maxScale = (VIEW_SIZE * .42) / Math.max(parsed.width, parsed.height);
     const renderScale = clamp(rawScale, minScale, maxScale);
     const cx = this._layout.sx(x);
     const cy = this._layout.sy(y);
     const directionRaw = finiteNumber(doodle.direction, 0) || 0;
-    const direction = Math.abs(directionRaw) <= Math.PI * 2 + .001 ? directionRaw * 180 / Math.PI : directionRaw;
+    const directionDegrees = Math.abs(directionRaw) <= Math.PI * 2 + .001 ? directionRaw * 180 / Math.PI : directionRaw;
+    // World Y grows upwards while SVG Y grows downwards, so the rotation
+    // direction must be mirrored. This keeps the doodle aligned with the map
+    // and lets it follow any future whole-map rotation correctly.
+    const direction = -directionDegrees;
     const opacity = clamp(finiteNumber(this._config.doodle_opacity, .7), 0, 1);
     const centerX = parsed.minX + parsed.width / 2;
     const centerY = parsed.minY + parsed.height / 2;
@@ -1366,11 +1372,11 @@ class NavimowerMapCard extends HTMLElement {
   _legend(hasChannels, hasTunnels) {
     const rows = [
       [this._config.trail_color, "Mowed"],
-      [this._config.obstacle_color, "Obstacle"],
-      [this._config.no_mow_color, "No-mow"],
+      [this._config.off_limit_color, "Off-limit"],
+      [this._config.vf_off_color, "VF-off"],
     ];
-    if (hasChannels) rows.push([this._config.channel_color, "Channel"]);
-    if (hasTunnels) rows.push([this._config.tunnel_color, "Tunnel"]);
+    if (hasTunnels) rows.push([this._config.channel_color, "Channel"]);
+    if (hasChannels) rows.push([this._config.gate_area_color, "Gate area"]);
     const fontSize = 19;
     const rowHeight = 30;
     const height = rows.length * rowHeight + 18;

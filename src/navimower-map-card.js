@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.1.7
+ * Version 0.1.8
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.7";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.8";
 const VIEW_SIZE = 1000;
 
 // Embedded H2 mower artwork from the earlier Navimow Map Card. Keeping the
@@ -140,8 +140,6 @@ const DEFAULTS = Object.freeze({
   zone_stroke_color: "#43a047",
   trail_color: "#43a047",
   trail_opacity: 0.55,
-  history_trail_min_opacity: 0.28,
-  history_trail_max_opacity: 0.5,
   map_background_color: "",
   off_limit_color: "#FF5A00",
   vf_off_color: "#2F80ED",
@@ -184,10 +182,8 @@ const LABELS = Object.freeze({
   zone_fill_color: "Zone fill color",
   zone_fill_opacity: "Zone fill opacity",
   zone_stroke_color: "Zone border color",
-  trail_color: "Trail color",
-  trail_opacity: "Active trail opacity",
-  history_trail_min_opacity: "Oldest session opacity",
-  history_trail_max_opacity: "Newest completed session opacity",
+  trail_color: "Mowed area color",
+  trail_opacity: "Mowed area opacity",
   map_background_color: "Map background color",
   off_limit_color: "Off-limit color",
   vf_off_color: "VF-off color",
@@ -266,8 +262,6 @@ class NavimowerMapCard extends HTMLElement {
       zone_stroke_color: DEFAULTS.zone_stroke_color,
       trail_color: DEFAULTS.trail_color,
       trail_opacity: DEFAULTS.trail_opacity,
-      history_trail_min_opacity: DEFAULTS.history_trail_min_opacity,
-      history_trail_max_opacity: DEFAULTS.history_trail_max_opacity,
       map_background_color: DEFAULTS.map_background_color,
       off_limit_color: DEFAULTS.off_limit_color,
       vf_off_color: DEFAULTS.vf_off_color,
@@ -373,8 +367,6 @@ class NavimowerMapCard extends HTMLElement {
                 { name: "zone_label_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
                 { name: "zone_fill_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
                 { name: "trail_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
-                { name: "history_trail_min_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
-                { name: "history_trail_max_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
                 { name: "mower_scale", selector: { number: { min: 0.5, max: 2.5, step: 0.1, mode: "box" } } },
                 { name: "dock_scale", selector: { number: { min: 0.5, max: 2.5, step: 0.1, mode: "box" } } },
                 colorField("map_background_color"),
@@ -514,8 +506,10 @@ class NavimowerMapCard extends HTMLElement {
         <div class="nm-wrap">
           <svg class="nm-map" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" aria-label="Navimower map">
             <g class="nm-base"></g>
-            <g class="nm-history"></g>
-            <g class="nm-trail"></g>
+            <g class="nm-mowed-area">
+              <g class="nm-history"></g>
+              <g class="nm-trail"></g>
+            </g>
             <g class="nm-highlight"></g>
             <g class="nm-details"></g>
             <g class="nm-labels"></g>
@@ -635,6 +629,7 @@ class NavimowerMapCard extends HTMLElement {
     this._titleEl = this.querySelector(".nm-title");
     this._svgEl = this.querySelector(".nm-map");
     this._baseEl = this.querySelector(".nm-base");
+    this._mowedAreaEl = this.querySelector(".nm-mowed-area");
     this._historyEl = this.querySelector(".nm-history");
     this._trailEl = this.querySelector(".nm-trail");
     this._highlightEl = this.querySelector(".nm-highlight");
@@ -678,7 +673,14 @@ class NavimowerMapCard extends HTMLElement {
     this._titleEl.textContent = this._config.title || "";
     this._titleEl.parentElement.style.display = this._config.title ? "flex" : "none";
     this._sessionsEl.style.display = this._config.show_session_legend ? "flex" : "none";
+    this._syncMowedAreaStyle();
     this._syncTouchAction();
+  }
+
+  _syncMowedAreaStyle() {
+    if (!this._mowedAreaEl || !this._config) return;
+    const opacity = clamp(finiteNumber(this._config.trail_opacity, .55), 0, 1);
+    this._mowedAreaEl.setAttribute("opacity", opacity.toFixed(2));
   }
 
   _state(entityId) {
@@ -1091,16 +1093,11 @@ class NavimowerMapCard extends HTMLElement {
     const sessions = this._sessionRecords();
     const drawable = sessions.filter((session) => !session.active && session.points.length >= 2);
     const width = Math.min(Math.max(.25 * this._layout.scale, 5), 28);
-    this._historyEl.innerHTML = drawable.map((session, index) => {
-      const configuredMin = clamp(finiteNumber(this._config.history_trail_min_opacity, .28), 0, 1);
-      const configuredMax = clamp(finiteNumber(this._config.history_trail_max_opacity, .5), 0, 1);
-      const minOpacity = Math.min(configuredMin, configuredMax);
-      const maxOpacity = Math.max(configuredMin, configuredMax);
-      const opacity = clamp(minOpacity + (index / Math.max(1, drawable.length - 1)) * (maxOpacity - minOpacity), minOpacity, maxOpacity);
-      return this._trailSegments(session.points).map((segment) =>
-        `<polyline class="nm-session-path" data-session-id="${escapeHtml(String(session.id))}" points="${this._pointString(segment)}" fill="none" stroke="${escapeHtml(this._config.trail_color)}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity.toFixed(2)}"/>`
-      ).join("");
-    }).join("");
+    this._historyEl.innerHTML = drawable.map((session) =>
+      this._trailSegments(session.points).map((segment) =>
+        `<polyline class="nm-session-path" data-session-id="${escapeHtml(String(session.id))}" points="${this._pointString(segment)}" fill="none" stroke="${escapeHtml(this._config.trail_color)}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`
+      ).join("")
+    ).join("");
   }
 
   _pulseSessionPath(sessionId) {
@@ -1194,11 +1191,10 @@ class NavimowerMapCard extends HTMLElement {
       return;
     }
     const width = Math.min(Math.max(.25 * this._layout.scale, 5), 28);
-    const opacity = clamp(finiteNumber(this._config.trail_opacity, .55), 0, 1);
     const activeSession = this._sessionRecords().find((session) => session.active);
     const sessionId = activeSession?.id ?? this._trailSession ?? 0;
     this._trailEl.innerHTML = this._trailSegments(this._trail)
-      .map((segment) => `<polyline class="nm-session-path" data-session-id="${escapeHtml(String(sessionId))}" points="${this._pointString(segment)}" fill="none" stroke="${escapeHtml(this._config.trail_color)}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity.toFixed(2)}"/>`)
+      .map((segment) => `<polyline class="nm-session-path" data-session-id="${escapeHtml(String(sessionId))}" points="${this._pointString(segment)}" fill="none" stroke="${escapeHtml(this._config.trail_color)}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`)
       .join("");
   }
 
@@ -1419,17 +1415,11 @@ class NavimowerMapCard extends HTMLElement {
       return;
     }
     const now = new Date();
-    this._sessionsEl.innerHTML = sessions.map((session, index) => {
+    this._sessionsEl.innerHTML = sessions.map((session) => {
       const start = dateValue(session.started_at);
       const end = dateValue(session.ended_at);
       const label = this._formatSessionTime(start, end, session.active, now);
-      const minHistory = clamp(finiteNumber(this._config.history_trail_min_opacity, .28), 0, 1);
-      const maxHistory = clamp(finiteNumber(this._config.history_trail_max_opacity, .5), 0, 1);
-      const low = Math.min(minHistory, maxHistory);
-      const high = Math.max(minHistory, maxHistory);
-      const opacity = session.active
-        ? clamp(finiteNumber(this._config.trail_opacity, .55) + .2, .35, 1)
-        : clamp(low + (index / Math.max(1, sessions.length - 1)) * (high - low), low, high);
+      const opacity = clamp(finiteNumber(this._config.trail_opacity, .55), 0, 1);
       const note = session.approximate ? `<span class="nm-session-note" title="Start time is when this browser first observed the session">*</span>` : "";
       const disabled = session.points.length < 2 ? " disabled" : "";
       const title = session.points.length < 2 ? "Route is not available" : "Pulse this session route on the map";

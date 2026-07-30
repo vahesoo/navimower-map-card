@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.1.4
+ * Version 0.1.6
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.5";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.6";
 const VIEW_SIZE = 1000;
 
 // Embedded H2 mower artwork from the earlier Navimow Map Card. Keeping the

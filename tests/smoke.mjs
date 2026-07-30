@@ -29,14 +29,17 @@ const stub = Card.getStubConfig();
 assert.equal(stub.auto_entities, true);
 assert.equal(stub.initial_focus, "map");
 assert.equal(stub.zone_label_opacity, 1);
-assert.equal(stub.history_trail_min_opacity, 0.28);
-assert.equal(stub.history_trail_max_opacity, 0.5);
+assert.equal(stub.trail_opacity, 0.55);
+assert.equal(stub.history_trail_min_opacity, undefined);
+assert.equal(stub.history_trail_max_opacity, undefined);
 
 const form = Card.getConfigForm();
 assert.ok(Array.isArray(form.schema));
 assert.ok(form.schema.length >= 5);
 assert.ok(JSON.stringify(form.schema).includes("zone_label_opacity"));
-assert.ok(JSON.stringify(form.schema).includes("history_trail_min_opacity"));
+assert.ok(JSON.stringify(form.schema).includes("trail_opacity"));
+assert.ok(!JSON.stringify(form.schema).includes("history_trail_min_opacity"));
+assert.ok(!JSON.stringify(form.schema).includes("history_trail_max_opacity"));
 assert.ok(JSON.stringify(form.schema).includes("map_background_color"));
 assert.ok(!JSON.stringify(form.schema).includes("doodle_opacity"));
 
@@ -61,8 +64,6 @@ card._config = {
   session_count: 6,
   trail_color: "#43a047",
   trail_opacity: 0.55,
-  history_trail_min_opacity: 0.3,
-  history_trail_max_opacity: 0.6,
   map_background_color: "#ededed",
   obstacle_color: "#FF5A00",
   no_mow_color: "#FF5A00",
@@ -81,6 +82,7 @@ card._config = {
   show_gate_areas: true,
   show_channels: true,
   show_map_legend: true,
+  show_session_legend: true,
 };
 card._resolved = { map_entity: "sensor.tont_map_data" };
 card._layout = {
@@ -139,9 +141,26 @@ assert.equal(zoneDetails.progress, 72);
 assert.equal(zoneDetails.cuttingHeight, 30);
 assert.equal(zoneDetails.inheritedHeight, true);
 
+let mowedOpacity = null;
+card._mowedAreaEl = { setAttribute: (name, value) => { if (name === "opacity") mowedOpacity = value; } };
+card._syncMowedAreaStyle();
+assert.equal(mowedOpacity, "0.55");
+
 card._historyEl = { innerHTML: "" };
 card._renderHistory();
-assert.ok(card._historyEl.innerHTML.includes('opacity="0.30"'));
+assert.ok(card._historyEl.innerHTML.includes("nm-session-path"));
+assert.ok(!card._historyEl.innerHTML.includes("opacity="));
+
+card._trail = [[0, 0], [1, 1], [2, 2]];
+card._trailSession = 2;
+card._trailEl = { innerHTML: "" };
+card._renderTrail();
+assert.ok(card._trailEl.innerHTML.includes("nm-session-path"));
+assert.ok(!card._trailEl.innerHTML.includes("opacity="));
+
+card._sessionsEl = { innerHTML: "", style: {} };
+card._renderSessions();
+assert.ok(card._sessionsEl.innerHTML.includes("opacity:0.55"));
 
 card._highlightEl = { innerHTML: "" };
 card._sessionsEl = { querySelectorAll: () => [] };

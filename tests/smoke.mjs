@@ -67,8 +67,8 @@ card._config = {
   map_background_color: "#ededed",
   show_doodles: true,
   doodle_opacity: 0.65,
-  obstacle_color: "#616161",
-  no_mow_color: "#bdbdbd",
+  obstacle_color: "#FF5A00",
+  no_mow_color: "#FF5A00",
   channel_color: "#8e24aa",
   tunnel_color: "#039be5",
   map_legend_opacity: 0.58,
@@ -81,7 +81,7 @@ card._config = {
   zone_fill_opacity: 0.22,
   zone_stroke_color: "#43a047",
   show_zone_labels: true,
-  show_tunnels: true,
+  show_gate_areas: true,
   show_channels: true,
   show_map_legend: true,
 };
@@ -95,10 +95,10 @@ card._layout = {
     boundary_flags: [2, 0, 2, 0],
     boundary: { height_set: 256 },
   }],
-  obstacles: [[[2, 2], [3, 2], [3, 3]]],
-  noMow: [[[4, 4], [5, 4], [5, 5]]],
-  tunnels: [{ points: [[0, 5], [10, 5]] }],
-  channels: [{ name: "Gate", x_min: 1, x_max: 2, y_min: 1, y_max: 2 }],
+  offLimits: [[[2, 2], [3, 2], [3, 3]]],
+  vfOff: [[[4, 4], [5, 4], [5, 5]]],
+  channels: [{ points: [[0, 5], [10, 5]] }],
+  gateAreas: [{ name: "Gate", x_min: 1, x_max: 2, y_min: 1, y_max: 2 }],
   station: { x: 1, y: 1 },
   sx: (value) => value * 10,
   sy: (value) => 100 - value * 10,
@@ -111,7 +111,7 @@ card._mapPayload = {
     last_mowed_at: "2026-07-29T12:54:00+03:00",
     last_completed_at: "2026-07-28T18:16:00+03:00",
   }],
-  doodles: [{ id: 9, center: [5, 5], direction: 0, scale: 0.1, svg: "<svg viewBox=\"0 0 10 10\"><path d=\"M0 0 L10 10\"/></svg>" }],
+  doodles: [{ id: 9, center: [5, 5], direction: 1, scale: 2, svg: "<svg viewBox=\"0 0 20 10\"><path d=\"M0 0 L20 10\"/></svg>" }],
   sessions: [{
     id: "session-1",
     started_at: "2026-07-29T12:00:00+03:00",
@@ -123,7 +123,7 @@ card._baseEl = { innerHTML: "" };
 card._detailsEl = { innerHTML: "" };
 card._doodlesEl = { innerHTML: "" };
 card._labelsEl = { innerHTML: "" };
-card._sanitizeVendorSvg = () => ({ minX: 0, minY: 0, width: 10, height: 10, content: "<path d=\"M0 0 L10 10\"/>" });
+card._sanitizeVendorSvg = () => ({ minX: 0, minY: 0, width: 20, height: 10, content: "<path d=\"M0 0 L20 10\"/>" });
 card._uiEl = { innerHTML: "" };
 card._selectedZoneId = null;
 card._renderStatic();
@@ -137,7 +137,11 @@ assert.ok(card._labelsEl.innerHTML.includes('opacity="0.55"'));
 assert.ok(card._labelsEl.innerHTML.includes("Gate"));
 assert.ok(card._doodlesEl.innerHTML.includes("nm-doodle"));
 assert.ok(card._doodlesEl.innerHTML.includes('opacity="0.65"'));
+assert.ok(card._doodlesEl.innerHTML.includes("rotate(-57.30)"));
+assert.ok(card._doodlesEl.innerHTML.includes("scale(2.000000)"));
 assert.ok(card._uiEl.innerHTML.includes("Mowed"));
+assert.ok(card._uiEl.innerHTML.includes("Off-limit"));
+assert.ok(card._uiEl.innerHTML.includes("VF-off"));
 
 const zoneDetails = card._zoneDetails(13);
 assert.equal(zoneDetails.name, "Zone 5");

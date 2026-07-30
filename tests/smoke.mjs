@@ -42,6 +42,7 @@ assert.ok(!JSON.stringify(form.schema).includes("history_trail_min_opacity"));
 assert.ok(!JSON.stringify(form.schema).includes("history_trail_max_opacity"));
 assert.ok(JSON.stringify(form.schema).includes("map_background_color"));
 assert.ok(!JSON.stringify(form.schema).includes("doodle_opacity"));
+assert.ok(JSON.stringify(form.schema).includes("schedule_entity"));
 
 const card = new Card();
 card._config = { auto_entities: true };
@@ -53,11 +54,13 @@ card._hass = {
     "sensor.tont_heading": { state: "3" },
     "sensor.tont_battery": { state: "80" },
     "sensor.tont_current_physical_zone": { state: "Back yard" },
+    "sensor.tont_schedule": { state: "Monday", attributes: { days: [], zones: [] } },
   },
 };
 const resolved = card._resolveEntitiesByName({ mower_entity: "lawn_mower.tont" });
 assert.equal(resolved.map_entity, "sensor.tont_map_data");
 assert.equal(resolved.zone_entity, "sensor.tont_current_physical_zone");
+assert.equal(resolved.schedule_entity, "sensor.tont_schedule");
 assert.deepEqual(card._normalizePoints([[1, 2], ["3", "4"], ["bad", 5]]), [[1, 2], [3, 4]]);
 
 card._config = {
@@ -196,3 +199,63 @@ assert.equal(mowCard._isPausedJob(), false);
 mowCard._hass.states["lawn_mower.tont"] = { state: "paused", attributes: {} };
 assert.equal(mowCard._isPausedJob(), true);
 assert.equal(mowCard._mowerDeviceId(), "device-1");
+
+
+const scheduleCard = new Card();
+const scheduleCalls = [];
+const scheduleDays = [{
+  day: 2,
+  weekday: "Monday",
+  enabled: true,
+  periods: [{ start_hhmm: "08:00", end_hhmm: "10:00", zone_ids: [13] }],
+}];
+scheduleCard._config = { entity: "lawn_mower.tont", auto_entities: true };
+scheduleCard._resolved = { mower_entity: "lawn_mower.tont", schedule_entity: "sensor.tont_schedule" };
+scheduleCard._hass = {
+  states: {
+    "lawn_mower.tont": { state: "docked", attributes: {} },
+    "sensor.tont_schedule": {
+      state: "Monday",
+      attributes: { days: scheduleDays, zones: [{ id: 13, name: "Street" }, { id: 24, name: "Yard" }] },
+    },
+  },
+  entities: { "lawn_mower.tont": { device_id: "device-1" } },
+  callService: async (domain, service, data) => scheduleCalls.push({ domain, service, data }),
+};
+scheduleCard._syncScheduleDraft(true);
+assert.equal(scheduleCard._scheduleDraft.length, 7);
+assert.equal(scheduleCard._scheduleDraft[0].key, "monday");
+assert.equal(scheduleCard._scheduleDraft[0].periods[0].start, "08:00");
+assert.deepEqual(scheduleCard._scheduleZones, [{ id: 13, name: "Street" }, { id: 24, name: "Yard" }]);
+assert.equal(scheduleCard._scheduleSnap15("09:08"), "09:15");
+assert.equal(scheduleCard._scheduleEndMin("00:00"), 1440);
+scheduleCard._scheduleDraft[0]._dirty = true;
+scheduleCard._scheduleDraft[0]._rev = 1;
+await scheduleCard._saveScheduleDay(0);
+assert.equal(scheduleCalls.length, 1);
+assert.equal(scheduleCalls[0].domain, "navimower");
+assert.equal(scheduleCalls[0].service, "set_schedule");
+assert.deepEqual(scheduleCalls[0].data, {
+  day: "monday",
+  enabled: true,
+  periods: [{ start: "08:00", end: "10:00", zones: [13] }],
+  device_id: "device-1",
+});
+for (const timer of Object.values(scheduleCard._scheduleStatusTimers)) clearTimeout(timer);
+scheduleCard._scheduleStatusTimers = {};
+
+const registryCard = new Card();
+registryCard._config = { auto_entities: true, status_entity: null, schedule_entity: null };
+registryCard._resolved = {};
+registryCard._resolutionKey = "registry-test";
+registryCard._hass = {
+  callWS: async () => [
+    { entity_id: "lawn_mower.tont", device_id: "device-1", unique_id: "tont_mower" },
+    { entity_id: "calendar.tont_schedule", device_id: "device-1", unique_id: "tont_schedule" },
+    { entity_id: "sensor.tont_schedule", device_id: "device-1", unique_id: "tont_schedule" },
+  ],
+};
+registryCard._maybeLoadMap = () => {};
+registryCard._updateLive = () => {};
+await registryCard._resolveEntitiesFromRegistry("lawn_mower.tont", "registry-test");
+assert.equal(registryCard._resolved.schedule_entity, "sensor.tont_schedule");

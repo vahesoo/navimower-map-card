@@ -16,7 +16,7 @@ globalThis.Event = class {
 
 await import("../src/navimower-map-card.js");
 const sourceText = await (await import("node:fs/promises")).readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
-assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.1.11";'));
+assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.1.12";'));
 assert.ok(sourceText.includes("nm-session-route-pulse 550ms ease-in-out 3"));
 assert.ok(sourceText.includes("}, 1700);"));
 assert.ok(sourceText.includes("<span>Schedule</span>"));
@@ -203,12 +203,19 @@ console.log("Navimower Map Card smoke tests passed");
 const mowCard = new Card();
 mowCard._config = { entity: "lawn_mower.tont" };
 mowCard._resolved = { mower_entity: "lawn_mower.tont" };
-mowCard._mapPayload = { zones: [{ id: 13, name: "Street" }, { id: 24, name: "Yard" }] };
+mowCard._mapPayload = {
+  map: { zones: [{ id: 13, name: "Street" }, { id: 24, name: "Yard" }] },
+};
 mowCard._hass = {
   states: { "lawn_mower.tont": { state: "docked", attributes: {} } },
   entities: { "lawn_mower.tont": { device_id: "device-1" } },
 };
 assert.deepEqual(mowCard._availableMowZones(), [{ id: 13, name: "Street" }, { id: 24, name: "Yard" }]);
+mowCard._mapPayload = { zones: [{ id: 5, name: "Legacy zone" }] };
+assert.deepEqual(mowCard._availableMowZones(), [{ id: 5, name: "Legacy zone" }]);
+mowCard._mapPayload = {
+  map: { zones: [{ id: 13, name: "Street" }, { id: 24, name: "Yard" }] },
+};
 assert.equal(mowCard._isPausedJob(), false);
 mowCard._hass.states["lawn_mower.tont"] = { state: "paused", attributes: {} };
 assert.equal(mowCard._isPausedJob(), true);

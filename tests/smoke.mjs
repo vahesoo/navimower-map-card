@@ -31,7 +31,6 @@ assert.equal(stub.initial_focus, "map");
 assert.equal(stub.zone_label_opacity, 1);
 assert.equal(stub.history_trail_min_opacity, 0.28);
 assert.equal(stub.history_trail_max_opacity, 0.5);
-assert.equal(stub.show_doodles, true);
 
 const form = Card.getConfigForm();
 assert.ok(Array.isArray(form.schema));
@@ -39,7 +38,7 @@ assert.ok(form.schema.length >= 5);
 assert.ok(JSON.stringify(form.schema).includes("zone_label_opacity"));
 assert.ok(JSON.stringify(form.schema).includes("history_trail_min_opacity"));
 assert.ok(JSON.stringify(form.schema).includes("map_background_color"));
-assert.ok(JSON.stringify(form.schema).includes("doodle_opacity"));
+assert.ok(!JSON.stringify(form.schema).includes("doodle_opacity"));
 
 const card = new Card();
 card._config = { auto_entities: true };
@@ -65,8 +64,6 @@ card._config = {
   history_trail_min_opacity: 0.3,
   history_trail_max_opacity: 0.6,
   map_background_color: "#ededed",
-  show_doodles: true,
-  doodle_opacity: 0.65,
   obstacle_color: "#FF5A00",
   no_mow_color: "#FF5A00",
   channel_color: "#8e24aa",
@@ -111,7 +108,6 @@ card._mapPayload = {
     last_mowed_at: "2026-07-29T12:54:00+03:00",
     last_completed_at: "2026-07-28T18:16:00+03:00",
   }],
-  doodles: [{ id: 9, center: [5, 5], direction: 1, scale: 2, svg: "<svg viewBox=\"0 0 20 10\"><path d=\"M0 0 L20 10\"/></svg>" }],
   sessions: [{
     id: "session-1",
     started_at: "2026-07-29T12:00:00+03:00",
@@ -121,9 +117,7 @@ card._mapPayload = {
 };
 card._baseEl = { innerHTML: "" };
 card._detailsEl = { innerHTML: "" };
-card._doodlesEl = { innerHTML: "" };
 card._labelsEl = { innerHTML: "" };
-card._sanitizeVendorSvg = () => ({ minX: 0, minY: 0, width: 20, height: 10, content: "<path d=\"M0 0 L20 10\"/>" });
 card._uiEl = { innerHTML: "" };
 card._selectedZoneId = null;
 card._renderStatic();
@@ -135,10 +129,6 @@ assert.ok(card._detailsEl.innerHTML.includes("stroke-dasharray"));
 assert.ok(card._labelsEl.innerHTML.includes("Zone 5 · 72%"));
 assert.ok(card._labelsEl.innerHTML.includes('opacity="0.55"'));
 assert.ok(card._labelsEl.innerHTML.includes("Gate"));
-assert.ok(card._doodlesEl.innerHTML.includes("nm-doodle"));
-assert.ok(card._doodlesEl.innerHTML.includes('opacity="0.65"'));
-assert.ok(card._doodlesEl.innerHTML.includes("rotate(-57.30)"));
-assert.ok(card._doodlesEl.innerHTML.includes("scale(2.000000)"));
 assert.ok(card._uiEl.innerHTML.includes("Mowed"));
 assert.ok(card._uiEl.innerHTML.includes("Off-limit"));
 assert.ok(card._uiEl.innerHTML.includes("VF-off"));
@@ -173,3 +163,17 @@ assert.equal(card._hour12Preference(), false);
 const formatted = card._formatSessionTime(new Date("2026-07-30T13:05:00Z"), new Date("2026-07-30T14:10:00Z"), false, new Date("2026-07-30T15:00:00Z"));
 assert.ok(!formatted.toLowerCase().includes("pm"));
 console.log("Navimower Map Card smoke tests passed");
+
+const mowCard = new Card();
+mowCard._config = { entity: "lawn_mower.tont" };
+mowCard._resolved = { mower_entity: "lawn_mower.tont" };
+mowCard._mapPayload = { zones: [{ id: 13, name: "Street" }, { id: 24, name: "Yard" }] };
+mowCard._hass = {
+  states: { "lawn_mower.tont": { state: "docked", attributes: {} } },
+  entities: { "lawn_mower.tont": { device_id: "device-1" } },
+};
+assert.deepEqual(mowCard._availableMowZones(), [{ id: 13, name: "Street" }, { id: 24, name: "Yard" }]);
+assert.equal(mowCard._isPausedJob(), false);
+mowCard._hass.states["lawn_mower.tont"] = { state: "paused", attributes: {} };
+assert.equal(mowCard._isPausedJob(), true);
+assert.equal(mowCard._mowerDeviceId(), "device-1");

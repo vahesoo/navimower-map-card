@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.1.8
+ * Version 0.1.9
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.8";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.9";
 const VIEW_SIZE = 1000;
 
 // Embedded H2 mower artwork from the earlier Navimow Map Card. Keeping the
@@ -119,6 +119,7 @@ const DEFAULTS = Object.freeze({
   status_entity: null,
   battery_entity: null,
   zone_entity: null,
+  schedule_entity: null,
   trail_length: 10000,
   session_count: 6,
   show_status: true,
@@ -197,6 +198,7 @@ const LABELS = Object.freeze({
   status_entity: "Mower status entity",
   battery_entity: "Battery sensor",
   zone_entity: "Current physical zone sensor",
+  schedule_entity: "Mowing schedule sensor",
   trail_length: "Maximum trail points",
 });
 
@@ -232,6 +234,17 @@ function dateValue(value) {
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
+
+
+const SCHEDULE_DAYS = Object.freeze([
+  { num: 2, key: "monday", label: "Monday" },
+  { num: 3, key: "tuesday", label: "Tuesday" },
+  { num: 4, key: "wednesday", label: "Wednesday" },
+  { num: 5, key: "thursday", label: "Thursday" },
+  { num: 6, key: "friday", label: "Friday" },
+  { num: 7, key: "saturday", label: "Saturday" },
+  { num: 1, key: "sunday", label: "Sunday" },
+]);
 
 class NavimowerMapCard extends HTMLElement {
   static getStubConfig() {
@@ -273,6 +286,7 @@ class NavimowerMapCard extends HTMLElement {
       mower_scale: DEFAULTS.mower_scale,
       dock_scale: DEFAULTS.dock_scale,
       trail_length: DEFAULTS.trail_length,
+      schedule_entity: DEFAULTS.schedule_entity,
     };
   }
 
@@ -395,6 +409,7 @@ class NavimowerMapCard extends HTMLElement {
             { name: "status_entity", selector: entitySelector("lawn_mower") },
             { name: "battery_entity", selector: entitySelector("sensor") },
             { name: "zone_entity", selector: entitySelector("sensor") },
+            { name: "schedule_entity", selector: entitySelector("sensor") },
             { name: "trail_length", selector: { number: { min: 100, max: 50000, step: 100, mode: "box" } } },
           ],
         },
@@ -432,6 +447,13 @@ class NavimowerMapCard extends HTMLElement {
     this._mowDialogOpen = false;
     this._mowSequence = [];
     this._mowReset = true;
+    this._scheduleDialogOpen = false;
+    this._scheduleDraft = null;
+    this._scheduleServerDays = [];
+    this._scheduleZones = [];
+    this._scheduleSignature = null;
+    this._scheduleStatus = {};
+    this._scheduleStatusTimers = {};
     this._commandBusy = false;
     this._commandStatus = null;
     this._domReady = false;
@@ -442,6 +464,7 @@ class NavimowerMapCard extends HTMLElement {
       throw new Error("Navimower Map Card: select a mower entity");
     }
     const previousEntity = this._config?.entity || this._config?.mower_entity || this._config?.status_entity;
+    const previousScheduleEntity = this._config?.schedule_entity || null;
     const incoming = { ...config };
     if (!incoming.entity && incoming.mower_entity) incoming.entity = incoming.mower_entity;
     this._config = { ...DEFAULTS, ...incoming };
@@ -457,6 +480,19 @@ class NavimowerMapCard extends HTMLElement {
       this._trail = [];
       this._trailSession = null;
       this._lastPointKey = null;
+      this._scheduleDialogOpen = false;
+      this._scheduleDraft = null;
+      this._scheduleServerDays = [];
+      this._scheduleZones = [];
+      this._scheduleSignature = null;
+      this._scheduleStatus = {};
+    }
+    if (previousScheduleEntity !== this._config.schedule_entity) {
+      this._scheduleDraft = null;
+      this._scheduleServerDays = [];
+      this._scheduleZones = [];
+      this._scheduleSignature = null;
+      this._scheduleStatus = {};
     }
     this._ensureDom();
     this._renderShell();
@@ -496,13 +532,20 @@ class NavimowerMapCard extends HTMLElement {
     this._interactivePointer = null;
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
     this._pulseTimer = null;
+    for (const timer of Object.values(this._scheduleStatusTimers || {})) clearTimeout(timer);
+    this._scheduleStatusTimers = {};
   }
 
   _ensureDom() {
     if (this._domReady) return;
     this.innerHTML = `
       <ha-card>
-        <div class="nm-header"><div class="nm-title"></div></div>
+        <div class="nm-header">
+          <div class="nm-title"></div>
+          <button type="button" class="nm-schedule-button" aria-label="Open mowing schedule" title="Mowing schedule">
+            <ha-icon icon="mdi:calendar-clock"></ha-icon>
+          </button>
+        </div>
         <div class="nm-wrap">
           <svg class="nm-map" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" aria-label="Navimower map">
             <g class="nm-base"></g>
@@ -534,8 +577,14 @@ class NavimowerMapCard extends HTMLElement {
       <style>
         :host { display: block; }
         ha-card { padding: 12px; overflow: hidden; }
-        .nm-header { display: flex; align-items: center; min-height: 26px; margin: 0 2px 8px; }
-        .nm-title { font-size: 1.05rem; font-weight: 600; color: var(--primary-text-color); }
+        .nm-header { display: flex; align-items: center; gap: 8px; min-height: 32px; margin: 0 2px 8px; }
+        .nm-title { flex: 1; min-width: 0; font-size: 1.05rem; font-weight: 600; color: var(--primary-text-color); }
+        .nm-schedule-button { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center;
+          padding: 0; border: 0; border-radius: 50%; cursor: pointer; color: var(--secondary-text-color);
+          background: transparent; }
+        .nm-schedule-button:hover, .nm-schedule-button:focus-visible { color: var(--primary-color);
+          background: color-mix(in srgb, var(--primary-color) 10%, transparent); outline: none; }
+        .nm-schedule-button ha-icon { --mdc-icon-size: 22px; }
         .nm-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden;
           border-radius: 10px; background: var(--secondary-background-color); }
         .nm-map { width: 100%; height: 100%; display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
@@ -600,6 +649,58 @@ class NavimowerMapCard extends HTMLElement {
           cursor: pointer; font: inherit; font-weight: 600; }
         .nm-dialog-cancel { color: var(--primary-text-color); background: var(--secondary-background-color); }
         .nm-dialog-start { color: var(--text-primary-color, #fff); background: var(--primary-color); }
+        .nm-schedule-dialog { max-width: 720px; max-height: min(90vh, 850px); padding: 0; overflow: hidden;
+          display: flex; flex-direction: column; }
+        .nm-schedule-dialog-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px 12px;
+          border-bottom: 1px solid var(--divider-color); }
+        .nm-schedule-dialog-title { flex: 1; min-width: 0; font-size: 1.15rem; font-weight: 700; }
+        .nm-schedule-close { width: 34px; height: 34px; display: grid; place-items: center; padding: 0;
+          border: 0; border-radius: 50%; cursor: pointer; color: var(--secondary-text-color); background: transparent; }
+        .nm-schedule-close:hover { color: var(--primary-text-color); background: var(--secondary-background-color); }
+        .nm-schedule-body { min-height: 0; overflow-y: auto; padding: 4px 10px 12px; }
+        .nm-schedule-message { padding: 22px 10px; color: var(--secondary-text-color); text-align: center; }
+        .nm-schedule-day { padding: 10px 8px; border-bottom: 1px solid var(--divider-color); }
+        .nm-schedule-day:last-child { border-bottom: 0; }
+        .nm-schedule-day-head { display: flex; align-items: center; gap: 12px; }
+        .nm-schedule-day-name { flex: 1; min-width: 0; cursor: pointer; }
+        .nm-schedule-day-title { font-weight: 600; color: var(--primary-text-color); }
+        .nm-schedule-day.off .nm-schedule-day-title { color: var(--secondary-text-color); }
+        .nm-schedule-day-sub { margin-top: 1px; color: var(--secondary-text-color); font-size: .8rem;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .nm-schedule-status { min-width: 64px; min-height: 1em; text-align: right; font-size: .78rem;
+          color: var(--secondary-text-color); }
+        .nm-schedule-status.saved { color: var(--success-color, #43a047); }
+        .nm-schedule-status.saving { color: var(--primary-color); }
+        .nm-schedule-status.error { color: var(--error-color, #db4437); }
+        .nm-schedule-chevron { flex: 0 0 auto; cursor: pointer; color: var(--secondary-text-color);
+          --mdc-icon-size: 24px; transform: rotate(-90deg); transition: transform .15s ease; }
+        .nm-schedule-day.expanded .nm-schedule-chevron { transform: rotate(0deg); }
+        .nm-schedule-day-body[hidden], .nm-schedule-day-actions[hidden] { display: none; }
+        .nm-schedule-periods { margin: 10px 0 4px 48px; }
+        .nm-schedule-period { margin: 0 0 10px; padding: 10px; border-radius: 10px;
+          background: var(--secondary-background-color); }
+        .nm-schedule-times { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+          align-items: center; gap: 8px; }
+        .nm-schedule-times input { width: 100%; min-width: 0; box-sizing: border-box; padding: 8px;
+          border: 1px solid var(--divider-color); border-radius: 8px; color: var(--primary-text-color);
+          background: var(--card-background-color); font: inherit; }
+        .nm-schedule-arrow { color: var(--secondary-text-color); }
+        .nm-schedule-delete { width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+          color: var(--error-color, #db4437); background: transparent; font-size: 1rem; }
+        .nm-schedule-zone-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+        .nm-schedule-zone-chip { min-height: 32px; padding: 5px 10px; border: 1px solid var(--divider-color);
+          border-radius: 16px; cursor: pointer; color: var(--primary-text-color);
+          background: var(--card-background-color); font: inherit; font-size: .82rem; }
+        .nm-schedule-zone-chip.active { border-color: var(--primary-color); color: var(--primary-color);
+          background: color-mix(in srgb, var(--primary-color) 11%, transparent); }
+        .nm-schedule-add { min-height: 36px; padding: 7px 11px; border: 1px dashed var(--divider-color);
+          border-radius: 9px; cursor: pointer; color: var(--primary-color); background: transparent; font: inherit; }
+        .nm-schedule-day-actions { display: flex; justify-content: flex-end; gap: 8px; margin: 10px 0 0 48px; }
+        .nm-schedule-day-actions button { min-height: 36px; padding: 7px 13px; border: 0; border-radius: 9px;
+          cursor: pointer; font: inherit; font-weight: 600; }
+        .nm-schedule-save { color: var(--text-primary-color, #fff); background: var(--primary-color); }
+        .nm-schedule-save:disabled { opacity: .5; cursor: default; }
+        .nm-schedule-discard { color: var(--primary-text-color); background: var(--secondary-background-color); }
         .nm-sessions { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 2px 0;
           color: var(--secondary-text-color); font-size: .84rem; }
         .nm-session { appearance: none; display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px;
@@ -623,10 +724,15 @@ class NavimowerMapCard extends HTMLElement {
           .nm-zone-info { right: 8px; bottom: 8px; max-width: calc(100% - 16px); }
           .nm-footer { font-size: .88rem; gap: 5px 11px; }
           .nm-sessions { font-size: .81rem; }
+          .nm-schedule-dialog { max-width: none; max-height: calc(100vh - 20px); }
+          .nm-schedule-body { padding-left: 4px; padding-right: 4px; }
+          .nm-schedule-periods, .nm-schedule-day-actions { margin-left: 0; }
+          .nm-schedule-times { grid-template-columns: 1fr auto 1fr auto; gap: 5px; }
         }
       </style>`;
 
     this._titleEl = this.querySelector(".nm-title");
+    this._scheduleButtonEl = this.querySelector(".nm-schedule-button");
     this._svgEl = this.querySelector(".nm-map");
     this._baseEl = this.querySelector(".nm-base");
     this._mowedAreaEl = this.querySelector(".nm-mowed-area");
@@ -648,6 +754,7 @@ class NavimowerMapCard extends HTMLElement {
     this._zoneInfoGridEl = this.querySelector(".nm-zone-info-grid");
 
     this.querySelector(".nm-zone-info-close")?.addEventListener("click", () => this._closeZoneInfo());
+    this._scheduleButtonEl?.addEventListener("click", () => this._openScheduleDialog());
     this._sessionsEl?.addEventListener("click", (event) => {
       const sessionButton = event.target?.closest?.(".nm-session[data-session-id]");
       if (!sessionButton || sessionButton.disabled) return;
@@ -671,7 +778,11 @@ class NavimowerMapCard extends HTMLElement {
   _renderShell() {
     if (!this._domReady || !this._config) return;
     this._titleEl.textContent = this._config.title || "";
-    this._titleEl.parentElement.style.display = this._config.title ? "flex" : "none";
+    this._titleEl.parentElement.style.display = "flex";
+    if (this._scheduleButtonEl) {
+      const scheduleEntity = this._resolved.schedule_entity || this._config.schedule_entity;
+      this._scheduleButtonEl.title = scheduleEntity ? `Mowing schedule · ${scheduleEntity}` : "Mowing schedule";
+    }
     this._sessionsEl.style.display = this._config.show_session_legend ? "flex" : "none";
     this._syncMowedAreaStyle();
     this._syncTouchAction();
@@ -710,6 +821,7 @@ class NavimowerMapCard extends HTMLElement {
       heading_entity: c.heading_entity || null,
       battery_entity: c.battery_entity || null,
       zone_entity: c.zone_entity || null,
+      schedule_entity: c.schedule_entity || null,
     };
   }
 
@@ -718,7 +830,7 @@ class NavimowerMapCard extends HTMLElement {
     const mower = this._config.entity || this._config.mower_entity || this._config.status_entity || "";
     const key = [mower, this._config.auto_entities, this._config.map_entity, this._config.x_entity,
       this._config.y_entity, this._config.heading_entity, this._config.battery_entity,
-      this._config.zone_entity].join("|");
+      this._config.zone_entity, this._config.schedule_entity].join("|");
     if (key === this._resolutionKey) return;
     this._resolutionKey = key;
     this._resolved = this._resolveEntitiesByName(this._explicitEntities());
@@ -738,6 +850,7 @@ class NavimowerMapCard extends HTMLElement {
       heading_entity: [`sensor.${mowerId}_heading`, `sensor.${mowerId.replace(/_mower$/, "")}_heading`],
       battery_entity: [`sensor.${mowerId}_battery`, `sensor.${mowerId.replace(/_mower$/, "")}_battery`],
       zone_entity: [`sensor.${mowerId}_current_physical_zone`, `sensor.${mowerId.replace(/_mower$/, "")}_current_physical_zone`],
+      schedule_entity: [`sensor.${mowerId}_schedule`, `sensor.${mowerId.replace(/_mower$/, "")}_schedule`],
     };
     for (const [key, list] of Object.entries(candidates)) {
       if (result[key]) continue;
@@ -761,6 +874,7 @@ class NavimowerMapCard extends HTMLElement {
         heading_entity: ["_heading", ".heading"],
         battery_entity: ["_battery", ".battery"],
         zone_entity: ["_current_physical_zone", ".current_physical_zone"],
+        schedule_entity: ["_schedule", ".schedule"],
       };
       const resolved = { ...this._resolved };
       for (const [key, patterns] of Object.entries(suffixes)) {
@@ -768,6 +882,7 @@ class NavimowerMapCard extends HTMLElement {
         const match = related.find((entry) => {
           const entityId = String(entry.entity_id || "");
           const uniqueId = String(entry.unique_id || "");
+          if (key === "schedule_entity" && !entityId.startsWith("sensor.")) return false;
           return patterns.some((pattern) => entityId.endsWith(pattern) || uniqueId.endsWith(pattern));
         });
         if (match) resolved[key] = match.entity_id;
@@ -1176,7 +1291,8 @@ class NavimowerMapCard extends HTMLElement {
     this._renderMower();
     this._renderFooter();
     this._renderControls();
-    this._renderMowDialog();
+    if (this._scheduleDialogOpen) this._syncScheduleDraft();
+    this._renderDialog();
     this._renderSessions();
     this._renderMessage();
   }
@@ -1295,10 +1411,11 @@ class NavimowerMapCard extends HTMLElement {
     }
     const zones = this._availableMowZones();
     this._mowSequence = this._mowSequence.filter((id) => zones.some((zone) => zone.id === id));
+    this._scheduleDialogOpen = false;
     this._mowDialogOpen = true;
     this._commandStatus = null;
     this._renderControls();
-    this._renderMowDialog();
+    this._renderDialog();
   }
 
   async _runMowerCommand(service, pendingText, successText) {
@@ -1319,12 +1436,401 @@ class NavimowerMapCard extends HTMLElement {
     }
   }
 
-  _renderMowDialog() {
+  _renderDialog() {
     if (!this._modalHostEl) return;
-    if (!this._mowDialogOpen) {
-      this._modalHostEl.innerHTML = "";
+    if (this._scheduleDialogOpen) {
+      this._renderScheduleDialog();
       return;
     }
+    if (this._mowDialogOpen) {
+      this._renderMowDialog();
+      return;
+    }
+    this._modalHostEl.innerHTML = "";
+  }
+
+  _scheduleEntity() {
+    return this._resolved.schedule_entity || this._config?.schedule_entity || null;
+  }
+
+  _scheduleState() {
+    return this._state(this._scheduleEntity());
+  }
+
+  _openScheduleDialog() {
+    this._mowDialogOpen = false;
+    this._scheduleDialogOpen = true;
+    this._syncScheduleDraft();
+    this._renderDialog();
+  }
+
+  _closeScheduleDialog() {
+    this._scheduleDialogOpen = false;
+    this._renderDialog();
+  }
+
+  _syncScheduleDraft(force = false) {
+    const state = this._scheduleState();
+    if (!state) {
+      if (force) {
+        this._scheduleDraft = null;
+        this._scheduleServerDays = [];
+        this._scheduleZones = [];
+        this._scheduleSignature = null;
+      }
+      return;
+    }
+    const days = Array.isArray(state.attributes?.days) ? state.attributes.days : [];
+    const rawZones = Array.isArray(state.attributes?.zones) ? state.attributes.zones : [];
+    const zones = rawZones
+      .filter((zone) => zone && zone.id !== undefined && zone.id !== null)
+      .map((zone) => ({ id: Number(zone.id), name: zone.name || `Zone ${zone.id}` }))
+      .filter((zone) => Number.isFinite(zone.id));
+    const signature = JSON.stringify([days, zones]);
+    if (!force && this._scheduleDraft && signature === this._scheduleSignature) return;
+    const active = typeof document !== "undefined" ? document.activeElement : null;
+    if (!force && active && this._modalHostEl?.contains?.(active)) return;
+    const old = this._scheduleDraft;
+    this._scheduleServerDays = days;
+    this._scheduleZones = zones.length ? zones : this._availableMowZones();
+    this._scheduleSignature = signature;
+    if (!old || force) {
+      this._scheduleDraft = this._buildScheduleDraft(days);
+      return;
+    }
+    this._scheduleDraft = old.map((day, index) => {
+      if (day._dirty || day._saving) return day;
+      const fresh = this._buildScheduleDay(days, index);
+      fresh._expanded = day._expanded;
+      return fresh;
+    });
+  }
+
+  _buildScheduleDraft(days) {
+    return SCHEDULE_DAYS.map((_day, index) => this._buildScheduleDay(days, index));
+  }
+
+  _buildScheduleDay(days, index) {
+    const def = SCHEDULE_DAYS[index];
+    const source = (days || []).find((day) => day && Number(day.day) === def.num);
+    const periods = [];
+    for (const period of source?.periods || []) {
+      const start = period.start_hhmm || this._scheduleMinToHHMM(period.start_min);
+      const end = period.end_hhmm || this._scheduleMinToHHMM(period.end_min);
+      if (!start || !end) continue;
+      periods.push({
+        start,
+        end,
+        zones: Array.isArray(period.zone_ids) ? period.zone_ids.map(Number).filter(Number.isFinite) : [],
+      });
+    }
+    return {
+      num: def.num,
+      key: def.key,
+      label: def.label,
+      enabled: Boolean(source?.enabled),
+      periods,
+      _dirty: false,
+      _saving: false,
+      _expanded: false,
+      _rev: 0,
+    };
+  }
+
+  _scheduleMinToHHMM(value) {
+    const minutes = Number(value);
+    if (!Number.isFinite(minutes)) return null;
+    const hour = Math.floor(minutes / 60) % 24;
+    const minute = Math.round(minutes % 60);
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
+  _scheduleHHMMToMin(value) {
+    const [hour, minute] = String(value || "").split(":").map((part) => Number.parseInt(part, 10));
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return 0;
+    return hour * 60 + minute;
+  }
+
+  _scheduleEndMin(value) {
+    const minutes = this._scheduleHHMMToMin(value);
+    return minutes === 0 ? 1440 : minutes;
+  }
+
+  _scheduleSnap15(value) {
+    const minutes = this._scheduleHHMMToMin(value);
+    let snapped = Math.round(minutes / 15) * 15;
+    if (snapped >= 1440) snapped = 1425;
+    return this._scheduleMinToHHMM(snapped);
+  }
+
+  _scheduleTouch(day) {
+    day._dirty = true;
+    day._rev = (day._rev || 0) + 1;
+    this._clearScheduleStatus(day.key);
+  }
+
+  _clearScheduleStatus(key) {
+    if (this._scheduleStatusTimers[key]) {
+      clearTimeout(this._scheduleStatusTimers[key]);
+      delete this._scheduleStatusTimers[key];
+    }
+    delete this._scheduleStatus[key];
+  }
+
+  _setScheduleStatus(key, kind, text) {
+    this._scheduleStatus[key] = { kind, text };
+  }
+
+  _scheduleStatusClearLater(key) {
+    if (this._scheduleStatusTimers[key]) clearTimeout(this._scheduleStatusTimers[key]);
+    this._scheduleStatusTimers[key] = setTimeout(() => {
+      delete this._scheduleStatusTimers[key];
+      if (this._scheduleStatus[key]?.kind === "saved") {
+        delete this._scheduleStatus[key];
+        if (this._scheduleDialogOpen) this._renderDialog();
+      }
+    }, 3000);
+  }
+
+  _renderScheduleDialog() {
+    if (!this._modalHostEl || !this._scheduleDialogOpen) return;
+    const state = this._scheduleState();
+    if (!state || !this._scheduleDraft) {
+      this._modalHostEl.innerHTML = `
+        <div class="nm-backdrop" data-schedule-action="backdrop">
+          <div class="nm-dialog nm-schedule-dialog" role="dialog" aria-modal="true" aria-label="Mowing schedule">
+            <div class="nm-schedule-dialog-head">
+              <div class="nm-schedule-dialog-title">Mowing schedule</div>
+              <button type="button" class="nm-schedule-close" data-schedule-action="close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
+            </div>
+            <div class="nm-schedule-message">Schedule sensor not found. Keep automatic entity detection enabled or select the schedule sensor in the card editor.</div>
+          </div>
+        </div>`;
+      this._attachScheduleDialogBaseEvents();
+      return;
+    }
+    const rows = this._scheduleDraft.map((day, index) => this._renderScheduleDay(day, index)).join("");
+    this._modalHostEl.innerHTML = `
+      <div class="nm-backdrop" data-schedule-action="backdrop">
+        <div class="nm-dialog nm-schedule-dialog" role="dialog" aria-modal="true" aria-label="Mowing schedule">
+          <div class="nm-schedule-dialog-head">
+            <div class="nm-schedule-dialog-title">Mowing schedule</div>
+            <button type="button" class="nm-schedule-close" data-schedule-action="close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
+          </div>
+          <div class="nm-schedule-body">${rows}</div>
+        </div>
+      </div>`;
+    this._attachScheduleDialogBaseEvents();
+    this._attachScheduleEvents();
+  }
+
+  _attachScheduleDialogBaseEvents() {
+    const backdrop = this._modalHostEl.querySelector("[data-schedule-action='backdrop']");
+    backdrop?.addEventListener("click", (event) => {
+      if (event.target === backdrop) this._closeScheduleDialog();
+    });
+    this._modalHostEl.querySelector("[data-schedule-action='close']")
+      ?.addEventListener("click", () => this._closeScheduleDialog());
+  }
+
+  _renderScheduleDay(day, index) {
+    const status = this._scheduleStatus[day.key];
+    const statusText = status?.text || "";
+    const count = day.periods.length;
+    const sub = day.enabled ? (count ? `${count} ${count === 1 ? "period" : "periods"}` : "Off") : "Off";
+    const periods = day.periods.map((period, periodIndex) => this._renderSchedulePeriod(index, period, periodIndex)).join("");
+    const canSave = day._dirty && !day._saving;
+    return `
+      <div class="nm-schedule-day ${day.enabled ? "on" : "off"} ${day._expanded ? "expanded" : ""}" data-schedule-day="${index}">
+        <div class="nm-schedule-day-head">
+          <ha-switch data-schedule-action="toggle-day" data-day-index="${index}"></ha-switch>
+          <div class="nm-schedule-day-name" data-schedule-action="toggle-expand" data-day-index="${index}">
+            <div class="nm-schedule-day-title">${escapeHtml(day.label)}</div>
+            <div class="nm-schedule-day-sub">${escapeHtml(sub)}</div>
+          </div>
+          <span class="nm-schedule-status ${escapeHtml(status?.kind || "")}">${escapeHtml(statusText)}</span>
+          <ha-icon class="nm-schedule-chevron" data-schedule-action="toggle-expand" data-day-index="${index}" icon="mdi:chevron-down"></ha-icon>
+        </div>
+        <div class="nm-schedule-day-body" ${day._expanded ? "" : "hidden"}>
+          <div class="nm-schedule-periods">
+            ${periods}
+            <button type="button" class="nm-schedule-add" data-schedule-action="add-period" data-day-index="${index}">+ Add period</button>
+          </div>
+        </div>
+        <div class="nm-schedule-day-actions" ${day._dirty ? "" : "hidden"}>
+          <button type="button" class="nm-schedule-discard" data-schedule-action="discard-day" data-day-index="${index}" ${canSave ? "" : "hidden"}>Discard</button>
+          <button type="button" class="nm-schedule-save" data-schedule-action="save-day" data-day-index="${index}" ${canSave ? "" : "disabled"}>Save</button>
+        </div>
+      </div>`;
+  }
+
+  _renderSchedulePeriod(dayIndex, period, periodIndex) {
+    const zones = this._scheduleZones || [];
+    const chips = zones.length ? `
+      <div class="nm-schedule-zone-chips">
+        <button type="button" class="nm-schedule-zone-chip ${period.zones.length ? "" : "active"}" data-schedule-action="all-zones" data-day-index="${dayIndex}" data-period-index="${periodIndex}">All zones</button>
+        ${zones.map((zone) => `<button type="button" class="nm-schedule-zone-chip ${period.zones.includes(zone.id) ? "active" : ""}" data-schedule-action="zone" data-day-index="${dayIndex}" data-period-index="${periodIndex}" data-zone-id="${zone.id}">${escapeHtml(zone.name)}</button>`).join("")}
+      </div>` : "";
+    return `
+      <div class="nm-schedule-period">
+        <div class="nm-schedule-times">
+          <input type="time" step="900" value="${escapeHtml(period.start)}" data-schedule-action="start" data-day-index="${dayIndex}" data-period-index="${periodIndex}">
+          <span class="nm-schedule-arrow">→</span>
+          <input type="time" step="900" value="${escapeHtml(period.end)}" data-schedule-action="end" data-day-index="${dayIndex}" data-period-index="${periodIndex}">
+          <button type="button" class="nm-schedule-delete" data-schedule-action="delete-period" data-day-index="${dayIndex}" data-period-index="${periodIndex}" aria-label="Remove period" title="Remove period">✕</button>
+        </div>
+        ${chips}
+      </div>`;
+  }
+
+  _attachScheduleEvents() {
+    this._modalHostEl.querySelectorAll("[data-schedule-action='toggle-day']").forEach((element) => {
+      const day = this._scheduleDraft[Number(element.dataset.dayIndex)];
+      element.checked = day.enabled;
+      element.addEventListener("change", (event) => {
+        day.enabled = Boolean(event.target.checked);
+        if (day.enabled) day._expanded = true;
+        this._scheduleTouch(day);
+        this._renderDialog();
+      });
+    });
+    this._modalHostEl.querySelectorAll("[data-schedule-action='toggle-expand']").forEach((element) => {
+      element.addEventListener("click", () => {
+        const day = this._scheduleDraft[Number(element.dataset.dayIndex)];
+        day._expanded = !day._expanded;
+        this._renderDialog();
+      });
+    });
+    this._modalHostEl.querySelectorAll("[data-schedule-action='add-period']").forEach((element) => {
+      element.addEventListener("click", () => {
+        const day = this._scheduleDraft[Number(element.dataset.dayIndex)];
+        day.periods.push({ start: "09:00", end: "18:00", zones: [] });
+        day._expanded = true;
+        this._scheduleTouch(day);
+        this._renderDialog();
+      });
+    });
+    this._modalHostEl.querySelectorAll("[data-schedule-action='delete-period']").forEach((element) => {
+      element.addEventListener("click", () => {
+        const day = this._scheduleDraft[Number(element.dataset.dayIndex)];
+        day.periods.splice(Number(element.dataset.periodIndex), 1);
+        this._scheduleTouch(day);
+        this._renderDialog();
+      });
+    });
+    this._modalHostEl.querySelectorAll("[data-schedule-action='zone']").forEach((element) => {
+      element.addEventListener("click", () => {
+        const day = this._scheduleDraft[Number(element.dataset.dayIndex)];
+        const period = day.periods[Number(element.dataset.periodIndex)];
+        const zoneId = Number(element.dataset.zoneId);
+        const index = period.zones.indexOf(zoneId);
+        if (index < 0) period.zones.push(zoneId);
+        else period.zones.splice(index, 1);
+        this._scheduleTouch(day);
+        this._renderDialog();
+      });
+    });
+    this._modalHostEl.querySelectorAll("[data-schedule-action='all-zones']").forEach((element) => {
+      element.addEventListener("click", () => {
+        const day = this._scheduleDraft[Number(element.dataset.dayIndex)];
+        day.periods[Number(element.dataset.periodIndex)].zones = [];
+        this._scheduleTouch(day);
+        this._renderDialog();
+      });
+    });
+    this._modalHostEl.querySelectorAll("[data-schedule-action='start'],[data-schedule-action='end']").forEach((element) => {
+      element.addEventListener("change", (event) => {
+        const day = this._scheduleDraft[Number(event.target.dataset.dayIndex)];
+        const period = day.periods[Number(event.target.dataset.periodIndex)];
+        const value = event.target.value ? this._scheduleSnap15(event.target.value) : "";
+        if (event.target.dataset.scheduleAction === "start") period.start = value;
+        else period.end = value;
+        event.target.value = value;
+        this._scheduleTouch(day);
+        this._renderDialog();
+      });
+    });
+    this._modalHostEl.querySelectorAll("[data-schedule-action='discard-day']").forEach((element) => {
+      element.addEventListener("click", () => this._discardScheduleDay(Number(element.dataset.dayIndex)));
+    });
+    this._modalHostEl.querySelectorAll("[data-schedule-action='save-day']").forEach((element) => {
+      element.addEventListener("click", () => this._saveScheduleDay(Number(element.dataset.dayIndex)));
+    });
+  }
+
+  _discardScheduleDay(dayIndex) {
+    const expanded = this._scheduleDraft[dayIndex]._expanded;
+    const key = this._scheduleDraft[dayIndex].key;
+    this._scheduleDraft[dayIndex] = this._buildScheduleDay(this._scheduleServerDays, dayIndex);
+    this._scheduleDraft[dayIndex]._expanded = expanded;
+    this._clearScheduleStatus(key);
+    this._renderDialog();
+  }
+
+  async _saveScheduleDay(dayIndex) {
+    const day = this._scheduleDraft?.[dayIndex];
+    if (!day || day._saving) return;
+    const periods = [];
+    for (const period of day.periods) {
+      if (!period.start || !period.end) {
+        if (day.enabled) {
+          this._setScheduleStatus(day.key, "error", "Fill in both times.");
+          this._renderDialog();
+          return;
+        }
+        continue;
+      }
+      const start = this._scheduleSnap15(period.start);
+      const end = this._scheduleSnap15(period.end);
+      if (this._scheduleEndMin(end) <= this._scheduleHHMMToMin(start)) {
+        if (day.enabled) {
+          this._setScheduleStatus(day.key, "error", "End must be after start.");
+          this._renderDialog();
+          return;
+        }
+        continue;
+      }
+      periods.push({ start, end, zones: period.zones.slice() });
+    }
+    const data = { day: day.key, enabled: day.enabled, periods };
+    const deviceId = this._mowerDeviceId();
+    if (deviceId) data.device_id = deviceId;
+    const revision = day._rev;
+    day._saving = true;
+    this._setScheduleStatus(day.key, "saving", "Saving…");
+    this._renderDialog();
+    try {
+      await this._hass.callService("navimower", "set_schedule", data);
+      day._saving = false;
+      if (day._rev === revision) {
+        day._dirty = false;
+        this._setScheduleStatus(day.key, "saved", "Saved");
+        const serverDay = {
+          day: day.num,
+          enabled: day.enabled,
+          periods: periods.map((period) => ({
+            start_hhmm: period.start,
+            end_hhmm: period.end,
+            zone_ids: period.zones.slice(),
+          })),
+        };
+        this._scheduleServerDays = (this._scheduleServerDays || []).filter((item) => Number(item?.day) !== day.num);
+        this._scheduleServerDays.push(serverDay);
+        this._scheduleStatusClearLater(day.key);
+      } else {
+        this._clearScheduleStatus(day.key);
+      }
+    } catch (error) {
+      day._saving = false;
+      this._setScheduleStatus(day.key, "error", "Save failed");
+      console.error("[Navimower Map Card] navimower.set_schedule failed", error);
+    }
+    this._renderDialog();
+  }
+
+  _renderMowDialog() {
+    if (!this._modalHostEl) return;
+    if (!this._mowDialogOpen) return;
     const zones = this._availableMowZones();
     const chips = [
       `<button type="button" class="nm-zone-chip ${this._mowSequence.length ? "" : "active"}" data-zone="all">All zones</button>`,
@@ -1366,7 +1872,7 @@ class NavimowerMapCard extends HTMLElement {
           if (index < 0) this._mowSequence.push(id);
           else this._mowSequence.splice(index, 1);
         }
-        this._renderMowDialog();
+        this._renderDialog();
       });
     });
     const reset = this._modalHostEl.querySelector("[data-mow-action='reset']");
@@ -1380,7 +1886,7 @@ class NavimowerMapCard extends HTMLElement {
 
   _closeMowDialog() {
     this._mowDialogOpen = false;
-    this._renderMowDialog();
+    this._renderDialog();
   }
 
   async _startMowNow() {
@@ -1388,7 +1894,7 @@ class NavimowerMapCard extends HTMLElement {
     this._mowDialogOpen = false;
     this._commandBusy = true;
     this._commandStatus = { kind: "saving", text: "Starting…" };
-    this._renderMowDialog();
+    this._renderDialog();
     this._renderControls();
     const data = { reset: this._mowReset };
     if (this._mowSequence.length) data.zones = this._mowSequence.slice();
@@ -1847,7 +2353,7 @@ if (!window.customCards.some((card) => card.type === "navimower-map-card")) {
   window.customCards.push({
     type: "navimower-map-card",
     name: "Navimower Map Card",
-    description: "Navimower map with live pose, trail, sessions, controls, ordered zone mowing, and zoom.",
+    description: "Navimower map with live pose, unified mowed area, mower controls, Mow now, schedule editing, sessions, and zoom.",
     preview: true,
     getEntitySuggestion: (_hass, entityId) => {
       if (!entityId || entityId.split(".")[0] !== "lawn_mower") return null;

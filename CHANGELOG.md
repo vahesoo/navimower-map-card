@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 0.1.12 - 2026-07-30
+
+- Fixed the integrated Mow now dialog so zone buttons are read from the current map API location, `map.zones`.
+- Restored ordered zone selection for Map API v2/v3 payloads while keeping the legacy top-level `zones` fallback.
+- Added regression coverage for both current and legacy zone payload layouts.
+
 ## 0.1.11 - 2026-07-30
 
 - Shortened the three-cycle session-route pulse by 200 ms overall for a cleaner finish without the impression of a fourth pulse starting.

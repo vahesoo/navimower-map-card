@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 0.1.8 - 2026-07-30
+
+- Unified completed-session and active mowing trails into one composited mowed-area layer.
+- Applied one shared trail color and opacity to the whole layer so overlapping routes no longer become darker.
+- Removed the oldest/newest historical trail opacity settings from defaults and the visual editor.
+- Kept session-time route pulsing unchanged: clicking a session still highlights only that session temporarily.
+- Updated session legend dots to use the same trail color and opacity as the unified mowed area.
+
 ## 0.1.7 - 2026-07-30
 
 - Integrated Mow, Pause, and Dock controls into the bottom of the map card.

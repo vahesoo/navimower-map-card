@@ -4,7 +4,7 @@
 
 A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo/NaviMower) custom integration.
 
-The card renders the decoded private-cloud lawn map and overlays the live MQTT mower position, heading, current and completed mowing trails, temporary doodles, Navimow channels, Home Assistant gate areas, charging station, battery, physical zone, and mowing-session times.
+The card renders the decoded private-cloud lawn map and overlays the live MQTT mower position, heading, current and completed mowing trails, Navimow channels, Home Assistant gate areas, charging station, battery, physical zone, and mowing-session times.
 
 > [!IMPORTANT]
 > This repository is for the new **Navimower** integration and uses the element name `custom:navimower-map-card`.
@@ -13,7 +13,7 @@ The card renders the decoded private-cloud lawn map and overlays the live MQTT m
 ## Features
 
 - Private-cloud zone geometry and zone names
-- Off-limit areas, VisionFence-off areas, and temporary app doodles
+- Off-limit areas and VisionFence-off areas
 - Navimow Channels and Home Assistant Gate areas
 - Live MQTT X/Y position and heading
 - Current-session mowing trail
@@ -21,7 +21,7 @@ The card renders the decoded private-cloud lawn map and overlays the live MQTT m
 - Session times supplied by the integration map API; click or tap a time to pulse that session route three times
 - Layered SVG rendering that keeps boundaries, Off-limit areas, VF-off areas, Channels, Gate areas, the dock, and labels above mowing trails
 - Interactive zone labels with progress, mowing times, and cutting height
-- Configurable opacity for active and completed trails, doodles, zone labels, and the map background
+- Configurable opacity for active and completed trails, zone labels, and the map background
 - Navimow-style Off-limit and VF-off rendering with strong outlines and transparent fills
 - Automatic entity discovery from one `lawn_mower` entity
 - Visual card editor
@@ -30,6 +30,8 @@ The card renders the decoded private-cloud lawn map and overlays the live MQTT m
 - Optional per-browser remembered map view
 - Home Assistant Sections-view sizing
 - Community card suggestion for `lawn_mower` entities on Home Assistant 2026.6+
+- Integrated Mow, Pause, and Dock controls
+- Ordered-zone Mow now dialog with clear/continue progress selection
 - No external JavaScript dependencies
 
 ## Requirements
@@ -137,7 +139,6 @@ show_position: false
 show_zone_labels: true
 show_channels: true
 show_gate_areas: true
-show_doodles: true
 show_map_legend: true
 show_session_legend: true
 session_count: 6
@@ -155,9 +156,6 @@ zone_fill_opacity: 0.22
 zone_stroke_color: "#43a047"
 trail_color: "#43a047"
 trail_opacity: 0.55
-history_trail_min_opacity: 0.28
-history_trail_max_opacity: 0.5
-doodle_opacity: 0.7
 off_limit_color: "#FF5A00"
 vf_off_color: "#2F80ED"
 channel_color: "#686868"
@@ -197,42 +195,34 @@ When `remember_view` is enabled, the last view is stored only in that browser's 
 The SVG is drawn from bottom to top in separate layers:
 
 1. background and zone fills
-2. completed-session trails
-3. current trail
-4. temporary session highlight
-5. zone boundaries, Off-limit areas, VF-off areas, Channels, Gate areas, and charging station
-6. temporary doodles
-7. zone and Gate-area labels
-8. live mower marker
-9. map legend and messages
+2. unified mowed area containing completed-session and active trails
+3. temporary session highlight
+4. zone boundaries, Off-limit areas, VF-off areas, Channels, Gate areas, and charging station
+5. zone and Gate-area labels
+6. live mower marker
+7. map legend and messages
 
 This keeps important map geometry visible even where a dense mowing trail crosses it.
 
-## Trail fading and map appearance
+## Mowed area and map appearance
 
-The active trail and completed-session fade can be tuned independently in YAML or the visual editor:
+Completed-session and active trails are composited into one mowed-area layer. The whole layer uses one color and one opacity, so overlapping routes do not become darker. Both settings are available in YAML and the visual editor:
 
 ```yaml
+trail_color: "#43a047"
 trail_opacity: 0.55
-history_trail_min_opacity: 0.28
-history_trail_max_opacity: 0.5
 map_background_color: "#e6e6e6"
 ```
 
-`history_trail_min_opacity` is used for the oldest displayed completed session and `history_trail_max_opacity` for the newest completed session. Values are interpolated between them. Reversing the two values is safe; the card normalizes them automatically. Leaving `map_background_color` empty keeps the Home Assistant theme's `--secondary-background-color`.
+Clicking a session time still pulses only that session route temporarily above the unified layer. Leaving `map_background_color` empty keeps the Home Assistant theme's `--secondary-background-color`.
 
-## Temporary doodles
+## Mower controls
 
-Doodle `center`, `direction`, and `scale` come from the private-cloud map payload. The card mirrors the direction for SVG coordinates and treats `scale` as the doodle height in map metres, keeping the artwork tied to the same world coordinate system as zones and trails.
+The map card includes Mow, Pause, and Dock controls. Pressing **Mow** while an active job is paused calls the normal `lawn_mower.start_mowing` action and resumes that job immediately. In other states, Mow opens the integrated **Mow now** dialog.
 
-Temporary doodles created in the Navimow app are rendered from the vendor SVG supplied by the Navimower map API. Their local center, direction, and scale are applied in map coordinates. Doodles can be hidden or faded independently:
+Zone chips are numbered in the order they are tapped. That ordered ID list is passed unchanged to `navimower.mow`. Leaving every zone unselected means all zones and allows the robot to choose its own route. The **Clear previous mowing progress** switch maps to the service's `reset` option.
 
-```yaml
-show_doodles: true
-doodle_opacity: 0.7
-```
-
-The card sanitizes the embedded SVG and clamps extreme sizes so malformed vendor dimensions cannot cover the whole map.
+The Mow now dialog is part of the same `dist/navimower-map-card.js` bundle; no separate Lovelace resource is installed.
 
 ## Time format
 
@@ -331,11 +321,8 @@ Commit both the source and generated `dist/navimower-map-card.js` file.
 
 ## Planned additions
 
-After the map-only release is stable:
-
-- Mow Now dialog using the Navimower integration's zone-aware mowing action
 - Scheduler dialog using the integration's schedule support
-- Zone ordering for Mow Now when supported by the integration
+- Additional command-state feedback and localization
 
 ## Disclaimer
 

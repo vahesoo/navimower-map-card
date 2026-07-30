@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 0.1.4 - 2026-07-30
+
+- Renamed the map legend entries from `Obstacle` and `No-mow` to the Navimow app terms `Off-limit` and `VF-off`.
+- Changed both default area colors to Navimow orange (`#FF5A00`) while retaining separate solid and dashed outlines.
+- Increased Off-limit and VF-off outline weight and reduced their fill opacity so the underlying map remains visible.
+- Corrected doodle orientation by mirroring the private-cloud direction across the SVG Y axis instead of applying a fixed rotation offset.
+- Corrected doodle size by interpreting private-cloud `scale` as world-space doodle height and converting it through the current map scale and SVG height.
+- Kept doodles in the map-world coordinate system so they remain aligned when whole-map rotation is added later.
+
 ## 0.1.3 - 2026-07-30
 
 - Added temporary doodle rendering from the Navimower map API, including sanitized vendor SVG, map-coordinate center, rotation, normalized scale, visibility control, and configurable opacity.

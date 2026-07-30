@@ -13,7 +13,7 @@ The card renders the decoded private-cloud lawn map and overlays the live MQTT m
 ## Features
 
 - Private-cloud zone geometry and zone names
-- Obstacles, no-mow areas, and temporary app doodles
+- Off-limit areas, VisionFence-off areas, and temporary app doodles
 - Tunnels and local channels
 - Live MQTT X/Y position and heading
 - Current-session mowing trail
@@ -22,6 +22,7 @@ The card renders the decoded private-cloud lawn map and overlays the live MQTT m
 - Layered SVG rendering that keeps boundaries, obstacles, no-mow areas, tunnels, channels, the dock, and labels above mowing trails
 - Interactive zone labels with progress, mowing times, and cutting height
 - Configurable opacity for active and completed trails, doodles, zone labels, and the map background
+- Navimow-style Off-limit and VF-off rendering with strong outlines and transparent fills
 - Automatic entity discovery from one `lawn_mower` entity
 - Visual card editor
 - Pinch zoom, mouse-wheel zoom, and pan
@@ -197,6 +198,8 @@ map_background_color: "#e6e6e6"
 `history_trail_min_opacity` is used for the oldest displayed completed session and `history_trail_max_opacity` for the newest completed session. Values are interpolated between them. Reversing the two values is safe; the card normalizes them automatically. Leaving `map_background_color` empty keeps the Home Assistant theme's `--secondary-background-color`.
 
 ## Temporary doodles
+
+Doodle `center`, `direction`, and `scale` come from the private-cloud map payload. The card mirrors the direction for SVG coordinates and treats `scale` as the doodle height in map metres, keeping the artwork tied to the same world coordinate system as zones and trails.
 
 Temporary obstacles created in the Navimow app are rendered from the vendor SVG supplied by the Navimower map API. Their local center, direction, and scale are applied in map coordinates. Doodles can be hidden or faded independently:
 

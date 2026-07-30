@@ -1,6 +1,6 @@
 # Navimower map API contract
 
-Navimower Map Card 0.1.1 works with the current map API payload and supports optional session-history and per-zone detail fields. The integration should own these records; the card deliberately does not rebuild historical mowing data from Home Assistant Recorder.
+Navimower Map Card 0.1.6 works with the current map API payload and supports optional session-history and per-zone detail fields. The integration should own these records; the card deliberately does not rebuild historical mowing data from Home Assistant Recorder.
 
 ## Existing trail fields
 

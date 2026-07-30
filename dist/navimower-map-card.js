@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.1.2
+ * Version 0.1.3
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.2";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.3";
 const VIEW_SIZE = 1000;
 
 // Embedded H2 mower artwork from the earlier Navimow Map Card. Keeping the
@@ -139,7 +139,12 @@ const DEFAULTS = Object.freeze({
   zone_fill_opacity: 0.22,
   zone_stroke_color: "#43a047",
   trail_color: "#43a047",
-  trail_opacity: 0.4,
+  trail_opacity: 0.55,
+  history_trail_min_opacity: 0.28,
+  history_trail_max_opacity: 0.5,
+  map_background_color: "",
+  show_doodles: true,
+  doodle_opacity: 0.7,
   obstacle_color: "#616161",
   no_mow_color: "#bdbdbd",
   channel_color: "#8e24aa",
@@ -182,7 +187,12 @@ const LABELS = Object.freeze({
   zone_fill_opacity: "Zone fill opacity",
   zone_stroke_color: "Zone border color",
   trail_color: "Trail color",
-  trail_opacity: "Trail opacity",
+  trail_opacity: "Active trail opacity",
+  history_trail_min_opacity: "Oldest session opacity",
+  history_trail_max_opacity: "Newest completed session opacity",
+  map_background_color: "Map background color",
+  show_doodles: "Show temporary doodles",
+  doodle_opacity: "Doodle opacity",
   obstacle_color: "Obstacle color",
   no_mow_color: "No-mow color",
   channel_color: "Channel color",
@@ -260,6 +270,11 @@ class NavimowerMapCard extends HTMLElement {
       zone_stroke_color: DEFAULTS.zone_stroke_color,
       trail_color: DEFAULTS.trail_color,
       trail_opacity: DEFAULTS.trail_opacity,
+      history_trail_min_opacity: DEFAULTS.history_trail_min_opacity,
+      history_trail_max_opacity: DEFAULTS.history_trail_max_opacity,
+      map_background_color: DEFAULTS.map_background_color,
+      show_doodles: DEFAULTS.show_doodles,
+      doodle_opacity: DEFAULTS.doodle_opacity,
       obstacle_color: DEFAULTS.obstacle_color,
       no_mow_color: DEFAULTS.no_mow_color,
       channel_color: DEFAULTS.channel_color,
@@ -308,6 +323,7 @@ class NavimowerMapCard extends HTMLElement {
                 { name: "show_zone_labels", selector: { boolean: {} } },
                 { name: "show_channels", selector: { boolean: {} } },
                 { name: "show_tunnels", selector: { boolean: {} } },
+                { name: "show_doodles", selector: { boolean: {} } },
                 { name: "show_map_legend", selector: { boolean: {} } },
                 { name: "show_session_legend", selector: { boolean: {} } },
                 { name: "session_count", selector: { number: { min: 1, max: 24, step: 1, mode: "box" } } },
@@ -364,8 +380,12 @@ class NavimowerMapCard extends HTMLElement {
                 { name: "zone_label_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
                 { name: "zone_fill_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
                 { name: "trail_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
+                { name: "history_trail_min_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
+                { name: "history_trail_max_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
+                { name: "doodle_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
                 { name: "mower_scale", selector: { number: { min: 0.5, max: 2.5, step: 0.1, mode: "box" } } },
                 { name: "dock_scale", selector: { number: { min: 0.5, max: 2.5, step: 0.1, mode: "box" } } },
+                colorField("map_background_color"),
                 colorField("zone_fill_color"),
                 colorField("zone_stroke_color"),
                 colorField("trail_color"),
@@ -482,6 +502,7 @@ class NavimowerMapCard extends HTMLElement {
     this._pointers.clear();
     this._panStart = null;
     this._pinchStart = null;
+    this._interactivePointer = null;
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
     this._pulseTimer = null;
   }
@@ -498,6 +519,7 @@ class NavimowerMapCard extends HTMLElement {
             <g class="nm-trail"></g>
             <g class="nm-highlight"></g>
             <g class="nm-details"></g>
+            <g class="nm-doodles"></g>
             <g class="nm-labels"></g>
             <g class="nm-dynamic"></g>
             <g class="nm-ui"></g>
@@ -522,7 +544,7 @@ class NavimowerMapCard extends HTMLElement {
         .nm-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden;
           border-radius: 10px; background: var(--secondary-background-color); }
         .nm-map { width: 100%; height: 100%; display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
-        .nm-zone-label { cursor: pointer; }
+        .nm-zone-label { cursor: pointer; pointer-events: all; touch-action: manipulation; }
         .nm-zone-label:focus { outline: none; }
         .nm-zone-label:hover rect, .nm-zone-label:focus rect {
           stroke: var(--primary-color, #03a9f4); stroke-width: 3;
@@ -579,6 +601,7 @@ class NavimowerMapCard extends HTMLElement {
     this._trailEl = this.querySelector(".nm-trail");
     this._highlightEl = this.querySelector(".nm-highlight");
     this._detailsEl = this.querySelector(".nm-details");
+    this._doodlesEl = this.querySelector(".nm-doodles");
     this._labelsEl = this.querySelector(".nm-labels");
     this._dynamicEl = this.querySelector(".nm-dynamic");
     this._uiEl = this.querySelector(".nm-ui");
@@ -911,7 +934,7 @@ class NavimowerMapCard extends HTMLElement {
   }
 
   _renderStatic() {
-    const layers = [this._baseEl, this._detailsEl, this._labelsEl, this._uiEl];
+    const layers = [this._baseEl, this._detailsEl, this._doodlesEl, this._labelsEl, this._uiEl];
     if (!layers.every(Boolean)) return;
     if (!this._layout) {
       layers.forEach((layer) => { layer.innerHTML = ""; });
@@ -924,8 +947,10 @@ class NavimowerMapCard extends HTMLElement {
       coverage.set(Number(item.id), item);
     }
 
-    const base = [`<rect width="${VIEW_SIZE}" height="${VIEW_SIZE}" fill="var(--secondary-background-color)"/>`];
+    const background = String(c.map_background_color || "").trim() || "var(--secondary-background-color)";
+    const base = [`<rect width="${VIEW_SIZE}" height="${VIEW_SIZE}" fill="${escapeHtml(background)}"/>`];
     const details = [];
+    const doodles = [];
     const labels = [];
 
     for (const zone of zones) {
@@ -970,9 +995,16 @@ class NavimowerMapCard extends HTMLElement {
     if (station && Number.isFinite(Number(station.x)) && Number.isFinite(Number(station.y))) {
       details.push(this._station(sx(Number(station.x)), sy(Number(station.y))));
     }
+    if (c.show_doodles) {
+      for (const doodle of this._mapPayload?.doodles || []) {
+        const rendered = this._renderDoodle(doodle);
+        if (rendered) doodles.push(rendered);
+      }
+    }
 
     this._baseEl.innerHTML = base.join("");
     this._detailsEl.innerHTML = details.join("");
+    this._doodlesEl.innerHTML = doodles.join("");
     this._labelsEl.innerHTML = labels.join("");
     this._uiEl.innerHTML = c.show_map_legend ? this._legend(channels.length > 0, tunnels.length > 0) : "";
     if (this._selectedZoneId !== null) this._openZoneInfo(this._selectedZoneId);
@@ -1027,7 +1059,11 @@ class NavimowerMapCard extends HTMLElement {
     const drawable = sessions.filter((session) => !session.active && session.points.length >= 2);
     const width = Math.min(Math.max(.25 * this._layout.scale, 5), 28);
     this._historyEl.innerHTML = drawable.map((session, index) => {
-      const opacity = clamp(0.16 + (index / Math.max(1, drawable.length - 1)) * 0.14, 0.16, 0.3);
+      const configuredMin = clamp(finiteNumber(this._config.history_trail_min_opacity, .28), 0, 1);
+      const configuredMax = clamp(finiteNumber(this._config.history_trail_max_opacity, .5), 0, 1);
+      const minOpacity = Math.min(configuredMin, configuredMax);
+      const maxOpacity = Math.max(configuredMin, configuredMax);
+      const opacity = clamp(minOpacity + (index / Math.max(1, drawable.length - 1)) * (maxOpacity - minOpacity), minOpacity, maxOpacity);
       return this._trailSegments(session.points).map((segment) =>
         `<polyline class="nm-session-path" data-session-id="${escapeHtml(String(session.id))}" points="${this._pointString(segment)}" fill="none" stroke="${escapeHtml(this._config.trail_color)}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity.toFixed(2)}"/>`
       ).join("");
@@ -1123,7 +1159,7 @@ class NavimowerMapCard extends HTMLElement {
       return;
     }
     const width = Math.min(Math.max(.25 * this._layout.scale, 5), 28);
-    const opacity = clamp(finiteNumber(this._config.trail_opacity, .4), 0, 1);
+    const opacity = clamp(finiteNumber(this._config.trail_opacity, .55), 0, 1);
     const activeSession = this._sessionRecords().find((session) => session.active);
     const sessionId = activeSession?.id ?? this._trailSession ?? 0;
     this._trailEl.innerHTML = this._trailSegments(this._trail)
@@ -1186,7 +1222,13 @@ class NavimowerMapCard extends HTMLElement {
       const start = dateValue(session.started_at);
       const end = dateValue(session.ended_at);
       const label = this._formatSessionTime(start, end, session.active, now);
-      const opacity = session.active ? clamp(finiteNumber(this._config.trail_opacity, .4) + .3, .35, 1) : clamp(.28 + index * .07, .28, .65);
+      const minHistory = clamp(finiteNumber(this._config.history_trail_min_opacity, .28), 0, 1);
+      const maxHistory = clamp(finiteNumber(this._config.history_trail_max_opacity, .5), 0, 1);
+      const low = Math.min(minHistory, maxHistory);
+      const high = Math.max(minHistory, maxHistory);
+      const opacity = session.active
+        ? clamp(finiteNumber(this._config.trail_opacity, .55) + .2, .35, 1)
+        : clamp(low + (index / Math.max(1, sessions.length - 1)) * (high - low), low, high);
       const note = session.approximate ? `<span class="nm-session-note" title="Start time is when this browser first observed the session">*</span>` : "";
       const disabled = session.points.length < 2 ? " disabled" : "";
       const title = session.points.length < 2 ? "Route is not available" : "Pulse this session route on the map";
@@ -1200,11 +1242,79 @@ class NavimowerMapCard extends HTMLElement {
     const sameDay = start.getFullYear() === now.getFullYear()
       && start.getMonth() === now.getMonth()
       && start.getDate() === now.getDate();
-    const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
-    const dateFormat = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+    const timeFormat = this._timeFormatter();
+    const dateFormat = new Intl.DateTimeFormat(this._localeLanguage(), { month: "short", day: "numeric" });
     const prefix = sameDay ? "" : `${dateFormat.format(start)} `;
     const endText = active && !end ? "now" : end ? timeFormat.format(end) : "—";
     return `${prefix}${timeFormat.format(start)}–${endText}`;
+  }
+
+  _localeLanguage() {
+    return this._hass?.locale?.language || this._hass?.language || globalThis.navigator?.language || undefined;
+  }
+
+  _hour12Preference() {
+    const value = String(this._hass?.locale?.time_format || "").toLowerCase();
+    if (value === "12" || value === "12h" || value.includes("am_pm")) return true;
+    if (value === "24" || value === "24h") return false;
+    return undefined;
+  }
+
+  _timeFormatter() {
+    return new Intl.DateTimeFormat(this._localeLanguage(), {
+      hour: "2-digit", minute: "2-digit", hour12: this._hour12Preference(),
+    });
+  }
+
+  _sanitizeVendorSvg(svgText) {
+    if (!svgText || typeof DOMParser === "undefined") return null;
+    try {
+      const document = new DOMParser().parseFromString(String(svgText), "image/svg+xml");
+      const root = document.documentElement;
+      if (!root || root.nodeName.toLowerCase() !== "svg" || document.querySelector("parsererror")) return null;
+      root.querySelectorAll("script,foreignObject,iframe,object,embed,audio,video").forEach((node) => node.remove());
+      root.querySelectorAll("*").forEach((node) => {
+        for (const attribute of [...node.attributes]) {
+          const name = attribute.name.toLowerCase();
+          const value = String(attribute.value || "").trim().toLowerCase();
+          if (name.startsWith("on") || value.startsWith("javascript:") || (name === "href" || name.endsWith(":href")) && value && !value.startsWith("#")) {
+            node.removeAttribute(attribute.name);
+          }
+        }
+      });
+      const viewBox = (root.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
+      let minX = 0, minY = 0, width = Number(root.getAttribute("width")), height = Number(root.getAttribute("height"));
+      if (viewBox.length === 4 && viewBox.every(Number.isFinite) && viewBox[2] > 0 && viewBox[3] > 0) {
+        [minX, minY, width, height] = viewBox;
+      }
+      if (!(width > 0) || !(height > 0)) return null;
+      return { minX, minY, width, height, content: root.innerHTML };
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  _renderDoodle(doodle) {
+    if (!this._layout || !doodle || !Array.isArray(doodle.center) || doodle.center.length < 2) return "";
+    const parsed = this._sanitizeVendorSvg(doodle.svg);
+    if (!parsed) return "";
+    const x = finiteNumber(doodle.center[0]);
+    const y = finiteNumber(doodle.center[1]);
+    if (x === null || y === null) return "";
+    const vendorScale = Math.abs(finiteNumber(doodle.scale, 1)) || 1;
+    const rawScale = this._layout.scale * vendorScale;
+    const maxDimension = Math.max(parsed.width, parsed.height);
+    const minScale = 8 / maxDimension;
+    const maxScale = (VIEW_SIZE * .42) / maxDimension;
+    const renderScale = clamp(rawScale, minScale, maxScale);
+    const cx = this._layout.sx(x);
+    const cy = this._layout.sy(y);
+    const directionRaw = finiteNumber(doodle.direction, 0) || 0;
+    const direction = Math.abs(directionRaw) <= Math.PI * 2 + .001 ? directionRaw * 180 / Math.PI : directionRaw;
+    const opacity = clamp(finiteNumber(this._config.doodle_opacity, .7), 0, 1);
+    const centerX = parsed.minX + parsed.width / 2;
+    const centerY = parsed.minY + parsed.height / 2;
+    return `<g class="nm-doodle" data-doodle-id="${escapeHtml(String(doodle.id ?? ""))}" opacity="${opacity.toFixed(2)}" transform="translate(${cx.toFixed(1)},${cy.toFixed(1)}) rotate(${direction.toFixed(2)}) scale(${renderScale.toFixed(6)}) translate(${-centerX},${-centerY})">${parsed.content}</g>`;
   }
 
   _renderMessage() {
@@ -1337,8 +1447,9 @@ class NavimowerMapCard extends HTMLElement {
   _formatZoneTimestamp(value) {
     const date = dateValue(value);
     if (!date) return "Not available";
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(this._localeLanguage(), {
       year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+      hour12: this._hour12Preference(),
     }).format(date);
   }
 
@@ -1365,7 +1476,8 @@ class NavimowerMapCard extends HTMLElement {
   }
 
   _placeholder(message) {
-    return `<rect width="${VIEW_SIZE}" height="${VIEW_SIZE}" fill="var(--secondary-background-color)"/><text x="${VIEW_SIZE / 2}" y="${VIEW_SIZE / 2}" text-anchor="middle" font-family="sans-serif" font-size="28" fill="var(--secondary-text-color)">${escapeHtml(message)}</text>`;
+    const background = String(this._config?.map_background_color || "").trim() || "var(--secondary-background-color)";
+    return `<rect width="${VIEW_SIZE}" height="${VIEW_SIZE}" fill="${escapeHtml(background)}"/><text x="${VIEW_SIZE / 2}" y="${VIEW_SIZE / 2}" text-anchor="middle" font-family="sans-serif" font-size="28" fill="var(--secondary-text-color)">${escapeHtml(message)}</text>`;
   }
 
   _openMoreInfo(entityId) {
@@ -1508,7 +1620,15 @@ class NavimowerMapCard extends HTMLElement {
   }
 
   _onPointerDown(event) {
+    const interactive = event.target?.closest?.(".nm-zone-label");
+    if (interactive) {
+      this._interactivePointer = {
+        pointerId: event.pointerId, x: event.clientX, y: event.clientY, zoneId: interactive.dataset.zoneId,
+      };
+      return;
+    }
     if (!this._config?.enable_zoom || !this._layout) return;
+    this._interactivePointer = null;
     this._pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (this._view.scale > 1 || this._pointers.size > 1) {
       try { this._svgEl.setPointerCapture(event.pointerId); } catch (_error) { /* no-op */ }
@@ -1554,6 +1674,16 @@ class NavimowerMapCard extends HTMLElement {
   }
 
   _onPointerUp(event) {
+    if (this._interactivePointer?.pointerId === event.pointerId) {
+      const candidate = this._interactivePointer;
+      this._interactivePointer = null;
+      if (Math.hypot(event.clientX - candidate.x, event.clientY - candidate.y) < 10) {
+        event.preventDefault();
+        event.stopPropagation();
+        this._openZoneInfo(candidate.zoneId);
+      }
+      return;
+    }
     this._pointers.delete(event.pointerId);
     try { this._svgEl.releasePointerCapture(event.pointerId); } catch (_error) { /* no-op */ }
     if (this._pointers.size === 1) {

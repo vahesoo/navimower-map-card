@@ -4,7 +4,7 @@
 
 A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo/NaviMower) custom integration.
 
-The card renders the decoded private-cloud lawn map and overlays the live MQTT mower position, heading, current and completed mowing trails, temporary doodles, local channels, tunnels, charging station, battery, physical zone, and mowing-session times.
+The card renders the decoded private-cloud lawn map and overlays the live MQTT mower position, heading, current and completed mowing trails, temporary doodles, Navimow channels, Home Assistant gate areas, charging station, battery, physical zone, and mowing-session times.
 
 > [!IMPORTANT]
 > This repository is for the new **Navimower** integration and uses the element name `custom:navimower-map-card`.
@@ -14,12 +14,12 @@ The card renders the decoded private-cloud lawn map and overlays the live MQTT m
 
 - Private-cloud zone geometry and zone names
 - Off-limit areas, VisionFence-off areas, and temporary app doodles
-- Tunnels and local channels
+- Navimow Channels and Home Assistant Gate areas
 - Live MQTT X/Y position and heading
 - Current-session mowing trail
 - Battery, mower status, and current physical zone below the map
 - Session times supplied by the integration map API; click or tap a time to pulse that session route three times
-- Layered SVG rendering that keeps boundaries, obstacles, no-mow areas, tunnels, channels, the dock, and labels above mowing trails
+- Layered SVG rendering that keeps boundaries, Off-limit areas, VF-off areas, Channels, Gate areas, the dock, and labels above mowing trails
 - Interactive zone labels with progress, mowing times, and cutting height
 - Configurable opacity for active and completed trails, doodles, zone labels, and the map background
 - Navimow-style Off-limit and VF-off rendering with strong outlines and transparent fills
@@ -37,6 +37,28 @@ The card renders the decoded private-cloud lawn map and overlays the live MQTT m
 - Home Assistant 2026.6 or newer
 - The `Navimower` custom integration with its authenticated map API
 - HACS for the recommended installation method
+
+## Map terminology and data schema
+
+The card uses the same user-facing concepts as the Navimow app:
+
+- **Off-limit**: mapped areas the mower must not enter
+- **VF-off**: areas where VisionFence obstacle detection is disabled
+- **Channel**: Navimow app routes connecting mowing zones
+- **Gate area**: local Home Assistant rectangles used by gate/interlock logic
+
+Navimower integration v0.2.2 or newer provides these fields:
+
+```json
+{
+  "map": {
+    "off_limit_areas": [],
+    "vf_off_areas": [],
+    "channels": []
+  },
+  "gate_areas": []
+}
+```
 
 ## Installation with HACS
 
@@ -114,7 +136,7 @@ show_battery: true
 show_position: false
 show_zone_labels: true
 show_channels: true
-show_tunnels: true
+show_gate_areas: true
 show_doodles: true
 show_map_legend: true
 show_session_legend: true
@@ -136,8 +158,10 @@ trail_opacity: 0.55
 history_trail_min_opacity: 0.28
 history_trail_max_opacity: 0.5
 doodle_opacity: 0.7
-channel_color: "#8e24aa"
-tunnel_color: "#039be5"
+off_limit_color: "#FF5A00"
+vf_off_color: "#2F80ED"
+channel_color: "#686868"
+gate_area_color: "#8e24aa"
 dock_color: "#37474f"
 ```
 
@@ -176,9 +200,9 @@ The SVG is drawn from bottom to top in separate layers:
 2. completed-session trails
 3. current trail
 4. temporary session highlight
-5. zone boundaries, obstacles, no-mow areas, tunnels, channels, and charging station
+5. zone boundaries, Off-limit areas, VF-off areas, Channels, Gate areas, and charging station
 6. temporary doodles
-7. zone and channel labels
+7. zone and Gate-area labels
 8. live mower marker
 9. map legend and messages
 
@@ -201,7 +225,7 @@ map_background_color: "#e6e6e6"
 
 Doodle `center`, `direction`, and `scale` come from the private-cloud map payload. The card mirrors the direction for SVG coordinates and treats `scale` as the doodle height in map metres, keeping the artwork tied to the same world coordinate system as zones and trails.
 
-Temporary obstacles created in the Navimow app are rendered from the vendor SVG supplied by the Navimower map API. Their local center, direction, and scale are applied in map coordinates. Doodles can be hidden or faded independently:
+Temporary doodles created in the Navimow app are rendered from the vendor SVG supplied by the Navimower map API. Their local center, direction, and scale are applied in map coordinates. Doodles can be hidden or faded independently:
 
 ```yaml
 show_doodles: true

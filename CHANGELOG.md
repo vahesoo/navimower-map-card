@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 0.1.6 - 2026-07-30
+
+- Updated all active package and runtime version references to `0.1.6`.
+- Added the previously missing `0.1.5` changelog entry.
+- Updated the README to consistently use `Off-limit`, `VF-off`, `Channel`, and `Gate area`.
+- Updated README YAML examples to use the current v0.1.5+ configuration keys and default colors.
+- Replaced the first-release-only checklist with a reusable release checklist for future versions.
+- No map rendering behavior changed from v0.1.5; this release refreshes release metadata and documentation so HACS can detect a new version cleanly.
+
+## 0.1.5 - 2026-07-30
+
+- Replaced the inherited map terminology with the actual Navimow meanings: `Off-limit`, `VF-off`, `Channel`, and `Gate area`.
+- Switched the card to the corrected Navimower v0.2.2 map-data schema: `off_limit_areas`, `vf_off_areas`, `channels`, and `gate_areas`.
+- Changed default colors to Navimow orange for Off-limit, Navimow blue for VF-off, dark grey for Channel, and purple for Gate area.
+- Updated the visual editor with the corrected visibility and color controls.
+- Removed compatibility reads for the old misleading map-data field names.
+
 ## 0.1.4 - 2026-07-30
 
 - Renamed the map legend entries from `Obstacle` and `No-mow` to the Navimow app terms `Off-limit` and `VF-off`.

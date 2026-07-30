@@ -2,14 +2,30 @@
 
 All notable changes to this project are documented here.
 
+## 0.1.11 - 2026-07-30
+
+- Shortened the three-cycle session-route pulse by 200 ms overall for a cleaner finish without the impression of a fourth pulse starting.
+- Reworked the README around the current all-in-one card: unified mowed area, integrated Mow now and Schedule dialogs, segmented sessions, automatic HACS resource handling, and current configuration options.
+- Documented removed historical-trail opacity and experimental doodle settings so older YAML can be cleaned up safely.
+- Removed outdated bundled-card migration guidance and clarified that active and completed routes now share one color and opacity.
+
+## 0.1.10 - 2026-07-30
+
+- Added `Schedule` text beside the calendar icon in the card header.
+- Added schedule-state styling: Navimow orange (`#FF5A00`) when at least one enabled schedule period exists, grey when the schedule is off or unavailable.
+- Added Navimower map API v3 segmented-trail support for active and completed sessions.
+- Rendered each `trail_segments` / `segments` fragment separately so short pauses, reloads, and restarts do not create false connecting lines.
+- Kept `trail` and `points` fallback support for older Navimower integration versions.
+- Kept session-time highlighting: clicking a merged logical session pulses all of its route segments together.
+- Expanded smoke tests for schedule status and multi-segment history, active trail, and session highlighting.
+- Updated the README preview image with the labelled orange Schedule control.
+
 ## 0.1.9 - 2026-07-30
 
-- Added a calendar button to the top-right corner of the map card.
-- Integrated the full weekly mowing-schedule editor into the existing `navimower-map-card.js` resource.
-- Added automatic discovery and an advanced override for the Navimower schedule sensor.
-- Preserved per-day enable/disable, multiple 15-minute periods, per-period zone selection, and per-day Save/Discard behavior.
-- Added mobile-friendly, scrollable schedule-dialog styling so the main map card keeps its compact height.
-- Added smoke-test coverage for schedule-sensor discovery, schedule parsing, 15-minute snapping, midnight end-of-day handling, and `navimower.set_schedule` service payloads.
+- Integrated the weekly schedule editor into the map card.
+- Added a calendar button in the card header with automatic schedule-entity detection and an optional `schedule_entity` override.
+- Added weekday enable/disable controls, multiple 15-minute mowing periods, per-period zone selection, and per-day Save/Discard actions.
+- Bundled schedule editing into `navimower-map-card.js`; no separate scheduler frontend resource is required.
 
 ## 0.1.8 - 2026-07-30
 

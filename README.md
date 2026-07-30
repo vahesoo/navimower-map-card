@@ -326,7 +326,7 @@ Commit both the source and generated `dist/navimower-map-card.js` file.
 
 ## Disclaimer
 
-This project is not affiliated with or supported by Segway, Ninebot, Navimow, or Willand. A robot mower is a moving machine with a cutting blade. Test remote commands and automations safely.
+This project is not affiliated with or supported by Segway, Navimow, or Willand. A robot mower is a moving machine with a cutting blade. Test remote commands and automations safely.
 
 ## License
 

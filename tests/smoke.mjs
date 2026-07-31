@@ -16,11 +16,17 @@ globalThis.Event = class {
 
 await import("../src/navimower-map-card.js");
 const sourceText = await (await import("node:fs/promises")).readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
-assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.1.12";'));
-assert.ok(sourceText.includes("nm-session-route-pulse 550ms ease-in-out 3"));
-assert.ok(sourceText.includes("}, 1700);"));
+assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.1.13";'));
+assert.ok(sourceText.includes("nm-session-route-pulse 600ms ease-in-out 3 forwards"));
+assert.ok(sourceText.includes("}, 1820);"));
+assert.ok(sourceText.includes("<span>History</span>"));
 assert.ok(sourceText.includes("<span>Schedule</span>"));
-assert.ok(sourceText.includes(".nm-schedule-button.active { color: #FF5A00; }"));
+assert.ok(sourceText.includes(".nm-history-button.active, .nm-schedule-button.active { color: #FF5A00; }"));
+assert.ok(sourceText.includes('{ value: "today", label: "Today" }'));
+assert.ok(sourceText.includes('{ value: "1", label: this._historyDateLabel(1) }'));
+assert.ok(sourceText.includes('{ value: "2", label: this._historyDateLabel(2) }'));
+assert.ok(!sourceText.includes('{ value: "current", label: "Current" }'));
+assert.ok(!sourceText.includes('label: "Yesterday"'));
 const Card = customElements.get("navimower-map-card");
 assert.equal(typeof Card, "function");
 assert.equal(window.customCards.length, 1);
@@ -115,18 +121,26 @@ card._layout = {
   sx: (value) => value * 10,
   sy: (value) => 100 - value * 10,
 };
+const testNow = new Date();
+const twoDaysAgoStart = new Date(testNow);
+twoDaysAgoStart.setHours(12, 0, 0, 0);
+twoDaysAgoStart.setDate(twoDaysAgoStart.getDate() - 2);
+const twoDaysAgoEnd = new Date(twoDaysAgoStart.getTime() + 60 * 60 * 1000);
+
 card._mapPayload = {
   cut_height: 30,
   coverage: { zones: [{ id: 13, pct: 72 }] },
   zone_details: [{
     id: 13,
+    progress: 84,
+    progress_source: "mqtt_route",
     last_mowed_at: "2026-07-29T12:54:00+03:00",
     last_completed_at: "2026-07-28T18:16:00+03:00",
   }],
   sessions: [{
     id: "session-1",
-    started_at: "2026-07-29T12:00:00+03:00",
-    ended_at: "2026-07-29T13:00:00+03:00",
+    started_at: twoDaysAgoStart.toISOString(),
+    ended_at: twoDaysAgoEnd.toISOString(),
     points: [[0, 0], [1, 1], [2, 2], [3, 3]],
     segments: [[[0, 0], [1, 1]], [[2, 2], [3, 3]]],
   }],
@@ -142,7 +156,7 @@ assert.ok(card._baseEl.innerHTML.includes("ededed"));
 assert.ok(!card._baseEl.innerHTML.includes("Obstacle"));
 assert.ok(card._detailsEl.innerHTML.includes("nm-dock-marker"));
 assert.ok(card._detailsEl.innerHTML.includes("stroke-dasharray"));
-assert.ok(card._labelsEl.innerHTML.includes("Zone 5 · 72%"));
+assert.ok(card._labelsEl.innerHTML.includes("Zone 5 · 84%"));
 assert.ok(card._labelsEl.innerHTML.includes('opacity="0.55"'));
 assert.ok(card._labelsEl.innerHTML.includes("Gate"));
 assert.ok(card._uiEl.innerHTML.includes("Mowed"));
@@ -151,7 +165,7 @@ assert.ok(card._uiEl.innerHTML.includes("VF-off"));
 
 const zoneDetails = card._zoneDetails(13);
 assert.equal(zoneDetails.name, "Zone 5");
-assert.equal(zoneDetails.progress, 72);
+assert.equal(zoneDetails.progress, 84);
 assert.equal(zoneDetails.cuttingHeight, 30);
 assert.equal(zoneDetails.inheritedHeight, true);
 
@@ -161,10 +175,48 @@ card._syncMowedAreaStyle();
 assert.equal(mowedOpacity, "0.55");
 
 card._historyEl = { innerHTML: "" };
+card._historyDayOffset = 2;
 card._renderHistory();
 assert.ok(card._historyEl.innerHTML.includes("nm-session-path"));
 assert.equal((card._historyEl.innerHTML.match(/<polyline/g) || []).length, 2);
 assert.ok(!card._historyEl.innerHTML.includes("opacity="));
+assert.equal(card._sessionsForCurrentView().length, 1);
+assert.equal(card._sessionsForCurrentView()[0].id, "session-1");
+assert.match(card._historyDateLabel(1), /^\d{2}\.\d{2}$/);
+assert.match(card._historyDateLabel(2), /^\d{2}\.\d{2}$/);
+card._historyDayOffset = null;
+
+card._mapPayload.sessions.push({
+  id: "session-2",
+  started_at: new Date().toISOString(),
+  ended_at: null,
+  active: true,
+  points: [[4, 4], [5, 5]],
+  segments: [[[4, 4], [5, 5]]],
+});
+assert.equal(card._sessionsForCurrentView().length, 1);
+assert.equal(card._sessionsForCurrentView()[0].id, "session-2");
+card._renderHistory();
+assert.equal(card._historyEl.innerHTML, "");
+card._mapPayload.sessions.pop();
+card._renderHistory();
+assert.equal(card._historyEl.innerHTML, "");
+
+const now = new Date();
+const todayStart = new Date(now);
+todayStart.setHours(10, 0, 0, 0);
+card._mapPayload.sessions.push({
+  id: "session-today",
+  started_at: todayStart.toISOString(),
+  ended_at: new Date(todayStart.getTime() + 30 * 60 * 1000).toISOString(),
+  segments: [[[6, 6], [7, 7]]],
+});
+card._historyDayOffset = null;
+assert.ok(card._sessionsForCurrentView().some((session) => session.id === "session-today"));
+card._renderHistory();
+assert.ok(card._historyEl.innerHTML.includes("nm-session-path"));
+card._historyDayOffset = null;
+card._mapPayload.sessions.pop();
 
 card._mapPayload.trail_segments = [[[0, 0], [1, 1]], [[2, 2], [3, 3]]];
 card._trail = [[0, 0], [1, 1], [2, 2], [3, 3]];
@@ -175,6 +227,7 @@ assert.ok(card._trailEl.innerHTML.includes("nm-session-path"));
 assert.equal((card._trailEl.innerHTML.match(/<polyline/g) || []).length, 2);
 assert.ok(!card._trailEl.innerHTML.includes("opacity="));
 
+card._historyDayOffset = 2;
 card._sessionsEl = { innerHTML: "", style: {} };
 card._renderSessions();
 assert.ok(card._sessionsEl.innerHTML.includes("opacity:0.55"));
@@ -186,6 +239,7 @@ assert.ok(card._highlightEl.innerHTML.includes("nm-session-highlight"));
 assert.equal((card._highlightEl.innerHTML.match(/<polyline/g) || []).length, 2);
 clearTimeout(card._pulseTimer);
 card._pulseTimer = null;
+card._historyDayOffset = null;
 
 const legend = card._legend(false, false);
 assert.ok(legend.includes("Mowed"));

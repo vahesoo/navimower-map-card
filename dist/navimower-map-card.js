@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.1.13
+ * Version 0.1.14
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.13";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.14";
 const VIEW_SIZE = 1000;
 
 // Embedded H2 mower artwork from the earlier Navimow Map Card. Keeping the
@@ -2224,18 +2224,54 @@ class NavimowerMapCard extends HTMLElement {
       detail.last_completed_at, detail.last_completed, detail.completed_at,
       history.last_completed_at, coverage.last_completed_at, zone.last_completed_at,
     );
-    let cuttingHeight = finiteNumber(first(
+
+    const capabilityValue = first(
+      detail.cutting_height_supported,
+      coverage.cutting_height_supported,
+      zone.cutting_height_supported,
+      this._mapPayload?.cutting_height_supported,
+      this._mapPayload?.map?.cutting_height_supported,
+    );
+    let cuttingHeightSupported = typeof capabilityValue === "boolean" ? capabilityValue : null;
+    if (capabilityValue === 0) cuttingHeightSupported = false;
+    if (capabilityValue === 1) cuttingHeightSupported = true;
+
+    const validHeight = (value) => {
+      const number = finiteNumber(value);
+      return number !== null && number >= 10 && number <= 100 ? number : null;
+    };
+    const explicitHeight = first(
       detail.cutting_height_mm, detail.cut_height_mm, detail.cutting_height, detail.cut_height,
-      coverage.cutting_height_mm, zone.cutting_height_mm, zone.boundary?.height_set,
-    ));
-    const inherited = cuttingHeight === 256;
-    if (inherited || cuttingHeight === null) {
-      const mapState = this._state(this._resolved.map_entity);
-      cuttingHeight = finiteNumber(first(
-        this._mapPayload?.cut_height, this._mapPayload?.cutting_height_mm,
-        this._mapPayload?.settings?.cut_height, mapState?.attributes?.cut_height,
-      ));
+      coverage.cutting_height_mm, zone.cutting_height_mm,
+    );
+    const rawBoundaryHeight = finiteNumber(zone.boundary?.height_set);
+    const inherited = detail.inherits_global_height === true
+      || zone.inherits_global_height === true
+      || rawBoundaryHeight === 0
+      || rawBoundaryHeight === 256;
+    const invalidEncodedHeight = rawBoundaryHeight !== null
+      && ![0, 256].includes(rawBoundaryHeight)
+      && validHeight(rawBoundaryHeight) === null;
+
+    // Older integration payloads did not expose the capability flag. An
+    // encoded value such as 316 must not be presented as a millimetre value.
+    if (cuttingHeightSupported === null && invalidEncodedHeight && validHeight(explicitHeight) === null) {
+      cuttingHeightSupported = false;
     }
+
+    let cuttingHeight = null;
+    if (cuttingHeightSupported !== false) {
+      cuttingHeight = validHeight(explicitHeight);
+      if (cuttingHeight === null && !inherited) cuttingHeight = validHeight(rawBoundaryHeight);
+      if (cuttingHeight === null) {
+        const mapState = this._state(this._resolved.map_entity);
+        cuttingHeight = validHeight(first(
+          this._mapPayload?.cut_height, this._mapPayload?.cutting_height_mm,
+          this._mapPayload?.settings?.cut_height, mapState?.attributes?.cut_height,
+        ));
+      }
+    }
+
     return {
       id: zone.id ?? zoneId,
       name: zone.name || coverage.name || detail.name || `Zone ${zoneId}`,
@@ -2243,7 +2279,8 @@ class NavimowerMapCard extends HTMLElement {
       lastMowed,
       lastCompleted,
       cuttingHeight,
-      inheritedHeight: inherited,
+      cuttingHeightSupported,
+      inheritedHeight: cuttingHeight !== null && inherited,
     };
   }
 
@@ -2261,15 +2298,21 @@ class NavimowerMapCard extends HTMLElement {
     const details = this._zoneDetails(zoneId);
     this._selectedZoneId = details.id;
     const progress = details.progress === null ? "Not available" : `${Math.round(details.progress)}%`;
-    const height = details.cuttingHeight === null
-      ? (details.inheritedHeight ? "Global setting" : "Not available")
-      : `${Math.round(details.cuttingHeight)} mm${details.inheritedHeight ? " (global)" : ""}`;
+    const rows = [
+      ["Progress", progress],
+      ["Last mowed", this._formatZoneTimestamp(details.lastMowed)],
+      ["Last completed", this._formatZoneTimestamp(details.lastCompleted)],
+    ];
+    if (details.cuttingHeight !== null) {
+      rows.push([
+        "Cutting height",
+        `${Math.round(details.cuttingHeight)} mm${details.inheritedHeight ? " (global)" : ""}`,
+      ]);
+    }
     this._zoneInfoTitleEl.textContent = details.name;
-    this._zoneInfoGridEl.innerHTML = `
-      <span>Progress</span><strong>${escapeHtml(progress)}</strong>
-      <span>Last mowed</span><strong>${escapeHtml(this._formatZoneTimestamp(details.lastMowed))}</strong>
-      <span>Last completed</span><strong>${escapeHtml(this._formatZoneTimestamp(details.lastCompleted))}</strong>
-      <span>Cutting height</span><strong>${escapeHtml(height)}</strong>`;
+    this._zoneInfoGridEl.innerHTML = rows
+      .map(([label, value]) => `<span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong>`)
+      .join("");
     this._zoneInfoEl.hidden = false;
   }
 

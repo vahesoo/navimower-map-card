@@ -18,7 +18,7 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 - Three-day History selector with matching routes and session times for each day
 - Gap-aware trail segments for pauses, integration reloads, and Home Assistant restarts
 - Clickable session times that briefly pulse the selected session route at the original three-pulse tempo
-- Interactive zone labels with progress, mowing times, and cutting height
+- Interactive zone labels with progress, mowing times, and cutting height when the mower supports automatic height control
 - Mow, Pause, and Dock controls directly below the map
 - Integrated **Mow now** dialog with ordered zone selection and progress reset/continue choice
 - Integrated weekly **Schedule** editor
@@ -32,7 +32,7 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 
 - Home Assistant 2026.6 or newer
 - [`Navimower`](https://github.com/vahesoo/NaviMower) integration
-- Navimower v0.2.6 or newer is recommended for cycle resets, app-like progress, and three-day history
+- Navimower v0.2.7 or newer is recommended for cycle resets, stable state handling, supported cutting-height detection, and three-day history
 - HACS is recommended for installation and updates
 
 ## Installation with HACS

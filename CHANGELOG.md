@@ -15,6 +15,16 @@
   so the brief extra color flash after the third pulse no longer appears.
 
 
+## 0.1.14 - 2026-07-31
+
+- Hide the Cutting height row when the integration reports that automatic
+  cutting-height control is unsupported or when no valid height is available.
+- Reject encoded/raw values such as `316` instead of displaying them as
+  millimetres when using older integration payloads.
+- Keep valid inherited/global cutting heights visible on supported mowers.
+- Updated the README preview to the current three-day History card layout.
+- Updated the recommended backend version to Navimower v0.2.7.
+
 All notable changes to this project are documented here.
 
 ## 0.1.12 - 2026-07-30

@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.1.12
+ * Version 0.1.13
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.12";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.13";
 const VIEW_SIZE = 1000;
 
 // Embedded H2 mower artwork from the earlier Navimow Map Card. Keeping the
@@ -444,6 +444,8 @@ class NavimowerMapCard extends HTMLElement {
     this._pinchStart = null;
     this._selectedZoneId = null;
     this._pulseTimer = null;
+    this._historyMenuOpen = false;
+    this._historyDayOffset = null;
     this._mowDialogOpen = false;
     this._mowSequence = [];
     this._mowReset = true;
@@ -542,11 +544,16 @@ class NavimowerMapCard extends HTMLElement {
       <ha-card>
         <div class="nm-header">
           <div class="nm-title"></div>
+          <button type="button" class="nm-history-button" aria-label="Open mowing history" title="Mowing history">
+            <span>History</span>
+            <ha-icon icon="mdi:history"></ha-icon>
+          </button>
           <button type="button" class="nm-schedule-button" aria-label="Open mowing schedule" title="Mowing schedule">
             <span>Schedule</span>
             <ha-icon icon="mdi:calendar-clock"></ha-icon>
           </button>
         </div>
+        <div class="nm-history-bar" hidden></div>
         <div class="nm-wrap">
           <svg class="nm-map" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" aria-label="Navimower map">
             <g class="nm-base"></g>
@@ -580,13 +587,21 @@ class NavimowerMapCard extends HTMLElement {
         ha-card { padding: 12px; overflow: hidden; }
         .nm-header { display: flex; align-items: center; gap: 8px; min-height: 32px; margin: 0 2px 8px; }
         .nm-title { flex: 1; min-width: 0; font-size: 1.05rem; font-weight: 600; color: var(--primary-text-color); }
-        .nm-schedule-button { min-height: 34px; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+        .nm-history-button, .nm-schedule-button { min-height: 34px; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
           padding: 0 9px 0 11px; border: 0; border-radius: 18px; cursor: pointer; color: var(--secondary-text-color);
           background: transparent; font: inherit; font-size: .86rem; font-weight: 600; }
-        .nm-schedule-button.active { color: #FF5A00; }
+        .nm-history-button.active, .nm-schedule-button.active { color: #FF5A00; }
+        .nm-history-button:hover, .nm-history-button:focus-visible,
         .nm-schedule-button:hover, .nm-schedule-button:focus-visible {
           background: color-mix(in srgb, currentColor 10%, transparent); outline: none; }
-        .nm-schedule-button ha-icon { --mdc-icon-size: 20px; }
+        .nm-history-button ha-icon, .nm-schedule-button ha-icon { --mdc-icon-size: 20px; }
+        .nm-history-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 2px 9px; }
+        .nm-history-bar[hidden] { display: none; }
+        .nm-history-choice { min-height: 32px; padding: 5px 10px; border: 1px solid var(--divider-color);
+          border-radius: 16px; cursor: pointer; color: var(--secondary-text-color); background: transparent;
+          font: inherit; font-size: .82rem; font-weight: 600; }
+        .nm-history-choice.active { border-color: #FF5A00; color: #FF5A00;
+          background: color-mix(in srgb, #FF5A00 10%, transparent); }
         .nm-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden;
           border-radius: 10px; background: var(--secondary-background-color); }
         .nm-map { width: 100%; height: 100%; display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
@@ -715,7 +730,7 @@ class NavimowerMapCard extends HTMLElement {
         .nm-session-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
         .nm-session-note { opacity: .75; }
         .nm-session-highlight { pointer-events: none; }
-        .nm-session-highlight polyline { animation: nm-session-route-pulse 550ms ease-in-out 3; }
+        .nm-session-highlight polyline { animation: nm-session-route-pulse 600ms ease-in-out 3 forwards; }
         @keyframes nm-session-route-pulse {
           0%, 100% { opacity: .06; stroke-width: var(--nm-highlight-width); filter: none; }
           50% { opacity: 1; stroke-width: var(--nm-highlight-pulse-width);
@@ -734,6 +749,8 @@ class NavimowerMapCard extends HTMLElement {
       </style>`;
 
     this._titleEl = this.querySelector(".nm-title");
+    this._historyButtonEl = this.querySelector(".nm-history-button");
+    this._historyBarEl = this.querySelector(".nm-history-bar");
     this._scheduleButtonEl = this.querySelector(".nm-schedule-button");
     this._svgEl = this.querySelector(".nm-map");
     this._baseEl = this.querySelector(".nm-base");
@@ -756,6 +773,18 @@ class NavimowerMapCard extends HTMLElement {
     this._zoneInfoGridEl = this.querySelector(".nm-zone-info-grid");
 
     this.querySelector(".nm-zone-info-close")?.addEventListener("click", () => this._closeZoneInfo());
+    this._historyButtonEl?.addEventListener("click", () => {
+      this._historyMenuOpen = !this._historyMenuOpen;
+      this._renderAllDynamic();
+    });
+    this._historyBarEl?.addEventListener("click", (event) => {
+      const button = event.target?.closest?.(".nm-history-choice[data-history-offset]");
+      if (!button) return;
+      const value = button.dataset.historyOffset;
+      this._historyDayOffset = value === "today" ? null : Number(value);
+      if (this._historyDayOffset === null) this._historyMenuOpen = false;
+      this._renderAllDynamic();
+    });
     this._scheduleButtonEl?.addEventListener("click", () => this._openScheduleDialog());
     this._sessionsEl?.addEventListener("click", (event) => {
       const sessionButton = event.target?.closest?.(".nm-session[data-session-id]");
@@ -791,9 +820,43 @@ class NavimowerMapCard extends HTMLElement {
         ? `Mowing schedule · ${stateText} · ${scheduleEntity}`
         : `Mowing schedule · ${stateText}`;
     }
+    this._renderHistoryBar();
     this._sessionsEl.style.display = this._config.show_session_legend ? "flex" : "none";
     this._syncMowedAreaStyle();
     this._syncTouchAction();
+  }
+
+  _renderHistoryBar() {
+    if (!this._historyBarEl) return;
+    const selected = this._historyDayOffset;
+    const visible = this._historyMenuOpen || selected !== null;
+    this._historyBarEl.hidden = !visible;
+    if (this._historyButtonEl) {
+      this._historyButtonEl.classList.toggle("active", selected !== null || this._historyMenuOpen);
+      this._historyButtonEl.setAttribute("aria-pressed", visible ? "true" : "false");
+    }
+    if (!visible) {
+      this._historyBarEl.innerHTML = "";
+      return;
+    }
+    const choices = [
+      { value: "today", label: "Today" },
+      { value: "1", label: this._historyDateLabel(1) },
+      { value: "2", label: this._historyDateLabel(2) },
+    ];
+    this._historyBarEl.innerHTML = choices.map((choice) => {
+      const active = choice.value === "today" ? selected === null : Number(choice.value) === selected;
+      return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${choice.value}">${escapeHtml(choice.label)}</button>`;
+    }).join("");
+  }
+
+  _historyDateLabel(offset) {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - Number(offset || 0));
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    return `${day}.${month}`;
   }
 
   _syncMowedAreaStyle() {
@@ -1165,7 +1228,7 @@ class NavimowerMapCard extends HTMLElement {
         const cx = polygon.reduce((sum, point) => sum + sx(Number(point[0])), 0) / polygon.length;
         const cy = polygon.reduce((sum, point) => sum + sy(Number(point[1])), 0) / polygon.length;
         const coverageItem = coverage.get(Number(zone.id));
-        const pct = coverageItem?.pct;
+        const pct = this._zoneDetails(zone.id).progress ?? coverageItem?.pct;
         const name = zone.name || `Zone ${zone.id}`;
         labels.push(this._pill(cx, cy, pct === undefined || pct === null ? name : `${name} · ${pct}%`, zone.id));
       }
@@ -1222,7 +1285,7 @@ class NavimowerMapCard extends HTMLElement {
     }).join("");
   }
 
-  _sessionRecords() {
+  _sessionRecords({ applyLimit = true } = {}) {
     const rawSessions = Array.isArray(this._mapPayload?.sessions) ? this._mapPayload.sessions : [];
     const normalized = rawSessions.map((session, index) => {
       const active = Boolean(session.active || session.ended_at === null && session.started_at);
@@ -1251,13 +1314,34 @@ class NavimowerMapCard extends HTMLElement {
         approximate: !(this._mapPayload?.trail_started_at || this._mapPayload?.session_started_at),
       });
     }
-    return normalized.slice(-Math.max(1, Number(this._config.session_count) || 6));
+    return applyLimit
+      ? normalized.slice(-Math.max(1, Number(this._config.session_count) || 6))
+      : normalized;
+  }
+
+  _sessionsForCurrentView() {
+    const sessions = this._sessionRecords({ applyLimit: false });
+    const limit = Math.max(1, Number(this._config.session_count) || 6);
+    const dayOffset = this._historyDayOffset === null ? 0 : this._historyDayOffset;
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    dayStart.setDate(dayStart.getDate() - dayOffset);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    return sessions.filter((session) => {
+      const start = dateValue(session.started_at);
+      const end = dateValue(session.ended_at) || (session.active ? new Date() : start);
+      return start && end && start < dayEnd && end >= dayStart;
+    }).slice(-limit);
   }
 
   _renderHistory() {
     if (!this._historyEl || !this._layout) return;
-    const sessions = this._sessionRecords();
-    const drawable = sessions.filter((session) => !session.active && session.segments.some((segment) => segment.length >= 2));
+    const sessions = this._sessionsForCurrentView();
+    const drawable = sessions.filter((session) =>
+      (this._historyDayOffset !== null || !session.active)
+      && session.segments.some((segment) => segment.length >= 2)
+    );
     const width = Math.min(Math.max(.25 * this._layout.scale, 5), 28);
     this._historyEl.innerHTML = drawable.map((session) =>
       session.segments.filter((segment) => segment.length >= 2).map((segment) =>
@@ -1268,7 +1352,7 @@ class NavimowerMapCard extends HTMLElement {
 
   _pulseSessionPath(sessionId) {
     if (!this._highlightEl || !this._layout) return;
-    const session = this._sessionRecords().find((item) => String(item.id) === String(sessionId));
+    const session = this._sessionRecords({ applyLimit: false }).find((item) => String(item.id) === String(sessionId));
     if (!session || !session.segments.some((segment) => segment.length >= 2)) return;
 
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
@@ -1292,7 +1376,7 @@ class NavimowerMapCard extends HTMLElement {
       this._highlightEl.innerHTML = "";
       button?.classList.remove("nm-session-pulsing");
       this._pulseTimer = null;
-    }, 1700);
+    }, 1820);
   }
 
   _updateLive() {
@@ -1338,6 +1422,7 @@ class NavimowerMapCard extends HTMLElement {
 
   _renderAllDynamic() {
     this._renderShell();
+    this._renderHistory();
     this._renderTrail();
     this._renderMower();
     this._renderFooter();
@@ -1349,6 +1434,10 @@ class NavimowerMapCard extends HTMLElement {
   }
 
   _renderTrail() {
+    if (this._historyDayOffset !== null) {
+      if (this._trailEl) this._trailEl.innerHTML = "";
+      return;
+    }
     if (!this._trailEl || !this._layout) {
       if (this._trailEl) this._trailEl.innerHTML = "";
       return;
@@ -1982,7 +2071,7 @@ class NavimowerMapCard extends HTMLElement {
 
   _renderSessions() {
     if (!this._sessionsEl || !this._config.show_session_legend) return;
-    const sessions = this._sessionRecords();
+    const sessions = this._sessionsForCurrentView();
     if (!sessions.length) {
       this._sessionsEl.innerHTML = "";
       this._sessionsEl.style.display = "none";
@@ -2150,7 +2239,7 @@ class NavimowerMapCard extends HTMLElement {
     return {
       id: zone.id ?? zoneId,
       name: zone.name || coverage.name || detail.name || `Zone ${zoneId}`,
-      progress: finiteNumber(first(coverage.pct, coverage.percentage, detail.progress, detail.percentage)),
+      progress: finiteNumber(first(detail.progress, detail.percentage, coverage.pct, coverage.percentage)),
       lastMowed,
       lastCompleted,
       cuttingHeight,

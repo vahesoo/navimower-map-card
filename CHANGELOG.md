@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.13 - 2026-07-31
+
+- Added a three-day History selector in the card header with **Today** and the
+  two preceding dates in compact `DD.MM` format.
+- Today is the default live view and combines the retained routes and session
+  buttons from the current calendar day, including the active trail.
+- Selecting either earlier date filters both the map routes and session buttons
+  to that calendar day.
+- Works with Navimower v0.2.6 cycle boundaries and retained session history.
+- Zone labels and details now prefer the integration's app-like active progress
+  over the slower private-cloud coverage value.
+- Restored the original 600 ms three-pulse speed and added `forwards` fill mode
+  so the brief extra color flash after the third pulse no longer appears.
+
+
 All notable changes to this project are documented here.
 
 ## 0.1.12 - 2026-07-30

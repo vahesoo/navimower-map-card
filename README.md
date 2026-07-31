@@ -14,9 +14,10 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 
 - Decoded Navimow map geometry with zones, Off-limit areas, VF-off areas, Channels, Gate areas, and charging station
 - Live MQTT mower position and heading
-- One unified mowed-area layer containing current and completed mowing routes
+- Day-based map history for Today and the two preceding dates
+- Three-day History selector with matching routes and session times for each day
 - Gap-aware trail segments for pauses, integration reloads, and Home Assistant restarts
-- Clickable session times that briefly pulse the selected session route
+- Clickable session times that briefly pulse the selected session route at the original three-pulse tempo
 - Interactive zone labels with progress, mowing times, and cutting height
 - Mow, Pause, and Dock controls directly below the map
 - Integrated **Mow now** dialog with ordered zone selection and progress reset/continue choice
@@ -31,7 +32,7 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 
 - Home Assistant 2026.6 or newer
 - [`Navimower`](https://github.com/vahesoo/NaviMower) integration
-- Navimower v0.2.4 or newer is recommended for merged sessions and segmented trails
+- Navimower v0.2.6 or newer is recommended for cycle resets, app-like progress, and three-day history
 - HACS is recommended for installation and updates
 
 ## Installation with HACS
@@ -131,16 +132,19 @@ The relevant map payload fields are:
 }
 ```
 
-## Mowed area and sessions
+## Today and three-day history
 
-Current and completed routes are rendered together as one mowed-area layer.
+The default map is **Today**. It shows the retained mowing routes and session times from the current calendar day, including the live active trail. The **History** button in the card header offers three day choices:
 
-- The entire layer uses one color and one opacity.
-- Overlapping routes do not become progressively darker.
-- Active and older routes are not styled separately.
-- Clicking a session time draws that session temporarily above the common layer and pulses it three times.
+- Today
+- the previous date in compact `DD.MM` format
+- the date two days ago in compact `DD.MM` format
 
-Use these settings for the whole mowed area:
+For example, on 31 August the choices are **Today**, **30.08**, and **29.08**. Selecting an earlier date filters both the map routes and session buttons to that calendar day. This intentionally keeps the interface simple; multiple sessions on the same day are displayed together and remain individually selectable from the session row.
+
+Clicking a session time draws that session temporarily above the selected map and pulses it three times. The original 600 ms pulse speed is retained, while `forwards` fill mode removes the brief extra color flash after the third pulse.
+
+Use these settings for the mowed area:
 
 ```yaml
 trail_color: "#43a047"
@@ -149,11 +153,11 @@ trail_opacity: 0.55
 
 There are no separate active-trail or old-trail color and opacity controls.
 
-Navimower v0.2.4 map API schema v3 can return separate route fragments:
+Navimower v0.2.6 map API schema v4 returns cycle-aware sessions and separate route fragments:
 
 ```json
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "trail_segments": [
     [[1.2, 3.4], [1.3, 3.5]],
     [[4.1, 5.2], [4.2, 5.3]]
@@ -173,7 +177,7 @@ Navimower v0.2.4 map API schema v3 can return separate route fragments:
 }
 ```
 
-The card renders every segment separately so missing position data during a pause, reload, or restart does not create a false straight line. The older flat `trail` and `points` fields remain supported as a fallback.
+The card renders every segment separately so missing position data during a pause, reload, or restart does not create a false straight line. Intentional cycle boundaries remain separate even when the next cycle starts within five minutes. The older flat `trail` and `points` fields remain supported as a fallback.
 
 Session and zone-detail times follow the current Home Assistant user's 12-hour or 24-hour time preference.
 

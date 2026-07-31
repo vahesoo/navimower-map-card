@@ -16,7 +16,7 @@ globalThis.Event = class {
 
 await import("../src/navimower-map-card.js");
 const sourceText = await (await import("node:fs/promises")).readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
-assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.1.13";'));
+assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.1.14";'));
 assert.ok(sourceText.includes("nm-session-route-pulse 600ms ease-in-out 3 forwards"));
 assert.ok(sourceText.includes("}, 1820);"));
 assert.ok(sourceText.includes("<span>History</span>"));
@@ -128,6 +128,7 @@ twoDaysAgoStart.setDate(twoDaysAgoStart.getDate() - 2);
 const twoDaysAgoEnd = new Date(twoDaysAgoStart.getTime() + 60 * 60 * 1000);
 
 card._mapPayload = {
+  cutting_height_supported: true,
   cut_height: 30,
   coverage: { zones: [{ id: 13, pct: 72 }] },
   zone_details: [{
@@ -167,7 +168,38 @@ const zoneDetails = card._zoneDetails(13);
 assert.equal(zoneDetails.name, "Zone 5");
 assert.equal(zoneDetails.progress, 84);
 assert.equal(zoneDetails.cuttingHeight, 30);
+assert.equal(zoneDetails.cuttingHeightSupported, true);
 assert.equal(zoneDetails.inheritedHeight, true);
+
+card._zoneInfoEl = { hidden: true };
+card._zoneInfoTitleEl = { textContent: "" };
+card._zoneInfoGridEl = { innerHTML: "" };
+card._openZoneInfo(13);
+assert.ok(card._zoneInfoGridEl.innerHTML.includes("Cutting height"));
+assert.ok(card._zoneInfoGridEl.innerHTML.includes("30 mm (global)"));
+
+card._mapPayload.cutting_height_supported = false;
+card._mapPayload.cut_height = null;
+card._mapPayload.zone_details[0].cutting_height_supported = false;
+card._layout.zones[0].boundary.height_set = 316;
+const unsupportedHeight = card._zoneDetails(13);
+assert.equal(unsupportedHeight.cuttingHeight, null);
+assert.equal(unsupportedHeight.cuttingHeightSupported, false);
+card._openZoneInfo(13);
+assert.ok(!card._zoneInfoGridEl.innerHTML.includes("Cutting height"));
+assert.ok(!card._zoneInfoGridEl.innerHTML.includes("316"));
+
+// Capability-less legacy payloads must also reject encoded values.
+delete card._mapPayload.cutting_height_supported;
+delete card._mapPayload.zone_details[0].cutting_height_supported;
+const legacyEncodedHeight = card._zoneDetails(13);
+assert.equal(legacyEncodedHeight.cuttingHeight, null);
+assert.equal(legacyEncodedHeight.cuttingHeightSupported, false);
+
+card._mapPayload.cutting_height_supported = true;
+card._mapPayload.cut_height = 30;
+card._mapPayload.zone_details[0].cutting_height_supported = true;
+card._layout.zones[0].boundary.height_set = 256;
 
 let mowedOpacity = null;
 card._mowedAreaEl = { setAttribute: (name, value) => { if (name === "opacity") mowedOpacity = value; } };

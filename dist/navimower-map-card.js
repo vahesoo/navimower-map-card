@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.1.15
+ * Version 0.1.16
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.15";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.16";
 const VIEW_SIZE = 1000;
 
 // Embedded H2 mower artwork from the earlier Navimow Map Card. Keeping the
@@ -127,6 +127,7 @@ const DEFAULTS = Object.freeze({
   show_battery: true,
   show_position: false,
   show_zone_labels: true,
+  avoid_zone_label_overlap: true,
   show_gate_areas: true,
   show_channels: true,
   show_map_legend: true,
@@ -165,6 +166,7 @@ const LABELS = Object.freeze({
   show_battery: "Show battery",
   show_position: "Show X/Y position",
   show_zone_labels: "Show zone labels",
+  avoid_zone_label_overlap: "Prevent zone label overlap",
   show_gate_areas: "Show gate areas",
   show_channels: "Show channels",
   show_map_legend: "Show map legend",
@@ -257,6 +259,7 @@ class NavimowerMapCard extends HTMLElement {
       show_battery: DEFAULTS.show_battery,
       show_position: DEFAULTS.show_position,
       show_zone_labels: DEFAULTS.show_zone_labels,
+      avoid_zone_label_overlap: DEFAULTS.avoid_zone_label_overlap,
       show_gate_areas: DEFAULTS.show_gate_areas,
       show_channels: DEFAULTS.show_channels,
       show_map_legend: DEFAULTS.show_map_legend,
@@ -323,6 +326,7 @@ class NavimowerMapCard extends HTMLElement {
                 { name: "show_battery", selector: { boolean: {} } },
                 { name: "show_position", selector: { boolean: {} } },
                 { name: "show_zone_labels", selector: { boolean: {} } },
+                { name: "avoid_zone_label_overlap", selector: { boolean: {} } },
                 { name: "show_gate_areas", selector: { boolean: {} } },
                 { name: "show_channels", selector: { boolean: {} } },
                 { name: "show_map_legend", selector: { boolean: {} } },
@@ -1218,6 +1222,8 @@ class NavimowerMapCard extends HTMLElement {
     const base = [`<rect width="${VIEW_SIZE}" height="${VIEW_SIZE}" fill="${escapeHtml(background)}"/>`];
     const details = [];
     const labels = [];
+    const zoneLabels = [];
+    const labelObstacles = [];
 
     for (const zone of zones) {
       const polygon = zone.polygon || [];
@@ -1230,7 +1236,16 @@ class NavimowerMapCard extends HTMLElement {
         const coverageItem = coverage.get(Number(zone.id));
         const pct = this._zoneDetails(zone.id).progress ?? coverageItem?.pct;
         const name = zone.name || `Zone ${zone.id}`;
-        labels.push(this._pill(cx, cy, pct === undefined || pct === null ? name : `${name} · ${pct}%`, zone.id));
+        const value = pct === undefined || pct === null ? name : `${name} · ${pct}%`;
+        const screenPolygon = polygon.map((point) => [sx(Number(point[0])), sy(Number(point[1]))]);
+        zoneLabels.push({
+          anchorX: cx,
+          anchorY: cy,
+          value,
+          zoneId: zone.id,
+          polygon: screenPolygon,
+          area: Math.abs(this._polygonArea(screenPolygon)),
+        });
       }
     }
 
@@ -1255,16 +1270,36 @@ class NavimowerMapCard extends HTMLElement {
         const y1 = sy(Number(channel.y_max));
         const y2 = sy(Number(channel.y_min));
         details.push(`<rect x="${Math.min(x1, x2).toFixed(1)}" y="${Math.min(y1, y2).toFixed(1)}" width="${Math.abs(x2 - x1).toFixed(1)}" height="${Math.abs(y2 - y1).toFixed(1)}" fill="${escapeHtml(c.gate_area_color)}" fill-opacity=".14" stroke="${escapeHtml(c.gate_area_color)}" stroke-width="3" stroke-dasharray="10 6"/>`);
-        labels.push(this._label((x1 + x2) / 2, Math.min(y1, y2) + 24, channel.name || "Gate area", 19));
+        const gateLabel = channel.name || "Gate area";
+        const gateX = (x1 + x2) / 2;
+        const gateY = Math.min(y1, y2) + 24;
+        labels.push(this._label(gateX, gateY, gateLabel, 19));
+        const gateWidth = Math.max(54, String(gateLabel).length * 11.5);
+        labelObstacles.push({ left: gateX - gateWidth / 2, right: gateX + gateWidth / 2, top: gateY - 21, bottom: gateY + 7 });
       });
     }
     if (station && Number.isFinite(Number(station.x)) && Number.isFinite(Number(station.y))) {
       details.push(this._station(sx(Number(station.x)), sy(Number(station.y))));
     }
 
+    if (c.show_map_legend) {
+      const legendRows = 3 + (channels.length > 0 ? 1 : 0) + (gateAreas.length > 0 ? 1 : 0);
+      labelObstacles.push({ left: 8, right: 180, top: 8, bottom: 32 + legendRows * 30 });
+    }
+    const arrangedZoneLabels = c.avoid_zone_label_overlap === false
+      ? zoneLabels.map((item) => ({ ...item, cx: item.anchorX, cy: item.anchorY, ...this._pillMetrics(item.value), moved: false }))
+      : this._layoutZoneLabels(zoneLabels, labelObstacles);
+    const zoneLeaders = [];
+    const zonePills = [];
+    for (const item of arrangedZoneLabels) {
+      const leader = this._zoneLabelLeader(item);
+      if (leader) zoneLeaders.push(leader);
+      zonePills.push(this._pill(item.cx, item.cy, item.value, item.zoneId));
+    }
+
     this._baseEl.innerHTML = base.join("");
     this._detailsEl.innerHTML = details.join("");
-    this._labelsEl.innerHTML = labels.join("");
+    this._labelsEl.innerHTML = [...zoneLeaders, ...zonePills, ...labels].join("");
     this._uiEl.innerHTML = c.show_map_legend ? this._legend(gateAreas.length > 0, channels.length > 0) : "";
     if (this._selectedZoneId !== null) this._openZoneInfo(this._selectedZoneId);
   }
@@ -2147,11 +2182,128 @@ class NavimowerMapCard extends HTMLElement {
     </g>`;
   }
 
-  _pill(cx, cy, value, zoneId = null) {
+  _pillMetrics(value) {
     const fontSize = clamp(finiteNumber(this._config.zone_label_font_size, 20), 12, 36);
+    const width = Math.min(VIEW_SIZE - 16, Math.max(92, String(value).length * fontSize * .58 + 28));
+    return { width, height: fontSize + 18, fontSize };
+  }
+
+  _polygonArea(points) {
+    if (!Array.isArray(points) || points.length < 3) return 0;
+    let area = 0;
+    for (let index = 0; index < points.length; index += 1) {
+      const current = points[index];
+      const next = points[(index + 1) % points.length];
+      area += Number(current[0]) * Number(next[1]) - Number(next[0]) * Number(current[1]);
+    }
+    return area / 2;
+  }
+
+  _pointInPolygon(point, polygon) {
+    if (!Array.isArray(polygon) || polygon.length < 3) return false;
+    const [x, y] = point;
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+      const xi = Number(polygon[i][0]);
+      const yi = Number(polygon[i][1]);
+      const xj = Number(polygon[j][0]);
+      const yj = Number(polygon[j][1]);
+      const intersects = ((yi > y) !== (yj > y))
+        && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi);
+      if (intersects) inside = !inside;
+    }
+    return inside;
+  }
+
+  _labelBox(cx, cy, width, height) {
+    return {
+      left: cx - width / 2,
+      right: cx + width / 2,
+      top: cy - height / 2,
+      bottom: cy + height / 2,
+    };
+  }
+
+  _labelOverlapArea(box, other, padding = 8) {
+    const width = Math.min(box.right, other.right + padding) - Math.max(box.left, other.left - padding);
+    const height = Math.min(box.bottom, other.bottom + padding) - Math.max(box.top, other.top - padding);
+    return width > 0 && height > 0 ? width * height : 0;
+  }
+
+  _zoneLabelCandidates(item, width, height) {
+    const margin = 8;
+    const xStep = Math.max(56, width * .58);
+    const yStep = height + 12;
+    const candidates = [];
+    const seen = new Set();
+    for (let ring = 0; ring <= 8; ring += 1) {
+      for (let dx = -ring; dx <= ring; dx += 1) {
+        for (let dy = -ring; dy <= ring; dy += 1) {
+          if (ring > 0 && Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+          const cx = clamp(item.anchorX + dx * xStep, margin + width / 2, VIEW_SIZE - margin - width / 2);
+          const cy = clamp(item.anchorY + dy * yStep, margin + height / 2, VIEW_SIZE - margin - height / 2);
+          const key = `${cx.toFixed(1)}:${cy.toFixed(1)}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          candidates.push({ cx, cy });
+        }
+      }
+    }
+    return candidates;
+  }
+
+  _layoutZoneLabels(items, obstacles = []) {
+    if (!Array.isArray(items) || items.length === 0) return [];
+    const placedBoxes = obstacles.map((box) => ({ ...box }));
+    const result = new Array(items.length);
+    const ordered = items.map((item, index) => ({ ...item, index, ...this._pillMetrics(item.value) }))
+      .sort((left, right) => finiteNumber(left.area, Number.MAX_SAFE_INTEGER) - finiteNumber(right.area, Number.MAX_SAFE_INTEGER) || left.index - right.index);
+
+    for (const item of ordered) {
+      let best = null;
+      for (const candidate of this._zoneLabelCandidates(item, item.width, item.height)) {
+        const box = this._labelBox(candidate.cx, candidate.cy, item.width, item.height);
+        const overlapArea = placedBoxes.reduce((sum, placed) => sum + this._labelOverlapArea(box, placed), 0);
+        const distance = Math.hypot(candidate.cx - item.anchorX, candidate.cy - item.anchorY);
+        const insidePenalty = this._pointInPolygon([candidate.cx, candidate.cy], item.polygon) ? 0 : 120;
+        const score = overlapArea * 100000 + distance + insidePenalty;
+        if (!best || score < best.score) best = { ...candidate, box, score, overlapArea };
+        if (overlapArea === 0 && distance === 0) break;
+      }
+      const chosen = best || {
+        cx: item.anchorX,
+        cy: item.anchorY,
+        box: this._labelBox(item.anchorX, item.anchorY, item.width, item.height),
+      };
+      placedBoxes.push(chosen.box);
+      result[item.index] = {
+        ...item,
+        cx: chosen.cx,
+        cy: chosen.cy,
+        moved: Math.hypot(chosen.cx - item.anchorX, chosen.cy - item.anchorY) > 1,
+      };
+    }
+    return result;
+  }
+
+  _zoneLabelLeader(item) {
+    if (!item?.moved) return "";
+    const dx = item.anchorX - item.cx;
+    const dy = item.anchorY - item.cy;
+    const halfWidth = item.width / 2;
+    const halfHeight = item.height / 2;
+    if (Math.abs(dx) <= halfWidth && Math.abs(dy) <= halfHeight) return "";
+    const tx = dx === 0 ? Number.POSITIVE_INFINITY : halfWidth / Math.abs(dx);
+    const ty = dy === 0 ? Number.POSITIVE_INFINITY : halfHeight / Math.abs(dy);
+    const ratio = Math.min(tx, ty);
+    const endX = item.cx + dx * ratio;
+    const endY = item.cy + dy * ratio;
+    return `<line class="nm-zone-label-leader" x1="${item.anchorX.toFixed(1)}" y1="${item.anchorY.toFixed(1)}" x2="${endX.toFixed(1)}" y2="${endY.toFixed(1)}" stroke="#607d8b" stroke-width="2" stroke-opacity=".72" stroke-linecap="round" pointer-events="none"/>`;
+  }
+
+  _pill(cx, cy, value, zoneId = null) {
+    const { fontSize, width, height } = this._pillMetrics(value);
     const text = escapeHtml(value);
-    const width = Math.max(92, String(value).length * fontSize * .58 + 28);
-    const height = fontSize + 18;
     const interactive = zoneId !== null && zoneId !== undefined;
     const opacity = clamp(finiteNumber(this._config.zone_label_opacity, 1), 0, 1);
     const attrs = interactive

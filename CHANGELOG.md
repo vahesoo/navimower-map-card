@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.15 - 2026-08-01
+
+- Updated the card runtime and package version to `0.1.15`.
+- Updated the recommended backend version to Navimower v0.2.8.
+- Retained the automatic cutting-height capability handling introduced in v0.1.14, including hiding unsupported or invalid height values.
+- No map-data schema change is required; Navimower Map API v4 remains supported.
+
 ## 0.1.13 - 2026-07-31
 
 - Added a three-day History selector in the card header with **Today** and the

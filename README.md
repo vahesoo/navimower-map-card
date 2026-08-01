@@ -32,7 +32,7 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 
 - Home Assistant 2026.6 or newer
 - [`Navimower`](https://github.com/vahesoo/NaviMower) integration
-- Navimower v0.2.7 or newer is recommended for cycle resets, stable state handling, supported cutting-height detection, and three-day history
+- Navimower v0.2.8 or newer is recommended for cycle resets, stable state handling, supported cutting-height detection, and three-day history
 - HACS is recommended for installation and updates
 
 ## Installation with HACS

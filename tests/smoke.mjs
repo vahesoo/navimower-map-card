@@ -16,7 +16,7 @@ globalThis.Event = class {
 
 await import("../src/navimower-map-card.js");
 const sourceText = await (await import("node:fs/promises")).readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
-assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.1.14";'));
+assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.1.15";'));
 assert.ok(sourceText.includes("nm-session-route-pulse 600ms ease-in-out 3 forwards"));
 assert.ok(sourceText.includes("}, 1820);"));
 assert.ok(sourceText.includes("<span>History</span>"));

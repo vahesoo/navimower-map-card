@@ -19,6 +19,7 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 - Gap-aware trail segments for pauses, integration reloads, and Home Assistant restarts
 - Clickable session times that briefly pulse the selected session route at the original three-pulse tempo
 - Interactive zone labels with progress, mowing times, and cutting height when the mower supports automatic height control
+- Automatic zone-label decluttering so nearby zone markers no longer cover each other
 - Mow, Pause, and Dock controls directly below the map
 - Integrated **Mow now** dialog with ordered zone selection and progress reset/continue choice
 - Integrated weekly **Schedule** editor
@@ -32,7 +33,7 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 
 - Home Assistant 2026.6 or newer
 - [`Navimower`](https://github.com/vahesoo/NaviMower) integration
-- Navimower v0.2.8 or newer is recommended for cycle resets, stable state handling, supported cutting-height detection, and three-day history
+- Navimower v0.2.9 or newer is recommended for dense battery telemetry, stable counters and channel state, supported cutting-height detection, and three-day history
 - HACS is recommended for installation and updates
 
 ## Installation with HACS
@@ -192,6 +193,8 @@ Click or tap a zone label to view available information:
 
 Exact timestamps depend on the `zone_details` data supplied by the Navimower integration. Missing values are shown as **Not available** rather than reconstructed in the browser.
 
+When nearby zone labels would overlap, the card moves the minimum number of labels to free positions and draws a subtle leader line back to the original zone anchor. This behavior is enabled by default and can be disabled with `avoid_zone_label_overlap: false`.
+
 See [docs/SESSION_API.md](docs/SESSION_API.md) for the supported map API fields.
 
 ## Zoom and navigation
@@ -235,6 +238,7 @@ show_zone: true
 show_battery: true
 show_position: false
 show_zone_labels: true
+avoid_zone_label_overlap: true
 show_channels: true
 show_gate_areas: true
 show_map_legend: true

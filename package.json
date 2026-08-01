@@ -1,6 +1,6 @@
 {
   "name": "navimower-map-card",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Home Assistant dashboard map card for the Navimower integration",
   "type": "module",
   "scripts": {
@@ -17,6 +17,6 @@
     "navimow",
     "robot-mower"
   ],
-  "author": "Toomas V\u00e4hesoo",
+  "author": "Toomas Vähesoo",
   "license": "MIT"
 }

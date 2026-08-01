@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.16 - 2026-08-01
+
+- Added automatic collision avoidance for zone markers and labels.
+- Nearby zone labels are repositioned to the nearest free location instead of being drawn on top of each other.
+- Added subtle leader lines from displaced labels back to their original zone anchors.
+- Zone labels also avoid the map legend and visible Gate-area labels.
+- Added the `avoid_zone_label_overlap` option, enabled by default and available in the visual editor.
+- Updated the recommended backend version to Navimower v0.2.9.
+- Map API schema v4 remains fully compatible.
+
+
 ## 0.1.15 - 2026-08-01
 
 - Updated the card runtime and package version to `0.1.15`.

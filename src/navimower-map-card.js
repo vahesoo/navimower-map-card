@@ -1,14 +1,41 @@
 /*
  * Navimower Map Card
- * Version 0.1.16
+ * Version 0.1.17
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.16";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.17";
 const VIEW_SIZE = 1000;
+const MAP_CACHE_LIMIT = 10;
+const MAP_CACHE_FRESH_MS = 45000;
+const MAP_PAYLOAD_CACHE = new Map();
+const STATIC_MAP_CACHE = new Map();
+let CARD_TEMPLATE = null;
+let MOWER_TEMPLATE = null;
+
+function cacheSet(cache, key, value, limit = MAP_CACHE_LIMIT) {
+  if (!key) return;
+  cache.delete(key);
+  cache.set(key, value);
+  while (cache.size > limit) cache.delete(cache.keys().next().value);
+}
+
+function sameValue(a, b) {
+  return Object.is(a, b);
+}
+
+function fastHash(value) {
+  const text = String(value ?? "");
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
 
 // Embedded H2 mower artwork from the earlier Navimow Map Card. Keeping the
 // SVG inside the bundle avoids a second HACS resource and works offline.
@@ -128,6 +155,7 @@ const DEFAULTS = Object.freeze({
   show_position: false,
   show_zone_labels: true,
   avoid_zone_label_overlap: true,
+  show_vf_off_areas: true,
   show_gate_areas: true,
   show_channels: true,
   show_map_legend: true,
@@ -167,6 +195,7 @@ const LABELS = Object.freeze({
   show_position: "Show X/Y position",
   show_zone_labels: "Show zone labels",
   avoid_zone_label_overlap: "Prevent zone label overlap",
+  show_vf_off_areas: "Show VisionFence / VF-off areas",
   show_gate_areas: "Show gate areas",
   show_channels: "Show channels",
   show_map_legend: "Show map legend",
@@ -260,6 +289,7 @@ class NavimowerMapCard extends HTMLElement {
       show_position: DEFAULTS.show_position,
       show_zone_labels: DEFAULTS.show_zone_labels,
       avoid_zone_label_overlap: DEFAULTS.avoid_zone_label_overlap,
+      show_vf_off_areas: DEFAULTS.show_vf_off_areas,
       show_gate_areas: DEFAULTS.show_gate_areas,
       show_channels: DEFAULTS.show_channels,
       show_map_legend: DEFAULTS.show_map_legend,
@@ -327,6 +357,7 @@ class NavimowerMapCard extends HTMLElement {
                 { name: "show_position", selector: { boolean: {} } },
                 { name: "show_zone_labels", selector: { boolean: {} } },
                 { name: "avoid_zone_label_overlap", selector: { boolean: {} } },
+                { name: "show_vf_off_areas", selector: { boolean: {} } },
                 { name: "show_gate_areas", selector: { boolean: {} } },
                 { name: "show_channels", selector: { boolean: {} } },
                 { name: "show_map_legend", selector: { boolean: {} } },
@@ -463,6 +494,22 @@ class NavimowerMapCard extends HTMLElement {
     this._commandBusy = false;
     this._commandStatus = null;
     this._domReady = false;
+    this._lastLiveSnapshot = null;
+    this._renderHandle = null;
+    this._pendingRender = {};
+    this._mowerGroup = null;
+    this._shellRenderKey = null;
+    this._historyBarRenderKey = null;
+    this._historyRenderKey = null;
+    this._trailRenderKey = null;
+    this._mowerRenderKey = null;
+    this._footerRenderKey = null;
+    this._controlsRenderKey = null;
+    this._sessionsRenderKey = null;
+    this._messageRenderKey = null;
+    this._staticRenderKey = null;
+    this._mapStaticSignature = null;
+    this._activeSessionDrawable = false;
   }
 
   setConfig(config) {
@@ -481,8 +528,12 @@ class NavimowerMapCard extends HTMLElement {
     this._mapKey = null;
     this._layout = null;
     this._initialViewApplied = false;
+    this._lastLiveSnapshot = null;
+    this._resetRenderKeys();
     if (previousEntity !== this._config.entity) {
       this._mapPayload = null;
+      this._mapStaticSignature = null;
+      this._activeSessionDrawable = false;
       this._trail = [];
       this._trailSession = null;
       this._lastPointKey = null;
@@ -505,7 +556,7 @@ class NavimowerMapCard extends HTMLElement {
     if (this._hass) {
       this._resolveEntities();
       this._maybeLoadMap();
-      this._updateLive();
+      this._updateLive(true);
     }
   }
 
@@ -515,7 +566,7 @@ class NavimowerMapCard extends HTMLElement {
     this._ensureDom();
     this._resolveEntities();
     this._maybeLoadMap();
-    this._updateLive();
+    this._updateLive(false);
   }
 
   getCardSize() {
@@ -540,11 +591,57 @@ class NavimowerMapCard extends HTMLElement {
     this._pulseTimer = null;
     for (const timer of Object.values(this._scheduleStatusTimers || {})) clearTimeout(timer);
     this._scheduleStatusTimers = {};
+    if (this._renderHandle !== null) {
+      const cancel = globalThis.cancelAnimationFrame || globalThis.clearTimeout;
+      cancel?.(this._renderHandle);
+      this._renderHandle = null;
+    }
+    this._pendingRender = {};
+  }
+
+  _resetRenderKeys() {
+    this._shellRenderKey = null;
+    this._historyBarRenderKey = null;
+    this._historyRenderKey = null;
+    this._trailRenderKey = null;
+    this._mowerRenderKey = null;
+    this._footerRenderKey = null;
+    this._controlsRenderKey = null;
+    this._sessionsRenderKey = null;
+    this._messageRenderKey = null;
+    this._staticRenderKey = null;
+  }
+
+  _queueRender(flags = {}) {
+    for (const [key, value] of Object.entries(flags)) {
+      if (value) this._pendingRender[key] = true;
+    }
+    if (this._renderHandle !== null) return;
+    const schedule = globalThis.requestAnimationFrame || ((callback) => globalThis.setTimeout(callback, 0));
+    this._renderHandle = schedule(() => {
+      this._renderHandle = null;
+      const pending = this._pendingRender;
+      this._pendingRender = {};
+      if (pending.shell) this._renderShell();
+      if (pending.history) this._renderHistory();
+      if (pending.trail) this._renderTrail();
+      if (pending.mower) this._renderMower();
+      if (pending.footer) this._renderFooter();
+      if (pending.controls) this._renderControls();
+      if (pending.dialog) {
+        if (this._scheduleDialogOpen) this._syncScheduleDraft();
+        this._renderDialog();
+      }
+      if (pending.sessions) this._renderSessions();
+      if (pending.message) this._renderMessage();
+    });
   }
 
   _ensureDom() {
     if (this._domReady) return;
-    this.innerHTML = `
+    if (!CARD_TEMPLATE) {
+      CARD_TEMPLATE = document.createElement("template");
+      CARD_TEMPLATE.innerHTML = `
       <ha-card>
         <div class="nm-header">
           <div class="nm-title"></div>
@@ -581,7 +678,17 @@ class NavimowerMapCard extends HTMLElement {
           </div>
         </div>
         <div class="nm-footer"></div>
-        <div class="nm-controls"></div>
+        <div class="nm-controls">
+          <button type="button" class="nm-control nm-mow" data-command="mow">
+            <ha-icon icon="mdi:play"></ha-icon><span>Mow</span>
+          </button>
+          <button type="button" class="nm-control" data-command="pause">
+            <ha-icon icon="mdi:pause"></ha-icon><span>Pause</span>
+          </button>
+          <button type="button" class="nm-control" data-command="dock">
+            <ha-icon icon="mdi:home-map-marker"></ha-icon><span>Dock</span>
+          </button>
+        </div>
         <div class="nm-command-status" aria-live="polite"></div>
         <div class="nm-sessions"></div>
       </ha-card>
@@ -751,6 +858,8 @@ class NavimowerMapCard extends HTMLElement {
           .nm-schedule-times { grid-template-columns: 1fr auto 1fr auto; gap: 5px; }
         }
       </style>`;
+    }
+    this.replaceChildren(CARD_TEMPLATE.content.cloneNode(true));
 
     this._titleEl = this.querySelector(".nm-title");
     this._historyButtonEl = this.querySelector(".nm-history-button");
@@ -776,6 +885,13 @@ class NavimowerMapCard extends HTMLElement {
     this._zoneInfoTitleEl = this.querySelector(".nm-zone-info-title");
     this._zoneInfoGridEl = this.querySelector(".nm-zone-info-grid");
 
+    if (!MOWER_TEMPLATE) {
+      MOWER_TEMPLATE = document.createElement("template");
+      MOWER_TEMPLATE.innerHTML = `<g class="nm-h2-mower" style="display:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.38))">${H2_MOWER_SVG}</g>`;
+    }
+    this._dynamicEl.appendChild(MOWER_TEMPLATE.content.cloneNode(true));
+    this._mowerGroup = this._dynamicEl.querySelector(".nm-h2-mower");
+
     this.querySelector(".nm-zone-info-close")?.addEventListener("click", () => this._closeZoneInfo());
     this._historyButtonEl?.addEventListener("click", () => {
       this._historyMenuOpen = !this._historyMenuOpen;
@@ -790,6 +906,17 @@ class NavimowerMapCard extends HTMLElement {
       this._renderAllDynamic();
     });
     this._scheduleButtonEl?.addEventListener("click", () => this._openScheduleDialog());
+    this._footerEl?.addEventListener("click", (event) => {
+      if (event.target?.closest?.(".nm-battery")) this._openMoreInfo(this._resolved.battery_entity);
+    });
+    this._controlsEl?.addEventListener("click", (event) => {
+      const button = event.target?.closest?.("[data-command]");
+      if (!button || button.disabled) return;
+      const command = button.dataset.command;
+      if (command === "mow") this._onMowPressed();
+      else if (command === "pause") this._runMowerCommand("pause", "Pausing…", "Pause command sent");
+      else if (command === "dock") this._runMowerCommand("dock", "Returning to dock…", "Dock command sent");
+    });
     this._sessionsEl?.addEventListener("click", (event) => {
       const sessionButton = event.target?.closest?.(".nm-session[data-session-id]");
       if (!sessionButton || sessionButton.disabled) return;
@@ -812,11 +939,16 @@ class NavimowerMapCard extends HTMLElement {
 
   _renderShell() {
     if (!this._domReady || !this._config) return;
-    this._titleEl.textContent = this._config.title || "";
-    this._titleEl.parentElement.style.display = "flex";
+    const scheduleEntity = this._resolved.schedule_entity || this._config.schedule_entity;
+    const scheduleEnabled = this._scheduleEnabled();
+    const shellKey = [this._config.title || "", scheduleEntity || "", scheduleEnabled,
+      this._config.show_session_legend, this._config.trail_opacity, this._config.enable_zoom, this._view.scale].join("|");
+    if (shellKey !== this._shellRenderKey) {
+      this._shellRenderKey = shellKey;
+      this._titleEl.textContent = this._config.title || "";
+      this._titleEl.parentElement.style.display = "flex";
+    }
     if (this._scheduleButtonEl) {
-      const scheduleEntity = this._resolved.schedule_entity || this._config.schedule_entity;
-      const scheduleEnabled = this._scheduleEnabled();
       this._scheduleButtonEl.classList.toggle("active", scheduleEnabled);
       this._scheduleButtonEl.setAttribute("aria-pressed", scheduleEnabled ? "true" : "false");
       const stateText = scheduleEnabled ? "On" : "Off";
@@ -825,7 +957,7 @@ class NavimowerMapCard extends HTMLElement {
         : `Mowing schedule · ${stateText}`;
     }
     this._renderHistoryBar();
-    this._sessionsEl.style.display = this._config.show_session_legend ? "flex" : "none";
+    if (!this._config.show_session_legend) this._sessionsEl.style.display = "none";
     this._syncMowedAreaStyle();
     this._syncTouchAction();
   }
@@ -834,6 +966,9 @@ class NavimowerMapCard extends HTMLElement {
     if (!this._historyBarEl) return;
     const selected = this._historyDayOffset;
     const visible = this._historyMenuOpen || selected !== null;
+    const historyBarKey = `${visible}|${selected ?? "today"}`;
+    if (historyBarKey === this._historyBarRenderKey) return;
+    this._historyBarRenderKey = historyBarKey;
     this._historyBarEl.hidden = !visible;
     if (this._historyButtonEl) {
       this._historyButtonEl.classList.toggle("active", selected !== null || this._historyMenuOpen);
@@ -966,8 +1101,9 @@ class NavimowerMapCard extends HTMLElement {
       resolved.status_entity = this._config.status_entity || mowerEntity;
       this._resolved = resolved;
       this._mapKey = null;
+      this._lastLiveSnapshot = null;
       this._maybeLoadMap();
-      this._updateLive();
+      this._updateLive(true);
     } catch (error) {
       console.debug("[Navimower Map Card] Entity registry auto-detection failed", error);
     }
@@ -988,7 +1124,7 @@ class NavimowerMapCard extends HTMLElement {
       this._loadError = mapEntity
         ? `Map entity has no api_path attribute: ${mapEntity}`
         : "Waiting for Navimower map entity auto-detection";
-      this._renderMessage();
+      this._queueRender({ message: true });
       return;
     }
     const mapState = this._state(this._resolved.map_entity);
@@ -997,47 +1133,73 @@ class NavimowerMapCard extends HTMLElement {
     if (key === this._mapKey) return;
     if (key === this._failedMapKey && Date.now() < this._retryAfter) return;
 
+    const cachedEntry = MAP_PAYLOAD_CACHE.get(key);
+    if (cachedEntry?.payload) {
+      this._loadError = null;
+      this._applyMapPayload(cachedEntry.payload, attrs, key);
+      this._queueRender({ shell: true, history: true, trail: true, mower: true, footer: true, controls: true, sessions: true, message: true });
+      if (Date.now() - Number(cachedEntry.cachedAt || 0) < MAP_CACHE_FRESH_MS) return;
+    }
+
     this._loadingMap = true;
     this._loadError = null;
-    this._renderMessage();
+    this._queueRender({ message: true });
     try {
       const path = String(apiPath).replace(/^\/api\//, "").replace(/^\/+/, "");
       const payload = await this._hass.callApi("GET", path);
       const nextPayload = payload || {};
-      const payloadSession = finiteNumber(nextPayload.trail_session, finiteNumber(attrs.trail_session, 0));
-      const backendSegments = this._normalizeTrailSegments(nextPayload.trail_segments, []);
-      const flatBackendTrail = backendSegments.flatMap((segment) => segment);
-      const backendTrail = this._normalizePoints(nextPayload.trail).length
-        ? this._normalizePoints(nextPayload.trail)
-        : flatBackendTrail;
-      if (this._trailSession === null || payloadSession !== this._trailSession) {
-        this._trail = backendTrail;
-        this._trailSession = payloadSession;
-        this._lastPointKey = null;
-        const last = this._trail.at(-1);
-        if (last) this._lastPointKey = `${last[0].toFixed(3)},${last[1].toFixed(3)}`;
-        this._loadSessionFirstSeen(nextPayload, attrs);
-      } else if (!this._trail.length && backendTrail.length) {
-        this._trail = backendTrail;
-      }
-      this._trimTrail();
-      this._mapPayload = nextPayload;
-      this._mapKey = key;
-      this._failedMapKey = null;
-      this._retryAfter = 0;
-      this._buildLayout();
-      this._renderStatic();
-      this._renderHistory();
-      this._initialViewApplied = false;
-      this._applyInitialView(false);
+      cacheSet(MAP_PAYLOAD_CACHE, key, { payload: nextPayload, cachedAt: Date.now() });
+      this._applyMapPayload(nextPayload, attrs, key);
     } catch (error) {
       this._loadError = `Map load failed: ${error?.message || error}`;
       this._failedMapKey = key;
       this._retryAfter = Date.now() + 30000;
     } finally {
       this._loadingMap = false;
-      this._renderAllDynamic();
+      this._queueRender({ shell: true, history: true, trail: true, mower: true, footer: true, controls: true, sessions: true, message: true });
     }
+  }
+
+  _applyMapPayload(sourcePayload, attrs, key) {
+    const nextPayload = { ...(sourcePayload || {}) };
+    const payloadSession = finiteNumber(nextPayload.trail_session, finiteNumber(attrs.trail_session, 0));
+    const backendSegments = this._normalizeTrailSegments(nextPayload.trail_segments, []);
+    const flatBackendTrail = backendSegments.flatMap((segment) => segment);
+    const directTrail = this._normalizePoints(nextPayload.trail);
+    const backendTrail = directTrail.length ? directTrail : flatBackendTrail;
+    if (this._trailSession === null || payloadSession !== this._trailSession) {
+      this._trail = backendTrail;
+      this._trailSession = payloadSession;
+      this._lastPointKey = null;
+      const last = this._trail.at(-1);
+      if (last) this._lastPointKey = `${last[0].toFixed(3)},${last[1].toFixed(3)}`;
+      this._loadSessionFirstSeen(nextPayload, attrs);
+    } else if (!this._trail.length && backendTrail.length) {
+      this._trail = backendTrail;
+    }
+    this._trimTrail();
+    this._mapPayload = nextPayload;
+    this._mapKey = key;
+    this._mapStaticSignature = this._payloadStaticSignature(nextPayload);
+    this._activeSessionDrawable = this._hasDrawableSegment(this._activeTrailSegments());
+    this._failedMapKey = null;
+    this._retryAfter = 0;
+
+    const staticKey = this._staticCacheKey(key);
+    const cachedStatic = STATIC_MAP_CACHE.get(staticKey);
+    if (cachedStatic) {
+      this._layout = cachedStatic.layout;
+      this._applyStaticLayers(cachedStatic);
+      this._staticRenderKey = staticKey;
+    } else {
+      this._buildLayout();
+      this._renderStatic();
+    }
+    this._historyRenderKey = null;
+    this._trailRenderKey = null;
+    this._sessionsRenderKey = null;
+    this._initialViewApplied = false;
+    this._applyInitialView(false);
   }
 
   _normalizePoints(raw) {
@@ -1056,6 +1218,15 @@ class NavimowerMapCard extends HTMLElement {
       if (segments.length) return segments;
     }
     return this._trailSegments(this._normalizePoints(fallbackPoints));
+  }
+
+  _hasDrawableSegment(segments) {
+    return (segments || []).some((segment) => {
+      if (!Array.isArray(segment) || segment.length < 2) return false;
+      const first = segment[0];
+      return segment.slice(1).some((point) => Math.hypot(Number(point[0]) - Number(first[0]),
+        Number(point[1]) - Number(first[1])) >= 0.01);
+    });
   }
 
   _activeTrailSegments() {
@@ -1117,6 +1288,39 @@ class NavimowerMapCard extends HTMLElement {
   _viewStorageKey() {
     const identity = this._apiPath() || this._resolved.mower_entity || this._config?.entity;
     return identity ? `navimower-map-card:view:${identity}` : null;
+  }
+
+  _payloadStaticSignature(payload = this._mapPayload) {
+    const map = payload?.map || {};
+    return fastHash(JSON.stringify({
+      mapVersion: payload?.map_version ?? map.version ?? null,
+      zones: map.zones || [],
+      offLimits: map.off_limit_areas || [],
+      vfOff: map.vf_off_areas || [],
+      channels: map.channels || [],
+      station: map.station || null,
+      gateAreas: payload?.gate_areas || [],
+      coverage: payload?.coverage?.zones || [],
+      zoneDetails: payload?.zone_details || payload?.zone_history || [],
+    }));
+  }
+
+  _staticCacheKey(mapKey = this._mapKey) {
+    const c = this._config || {};
+    return [mapKey || "", this._mapStaticSignature || "", c.show_zone_labels, c.avoid_zone_label_overlap, c.show_vf_off_areas,
+      c.show_gate_areas, c.show_channels, c.show_map_legend, c.zone_fill_color, c.zone_fill_opacity,
+      c.zone_stroke_color, c.off_limit_color, c.vf_off_color, c.channel_color, c.gate_area_color,
+      c.dock_color, c.dock_scale, c.map_background_color, c.map_legend_opacity,
+      c.zone_label_font_size, c.zone_label_opacity].join("|");
+  }
+
+  _applyStaticLayers(entry) {
+    if (!entry) return;
+    if (this._baseEl) this._baseEl.innerHTML = entry.baseHtml || "";
+    if (this._detailsEl) this._detailsEl.innerHTML = entry.detailsHtml || "";
+    if (this._labelsEl) this._labelsEl.innerHTML = entry.labelsHtml || "";
+    if (this._uiEl) this._uiEl.innerHTML = entry.uiHtml || "";
+    if (this._selectedZoneId !== null) this._openZoneInfo(this._selectedZoneId);
   }
 
   _buildLayout() {
@@ -1211,6 +1415,14 @@ class NavimowerMapCard extends HTMLElement {
       layers.forEach((layer) => { layer.innerHTML = ""; });
       return;
     }
+    const staticKey = this._staticCacheKey();
+    const cached = STATIC_MAP_CACHE.get(staticKey);
+    if (cached) {
+      this._layout = cached.layout;
+      this._applyStaticLayers(cached);
+      this._staticRenderKey = staticKey;
+      return;
+    }
     const c = this._config;
     const { zones, offLimits, vfOff, channels, gateAreas, station, scale, sx, sy } = this._layout;
     const coverage = new Map();
@@ -1252,9 +1464,11 @@ class NavimowerMapCard extends HTMLElement {
     offLimits.forEach((polygon) => {
       if (polygon.length >= 3) details.push(`<polygon points="${this._pointString(polygon)}" fill="${escapeHtml(c.off_limit_color)}" fill-opacity=".08" stroke="${escapeHtml(c.off_limit_color)}" stroke-width="5" stroke-linejoin="round"/>`);
     });
-    vfOff.forEach((polygon) => {
-      if (polygon.length >= 3) details.push(`<polygon points="${this._pointString(polygon)}" fill="${escapeHtml(c.vf_off_color)}" fill-opacity=".06" stroke="${escapeHtml(c.vf_off_color)}" stroke-width="5" stroke-linejoin="round"/>`);
-    });
+    if (c.show_vf_off_areas !== false) {
+      vfOff.forEach((polygon) => {
+        if (polygon.length >= 3) details.push(`<polygon points="${this._pointString(polygon)}" fill="${escapeHtml(c.vf_off_color)}" fill-opacity=".06" stroke="${escapeHtml(c.vf_off_color)}" stroke-width="5" stroke-linejoin="round"/>`);
+      });
+    }
     if (c.show_channels) {
       channels.forEach((tunnel) => {
         const points = tunnel.points || [];
@@ -1283,7 +1497,7 @@ class NavimowerMapCard extends HTMLElement {
     }
 
     if (c.show_map_legend) {
-      const legendRows = 3 + (channels.length > 0 ? 1 : 0) + (gateAreas.length > 0 ? 1 : 0);
+      const legendRows = 2 + (c.show_vf_off_areas !== false ? 1 : 0) + (channels.length > 0 ? 1 : 0) + (gateAreas.length > 0 ? 1 : 0);
       labelObstacles.push({ left: 8, right: 180, top: 8, bottom: 32 + legendRows * 30 });
     }
     const arrangedZoneLabels = c.avoid_zone_label_overlap === false
@@ -1301,6 +1515,15 @@ class NavimowerMapCard extends HTMLElement {
     this._detailsEl.innerHTML = details.join("");
     this._labelsEl.innerHTML = [...zoneLeaders, ...zonePills, ...labels].join("");
     this._uiEl.innerHTML = c.show_map_legend ? this._legend(gateAreas.length > 0, channels.length > 0) : "";
+    const entry = {
+      layout: this._layout,
+      baseHtml: this._baseEl.innerHTML,
+      detailsHtml: this._detailsEl.innerHTML,
+      labelsHtml: this._labelsEl.innerHTML,
+      uiHtml: this._uiEl.innerHTML,
+    };
+    cacheSet(STATIC_MAP_CACHE, staticKey, entry);
+    this._staticRenderKey = staticKey;
     if (this._selectedZoneId !== null) this._openZoneInfo(this._selectedZoneId);
   }
 
@@ -1329,6 +1552,7 @@ class NavimowerMapCard extends HTMLElement {
       const segments = active
         ? this._activeTrailSegments()
         : this._normalizeTrailSegments(session.segments, points);
+      const drawable = this._hasDrawableSegment(segments);
       return {
         id: session.id ?? session.session_id ?? index,
         started_at: session.started_at || session.start || session.start_time || null,
@@ -1336,17 +1560,23 @@ class NavimowerMapCard extends HTMLElement {
         active,
         points,
         segments,
+        drawable,
       };
-    }).filter((session) => session.started_at || session.points.length || session.segments.length);
+    }).filter((session) => {
+      if (session.active) return true;
+      return session.drawable;
+    });
     if (!normalized.length && (this._trail.length || this._mapPayload?.trail_active)) {
+      const activeSegments = this._activeTrailSegments();
       normalized.push({
         id: this._trailSession ?? 0,
         started_at: this._mapPayload?.trail_started_at || this._mapPayload?.session_started_at || this._sessionFirstSeen,
         ended_at: this._mapPayload?.trail_ended_at || null,
         active: Boolean(this._mapPayload?.trail_active ?? true),
         points: this._trail,
-        segments: this._activeTrailSegments(),
+        segments: activeSegments,
         approximate: !(this._mapPayload?.trail_started_at || this._mapPayload?.session_started_at),
+        drawable: this._hasDrawableSegment(activeSegments),
       });
     }
     return applyLimit
@@ -1373,9 +1603,16 @@ class NavimowerMapCard extends HTMLElement {
   _renderHistory() {
     if (!this._historyEl || !this._layout) return;
     const sessions = this._sessionsForCurrentView();
+    const renderKey = [this._mapKey, this._historyDayOffset ?? "today", this._config.session_count,
+      this._config.trail_color, this._layout.scale, sessions.map((session) => {
+        const segmentKey = session.segments.map((segment) => `${segment.length}:${segment.at(-1)?.join(",") || ""}`).join(",");
+        return `${session.id}:${session.started_at}:${session.ended_at}:${session.active}:${segmentKey}`;
+      }).join(";")].join("|");
+    if (renderKey === this._historyRenderKey) return;
+    this._historyRenderKey = renderKey;
     const drawable = sessions.filter((session) =>
       (this._historyDayOffset !== null || !session.active)
-      && session.segments.some((segment) => segment.length >= 2)
+      && session.drawable
     );
     const width = Math.min(Math.max(.25 * this._layout.scale, 5), 28);
     this._historyEl.innerHTML = drawable.map((session) =>
@@ -1388,7 +1625,7 @@ class NavimowerMapCard extends HTMLElement {
   _pulseSessionPath(sessionId) {
     if (!this._highlightEl || !this._layout) return;
     const session = this._sessionRecords({ applyLimit: false }).find((item) => String(item.id) === String(sessionId));
-    if (!session || !session.segments.some((segment) => segment.length >= 2)) return;
+    if (!session || !session.drawable) return;
 
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
     this._highlightEl.innerHTML = "";
@@ -1414,36 +1651,84 @@ class NavimowerMapCard extends HTMLElement {
     }, 1820);
   }
 
-  _updateLive() {
-    if (!this._config || !this._hass) return;
-    const x = this._number(this._resolved.x_entity);
-    const y = this._number(this._resolved.y_entity);
+  _liveSnapshot() {
     const mapState = this._state(this._resolved.map_entity);
     const mapAttrs = mapState?.attributes || {};
-    const status = this._text(this._resolved.status_entity, this._mapPayload?.activity || "unknown");
+    const mowerState = this._state(this._mowerEntity());
+    const status = this._text(this._resolved.status_entity, mapAttrs.activity || this._mapPayload?.activity || "unknown");
     const normalizedStatus = String(status || "").toLowerCase();
-    const trailActive = mapAttrs.trail_active === true
-      || this._mapPayload?.trail_active === true
-      || normalizedStatus === "mowing"
-      || normalizedStatus.includes("edge mow");
+    return {
+      x: this._number(this._resolved.x_entity),
+      y: this._number(this._resolved.y_entity),
+      heading: this._number(this._resolved.heading_entity),
+      status,
+      zone: this._text(this._resolved.zone_entity, mapAttrs.current_physical_zone || this._mapPayload?.current_physical_zone || "—"),
+      battery: this._number(this._resolved.battery_entity),
+      trailActive: mapAttrs.trail_active === true
+        || this._mapPayload?.trail_active === true
+        || normalizedStatus === "mowing"
+        || normalizedStatus.includes("edge mow"),
+      mapActivity: mapAttrs.activity || null,
+      mapZone: mapAttrs.current_physical_zone || null,
+      mowerState: mowerState?.state || null,
+      mowerActivity: mowerState?.attributes?.activity || mowerState?.attributes?.state || null,
+      scheduleEnabled: this._scheduleEnabled(),
+      scheduleUpdated: this._scheduleState()?.last_updated || null,
+    };
+  }
 
-    if (trailActive && x !== null && y !== null) {
-      const key = `${x.toFixed(3)},${y.toFixed(3)}`;
+  _updateLive(force = false) {
+    if (!this._config || !this._hass) return;
+    const next = this._liveSnapshot();
+    const previous = this._lastLiveSnapshot;
+    let trailChanged = false;
+    let sessionDrawableChanged = false;
+
+    if (next.trailActive && next.x !== null && next.y !== null) {
+      const key = `${next.x.toFixed(3)},${next.y.toFixed(3)}`;
       if (key !== this._lastPointKey) {
-        const previous = this._trail.at(-1);
-        if (!previous || Math.hypot(x - previous[0], y - previous[1]) >= 0.12) {
-          this._trail.push([x, y]);
+        const priorPoint = this._trail.at(-1);
+        if (!priorPoint || Math.hypot(next.x - priorPoint[0], next.y - priorPoint[1]) >= 0.12) {
+          this._trail.push([next.x, next.y]);
           this._trimTrail();
+          trailChanged = true;
+          if (!this._activeSessionDrawable && this._trail.length >= 2) {
+            this._activeSessionDrawable = true;
+            sessionDrawableChanged = true;
+          }
         }
         this._lastPointKey = key;
       }
     }
     if (this._mapPayload) {
-      this._mapPayload.trail_active = trailActive;
-      this._mapPayload.activity = mapAttrs.activity || this._mapPayload.activity;
-      this._mapPayload.current_physical_zone = mapAttrs.current_physical_zone || this._mapPayload.current_physical_zone;
+      this._mapPayload.trail_active = next.trailActive;
+      this._mapPayload.activity = next.mapActivity || this._mapPayload.activity;
+      this._mapPayload.current_physical_zone = next.mapZone || this._mapPayload.current_physical_zone;
     }
-    this._renderAllDynamic();
+
+    const first = force || !previous;
+    const positionChanged = first || !sameValue(previous?.x, next.x) || !sameValue(previous?.y, next.y)
+      || !sameValue(previous?.heading, next.heading);
+    const footerChanged = first || !sameValue(previous?.status, next.status) || !sameValue(previous?.zone, next.zone)
+      || !sameValue(previous?.battery, next.battery)
+      || (this._config.show_position && (!sameValue(previous?.x, next.x) || !sameValue(previous?.y, next.y)));
+    const controlsChanged = first || !sameValue(previous?.mowerState, next.mowerState)
+      || !sameValue(previous?.mowerActivity, next.mowerActivity);
+    const shellChanged = first || !sameValue(previous?.scheduleEnabled, next.scheduleEnabled)
+      || !sameValue(previous?.scheduleUpdated, next.scheduleUpdated);
+    const trailStateChanged = first || trailChanged || !sameValue(previous?.trailActive, next.trailActive);
+
+    this._lastLiveSnapshot = next;
+    this._queueRender({
+      shell: shellChanged,
+      trail: trailStateChanged,
+      mower: positionChanged,
+      footer: footerChanged,
+      controls: controlsChanged,
+      dialog: this._scheduleDialogOpen && shellChanged,
+      sessions: first || sessionDrawableChanged,
+      message: first,
+    });
   }
 
   _trimTrail() {
@@ -1456,20 +1741,13 @@ class NavimowerMapCard extends HTMLElement {
   }
 
   _renderAllDynamic() {
-    this._renderShell();
-    this._renderHistory();
-    this._renderTrail();
-    this._renderMower();
-    this._renderFooter();
-    this._renderControls();
-    if (this._scheduleDialogOpen) this._syncScheduleDraft();
-    this._renderDialog();
-    this._renderSessions();
-    this._renderMessage();
+    this._queueRender({ shell: true, history: true, trail: true, mower: true, footer: true, controls: true,
+      dialog: true, sessions: true, message: true });
   }
 
   _renderTrail() {
     if (this._historyDayOffset !== null) {
+      this._trailRenderKey = "history";
       if (this._trailEl) this._trailEl.innerHTML = "";
       return;
     }
@@ -1478,29 +1756,45 @@ class NavimowerMapCard extends HTMLElement {
       return;
     }
     const segments = this._activeTrailSegments();
+    const renderKey = [this._historyDayOffset ?? "today", this._trailSession, this._config.trail_color,
+      this._layout.scale, segments.map((segment) => `${segment.length}:${segment.at(-1)?.join(",") || ""}`).join(";")].join("|");
+    if (renderKey === this._trailRenderKey) return;
+    this._trailRenderKey = renderKey;
     if (!segments.length) {
       this._trailEl.innerHTML = "";
       return;
     }
     const width = Math.min(Math.max(.25 * this._layout.scale, 5), 28);
-    const activeSession = this._sessionRecords().find((session) => session.active);
-    const sessionId = activeSession?.id ?? this._trailSession ?? 0;
+    const rawSessions = Array.isArray(this._mapPayload?.sessions) ? this._mapPayload.sessions : [];
+    const activeSession = [...rawSessions].reverse().find((session) => Boolean(session?.active || (session?.ended_at === null && session?.started_at)));
+    const sessionId = activeSession?.id ?? activeSession?.session_id ?? this._trailSession ?? 0;
     this._trailEl.innerHTML = segments
       .map((segment) => `<polyline class="nm-session-path" data-session-id="${escapeHtml(String(sessionId))}" points="${this._pointString(segment)}" fill="none" stroke="${escapeHtml(this._config.trail_color)}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`)
       .join("");
   }
 
   _renderMower() {
-    if (!this._dynamicEl || !this._layout) {
-      if (this._dynamicEl) this._dynamicEl.innerHTML = "";
+    if (!this._mowerGroup || !this._layout) {
+      if (this._mowerGroup) this._mowerGroup.style.display = "none";
       return;
     }
     const x = this._number(this._resolved.x_entity);
     const y = this._number(this._resolved.y_entity);
     const heading = this._number(this._resolved.heading_entity);
-    this._dynamicEl.innerHTML = x !== null && y !== null
-      ? this._mower(this._layout.sx(x), this._layout.sy(y), heading)
-      : "";
+    const renderKey = `${x}|${y}|${heading}|${this._config.mower_scale}|${this._layout.scale}`;
+    if (renderKey === this._mowerRenderKey) return;
+    this._mowerRenderKey = renderKey;
+    if (x === null || y === null) {
+      this._mowerGroup.style.display = "none";
+      return;
+    }
+    const cx = this._layout.sx(x);
+    const cy = this._layout.sy(y);
+    const degrees = Number.isFinite(heading) ? 90 - heading : 90;
+    const scale = .37 * clamp(finiteNumber(this._config.mower_scale, 1), .5, 2.5);
+    this._mowerGroup.setAttribute("transform",
+      `translate(${cx.toFixed(1)},${cy.toFixed(1)}) rotate(${degrees.toFixed(1)}) scale(${scale.toFixed(4)}) translate(-60,-79.5)`);
+    this._mowerGroup.style.display = "";
   }
 
   _renderFooter() {
@@ -1525,11 +1819,11 @@ class NavimowerMapCard extends HTMLElement {
     if (this._config.show_position && x !== null && y !== null) {
       parts.push(`<span>Position: <span class="nm-value">${x.toFixed(2)}, ${y.toFixed(2)} m</span></span>`);
     }
-    this._footerEl.innerHTML = parts.join("");
+    const html = parts.join("");
+    if (html === this._footerRenderKey) return;
+    this._footerRenderKey = html;
+    this._footerEl.innerHTML = html;
     this._footerEl.style.display = parts.length ? "flex" : "none";
-    this._footerEl.querySelector(".nm-battery")?.addEventListener("click", () => {
-      this._openMoreInfo(this._resolved.battery_entity);
-    });
   }
 
   _mowerEntity() {
@@ -1564,20 +1858,11 @@ class NavimowerMapCard extends HTMLElement {
     if (!this._controlsEl) return;
     const mower = this._state(this._mowerEntity());
     const unavailable = !mower || ["unavailable", "unknown"].includes(String(mower.state).toLowerCase());
-    const disabled = unavailable || this._commandBusy ? " disabled" : "";
-    this._controlsEl.innerHTML = `
-      <button type="button" class="nm-control nm-mow" data-command="mow"${disabled}>
-        <ha-icon icon="mdi:play"></ha-icon><span>Mow</span>
-      </button>
-      <button type="button" class="nm-control" data-command="pause"${disabled}>
-        <ha-icon icon="mdi:pause"></ha-icon><span>Pause</span>
-      </button>
-      <button type="button" class="nm-control" data-command="dock"${disabled}>
-        <ha-icon icon="mdi:home-map-marker"></ha-icon><span>Dock</span>
-      </button>`;
-    this._controlsEl.querySelector("[data-command='mow']")?.addEventListener("click", () => this._onMowPressed());
-    this._controlsEl.querySelector("[data-command='pause']")?.addEventListener("click", () => this._runMowerCommand("pause", "Pausing…", "Pause command sent"));
-    this._controlsEl.querySelector("[data-command='dock']")?.addEventListener("click", () => this._runMowerCommand("dock", "Returning to dock…", "Dock command sent"));
+    const disabled = unavailable || this._commandBusy;
+    const key = `${disabled}|${this._commandStatus?.kind || ""}|${this._commandStatus?.text || ""}`;
+    if (key === this._controlsRenderKey) return;
+    this._controlsRenderKey = key;
+    this._controlsEl.querySelectorAll("[data-command]").forEach((button) => { button.disabled = disabled; });
     if (this._commandStatusEl) {
       this._commandStatusEl.className = `nm-command-status ${this._commandStatus?.kind || ""}`;
       this._commandStatusEl.textContent = this._commandStatus?.text || "";
@@ -2107,6 +2392,10 @@ class NavimowerMapCard extends HTMLElement {
   _renderSessions() {
     if (!this._sessionsEl || !this._config.show_session_legend) return;
     const sessions = this._sessionsForCurrentView();
+    const renderKey = [this._historyDayOffset ?? "today", this._config.session_count, this._config.trail_color,
+      this._config.trail_opacity, sessions.map((session) => `${session.id}:${session.started_at}:${session.ended_at}:${session.active}:${session.drawable}`).join(";")].join("|");
+    if (renderKey === this._sessionsRenderKey) return;
+    this._sessionsRenderKey = renderKey;
     if (!sessions.length) {
       this._sessionsEl.innerHTML = "";
       this._sessionsEl.style.display = "none";
@@ -2119,8 +2408,8 @@ class NavimowerMapCard extends HTMLElement {
       const label = this._formatSessionTime(start, end, session.active, now);
       const opacity = clamp(finiteNumber(this._config.trail_opacity, .55), 0, 1);
       const note = session.approximate ? `<span class="nm-session-note" title="Start time is when this browser first observed the session">*</span>` : "";
-      const disabled = session.points.length < 2 ? " disabled" : "";
-      const title = session.points.length < 2 ? "Route is not available" : "Pulse this session route on the map";
+      const disabled = session.drawable ? "" : " disabled";
+      const title = session.drawable ? "Pulse this session route on the map" : "Route is not available";
       return `<button type="button" class="nm-session" data-session-id="${escapeHtml(String(session.id))}" title="${title}" aria-label="${escapeHtml(label)}. ${title}."${disabled}><span class="nm-session-dot" style="background:${escapeHtml(this._config.trail_color)};opacity:${opacity.toFixed(2)}"></span><span>${escapeHtml(label)}</span>${note}</button>`;
     }).join("");
     this._sessionsEl.style.display = "flex";
@@ -2163,7 +2452,10 @@ class NavimowerMapCard extends HTMLElement {
     else if (!this._mapPayload) message = "Waiting for map data…";
     else if (!this._layout) message = "Map geometry is empty";
     else if (this._loadError) message = this._loadError;
-    this._messageEl.innerHTML = message ? this._placeholder(message) : "";
+    const html = message ? this._placeholder(message) : "";
+    if (html === this._messageRenderKey) return;
+    this._messageRenderKey = html;
+    this._messageEl.innerHTML = html;
   }
 
   _mower(cx, cy, headingDegrees) {
@@ -2322,8 +2614,8 @@ class NavimowerMapCard extends HTMLElement {
     const rows = [
       [this._config.trail_color, "Mowed"],
       [this._config.off_limit_color, "Off-limit"],
-      [this._config.vf_off_color, "VF-off"],
     ];
+    if (this._config.show_vf_off_areas !== false) rows.push([this._config.vf_off_color, "VF-off"]);
     if (hasTunnels) rows.push([this._config.channel_color, "Channel"]);
     if (hasChannels) rows.push([this._config.gate_area_color, "Gate area"]);
     const fontSize = 19;

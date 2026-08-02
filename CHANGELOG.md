@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.17 - 2026-08-02
+
+- Added module-level caching for map API payloads and prepared static SVG layers. Returning to the same dashboard restores the base map without repeating geometry normalization, coordinate projection, zone-label collision layout, and static SVG generation.
+- Added stale-while-revalidate map loading: a cached map is shown immediately and an older entry is refreshed from the integration in the background.
+- Parsed and cached the card template and embedded H2 mower artwork once per loaded frontend module.
+- Kept the mower SVG and Mow, Pause, and Dock controls mounted; live updates now change attributes, text, classes, and disabled states instead of rebuilding those DOM trees.
+- Added relevant-entity diffing so unrelated Home Assistant state updates no longer redraw the card.
+- Coalesced live render requests with `requestAnimationFrame`.
+- Added render-key caching for the static map, history, live trail, footer, controls, sessions, and status message.
+- Filtered completed session records that contain no drawable route, removing zero-duration restart/reset stubs from the session row and history limit.
+- Kept a newly active session visible while it is collecting its first route points.
+- Added `show_vf_off_areas`, enabled by default, to hide VF-off polygon fill, outline, and legend row from YAML or the visual editor.
+- Map API schema v4 and existing configurations remain compatible.
+
 ## 0.1.16 - 2026-08-01
 
 - Added automatic collision avoidance for zone markers and labels.

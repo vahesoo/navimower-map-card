@@ -20,6 +20,9 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 - Clickable session times that briefly pulse the selected session route at the original three-pulse tempo
 - Interactive zone labels with progress, mowing times, and cutting height when the mower supports automatic height control
 - Automatic zone-label decluttering so nearby zone markers no longer cover each other
+- Optional VisionFence / VF-off geometry visibility for cleaner perimeter-style maps
+- Cached static map geometry and selective live-layer updates for faster dashboard reopening
+- Automatic filtering of completed history records that contain no drawable route
 - Mow, Pause, and Dock controls directly below the map
 - Integrated **Mow now** dialog with ordered zone selection and progress reset/continue choice
 - Integrated weekly **Schedule** editor
@@ -178,7 +181,7 @@ Navimower v0.2.6 map API schema v4 returns cycle-aware sessions and separate rou
 }
 ```
 
-The card renders every segment separately so missing position data during a pause, reload, or restart does not create a false straight line. Intentional cycle boundaries remain separate even when the next cycle starts within five minutes. The older flat `trail` and `points` fields remain supported as a fallback.
+The card renders every segment separately so missing position data during a pause, reload, or restart does not create a false straight line. Intentional cycle boundaries remain separate even when the next cycle starts within five minutes. Completed backend session stubs with no drawable route are filtered out, while a newly active session remains visible until its route has enough points to be selected. The older flat `trail` and `points` fields remain supported as a fallback.
 
 Session and zone-detail times follow the current Home Assistant user's 12-hour or 24-hour time preference.
 
@@ -194,6 +197,12 @@ Click or tap a zone label to view available information:
 Exact timestamps depend on the `zone_details` data supplied by the Navimower integration. Missing values are shown as **Not available** rather than reconstructed in the browser.
 
 When nearby zone labels would overlap, the card moves the minimum number of labels to free positions and draws a subtle leader line back to the original zone anchor. This behavior is enabled by default and can be disabled with `avoid_zone_label_overlap: false`.
+
+VisionFence / VF-off polygons are shown by default. Users who keep VisionFence enabled only around a perimeter and use a large VF-off area in the middle can hide that geometry and its legend row without changing mower data or behavior:
+
+```yaml
+show_vf_off_areas: false
+```
 
 See [docs/SESSION_API.md](docs/SESSION_API.md) for the supported map API fields.
 
@@ -239,6 +248,7 @@ show_battery: true
 show_position: false
 show_zone_labels: true
 avoid_zone_label_overlap: true
+show_vf_off_areas: true
 show_channels: true
 show_gate_areas: true
 show_map_legend: true
@@ -269,6 +279,22 @@ dock_color: "#37474f"
 ```
 
 Leaving `map_background_color` empty uses the current Home Assistant theme's secondary background color.
+
+## Frontend performance
+
+The card separates static map content from live telemetry. Zone geometry, Off-limit and VF-off polygons, Channels, Gate areas, the charging station, legend, and resolved zone-label positions are cached in browser memory by map revision and visual configuration. Returning to the same dashboard can therefore restore the prepared base map immediately instead of normalizing and laying out all geometry again.
+
+The live update path watches only the entities used by the card:
+
+- position or heading changes update the mower transform and active trail
+- status, zone, or battery changes update only the footer
+- mower availability changes update only the existing controls
+- schedule changes update only the schedule state and open editor
+- unrelated Home Assistant entity updates cause no card redraw
+
+The static card template and embedded mower artwork are parsed once per loaded frontend module. The mower SVG and Mow, Pause, and Dock buttons remain mounted and are updated in place rather than being recreated for every telemetry event. Render requests arriving in the same browser frame are coalesced.
+
+Cached map payloads use stale-while-revalidate behavior: the prepared map is restored immediately, and an older cache entry is refreshed from the integration in the background. Cache entries are bounded in memory and map/configuration changes create a new cache key.
 
 ## Manual entity overrides
 

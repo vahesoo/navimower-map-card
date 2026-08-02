@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.1.17
+ * Version 0.1.18
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.1.17";
+const NAVIMOWER_MAP_CARD_VERSION = "0.1.18";
 const VIEW_SIZE = 1000;
 const MAP_CACHE_LIMIT = 10;
 const MAP_CACHE_FRESH_MS = 45000;
@@ -886,11 +886,16 @@ class NavimowerMapCard extends HTMLElement {
     this._zoneInfoGridEl = this.querySelector(".nm-zone-info-grid");
 
     if (!MOWER_TEMPLATE) {
-      MOWER_TEMPLATE = document.createElement("template");
-      MOWER_TEMPLATE.innerHTML = `<g class="nm-h2-mower" style="display:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.38))">${H2_MOWER_SVG}</g>`;
+      // This node must be created in the SVG namespace. An HTML <template>
+      // produces an XHTML <g> element, which can be queried after insertion
+      // into <svg> but is not rendered by the browser.
+      MOWER_TEMPLATE = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      MOWER_TEMPLATE.setAttribute("class", "nm-h2-mower");
+      MOWER_TEMPLATE.setAttribute("style", "display:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.38))");
+      MOWER_TEMPLATE.innerHTML = H2_MOWER_SVG;
     }
-    this._dynamicEl.appendChild(MOWER_TEMPLATE.content.cloneNode(true));
-    this._mowerGroup = this._dynamicEl.querySelector(".nm-h2-mower");
+    this._mowerGroup = MOWER_TEMPLATE.cloneNode(true);
+    this._dynamicEl.appendChild(this._mowerGroup);
 
     this.querySelector(".nm-zone-info-close")?.addEventListener("click", () => this._closeZoneInfo());
     this._historyButtonEl?.addEventListener("click", () => {

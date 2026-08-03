@@ -16,7 +16,7 @@ await import("../src/navimower-map-card.js");
 const sourceText = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const Card = customElements.get("navimower-map-card");
 
-assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.2.0";'));
+assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.2.1";'));
 assert.equal(typeof Card, "function");
 assert.equal(window.customCards.length, 1);
 assert.equal(window.customCards[0].type, "navimower-map-card");
@@ -275,6 +275,47 @@ delete scheduleCard._hass.states["switch.test_schedule_enabled"];
 assert.equal(scheduleCard._scheduleEnabled(), null);
 assert.equal(scheduleCard._scheduleStatusText(), "Configured");
 
+
+// An active backend session continues collecting live positions while the mower
+// returns to the dock, matching the integration's include_return_trail option.
+const returnCard = new Card();
+returnCard._config = { show_position: false, show_status: true, show_zone: true, show_battery: true, trail_length: 1000 };
+returnCard._resolved = {
+  mower_entity: "lawn_mower.return_test",
+  status_entity: "lawn_mower.return_test",
+  map_entity: "sensor.return_map",
+  x_entity: "sensor.return_x",
+  y_entity: "sensor.return_y",
+  heading_entity: "sensor.return_heading",
+  battery_entity: "sensor.return_battery",
+  zone_entity: "sensor.return_zone",
+  schedule_entity: null,
+  schedule_switch_entity: null,
+};
+returnCard._mapPayload = { active_session: { id: "session-1" }, trail_active: false, include_return_trail: true };
+returnCard._hass = { states: {
+  "lawn_mower.return_test": { state: "returning", attributes: { activity: "returning" } },
+  "sensor.return_map": { state: "ready", attributes: { activity: "returning", trail_active: false, active_session_id: "session-1", include_return_trail: true } },
+  "sensor.return_x": { state: "4", attributes: {} },
+  "sensor.return_y": { state: "5", attributes: {} },
+  "sensor.return_heading": { state: "180", attributes: {} },
+  "sensor.return_battery": { state: "50", attributes: {} },
+  "sensor.return_zone": { state: "Yard", attributes: {} },
+} };
+returnCard._queueRender = () => {};
+returnCard._updateLive(true);
+assert.deepEqual(returnCard._trail, [[4, 5]]);
+returnCard._hass.states["sensor.return_x"] = { state: "4.5", attributes: {} };
+returnCard._updateLive(false);
+assert.deepEqual(returnCard._trail, [[4, 5], [4.5, 5]]);
+returnCard._hass.states["sensor.return_map"].attributes.include_return_trail = false;
+returnCard._hass.states["sensor.return_x"] = { state: "5", attributes: {} };
+returnCard._updateLive(false);
+assert.deepEqual(returnCard._trail, [[4, 5], [4.5, 5]]);
+
+assert.ok(sourceText.includes("LATEST_MAP_PAYLOAD_CACHE"));
+assert.ok(sourceText.includes("daily_trails_revision"));
+assert.ok(sourceText.includes("recordTrail"));
 assert.ok(sourceText.includes("MAP_PAYLOAD_CACHE"));
 assert.ok(sourceText.includes("STATIC_MAP_CACHE"));
 assert.ok(sourceText.includes("CARD_TEMPLATE"));

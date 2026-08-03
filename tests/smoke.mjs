@@ -16,7 +16,7 @@ await import("../src/navimower-map-card.js");
 const sourceText = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const Card = customElements.get("navimower-map-card");
 
-assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.1.17";'));
+assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.2.0";'));
 assert.equal(typeof Card, "function");
 assert.equal(window.customCards.length, 1);
 assert.equal(window.customCards[0].type, "navimower-map-card");
@@ -33,6 +33,7 @@ assert.ok(formText.includes("avoid_zone_label_overlap"));
 assert.ok(formText.includes("show_vf_off_areas"));
 assert.ok(formText.includes("zone_label_opacity"));
 assert.ok(formText.includes("schedule_entity"));
+assert.ok(formText.includes("schedule_switch_entity"));
 
 const card = new Card();
 card._config = {
@@ -206,6 +207,7 @@ perfCard._resolved = {
   battery_entity: "sensor.test_battery",
   zone_entity: "sensor.test_zone",
   schedule_entity: null,
+  schedule_switch_entity: null,
 };
 perfCard._mapPayload = { activity: "docked", current_physical_zone: "Not in zone", trail_active: false };
 const baseStates = {
@@ -230,9 +232,55 @@ perfCard._updateLive(false);
 assert.equal(queued.footer, true);
 assert.equal(queued.mower, false);
 
+
+// Schema-v5 daily trails replace older same-day routes zone by zone, while the
+// active cycle stays on the separate live-trail layer.
+const dailyCard = new Card();
+dailyCard._config = { session_count: 6, trail_color: "#43a047" };
+dailyCard._layout = { scale: 10, sx: (value) => value * 10, sy: (value) => value * 10 };
+dailyCard._historyDayOffset = null;
+dailyCard._historyEl = { innerHTML: "" };
+dailyCard._mapStaticSignature = "daily-map";
+dailyCard._mapPayload = {
+  schema_version: 5,
+  daily_trails: {
+    date: "2026-08-03",
+    revision: 9,
+    zones: [
+      { zone_id: 1, cycle_id: "new-zone-1", active: false, segments: [[[1, 1], [2, 2]]] },
+      { zone_id: 2, cycle_id: "active-zone-2", active: true, segments: [[[3, 3], [4, 4]]] },
+    ],
+  },
+  sessions: [
+    { id: "old-zone-1", started_at: new Date().toISOString(), ended_at: new Date().toISOString(), segments: [[[90, 90], [91, 91]]] },
+  ],
+};
+dailyCard._renderHistory();
+assert.ok(dailyCard._historyEl.innerHTML.includes("10.0,10.0 20.0,20.0"));
+assert.ok(!dailyCard._historyEl.innerHTML.includes("900.0,900.0"));
+assert.ok(!dailyCard._historyEl.innerHTML.includes("30.0,30.0 40.0,40.0"));
+
+// A real global schedule switch is authoritative. Without it, configured day
+// periods are reported as configured rather than incorrectly claiming On.
+const scheduleCard = new Card();
+scheduleCard._config = { schedule_entity: "sensor.test_schedule", schedule_switch_entity: "switch.test_schedule_enabled" };
+scheduleCard._resolved = { schedule_entity: "sensor.test_schedule", schedule_switch_entity: "switch.test_schedule_enabled" };
+scheduleCard._hass = { states: {
+  "sensor.test_schedule": { state: "Mon", attributes: { days: [{ enabled: true, periods: [{ start_min: 60, end_min: 120 }] }] } },
+  "switch.test_schedule_enabled": { state: "off", attributes: {} },
+} };
+assert.equal(scheduleCard._scheduleEnabled(), false);
+assert.equal(scheduleCard._scheduleStatusText(), "Off");
+delete scheduleCard._hass.states["switch.test_schedule_enabled"];
+assert.equal(scheduleCard._scheduleEnabled(), null);
+assert.equal(scheduleCard._scheduleStatusText(), "Configured");
+
 assert.ok(sourceText.includes("MAP_PAYLOAD_CACHE"));
 assert.ok(sourceText.includes("STATIC_MAP_CACHE"));
 assert.ok(sourceText.includes("CARD_TEMPLATE"));
 assert.ok(sourceText.includes("MOWER_TEMPLATE"));
+assert.ok(sourceText.includes('document.createElementNS("http://www.w3.org/2000/svg", "g")'));
+assert.ok(!sourceText.includes('MOWER_TEMPLATE = document.createElement("template")'));
+assert.ok(sourceText.includes("this._mowerGroup = MOWER_TEMPLATE.cloneNode(true)"));
 
 console.log("Navimower Map Card smoke tests passed");

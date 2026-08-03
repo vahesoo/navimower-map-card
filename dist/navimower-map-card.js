@@ -1,17 +1,18 @@
 /*
  * Navimower Map Card
- * Version 0.2.0
+ * Version 0.2.1
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.2.0";
+const NAVIMOWER_MAP_CARD_VERSION = "0.2.1";
 const VIEW_SIZE = 1000;
 const MAP_CACHE_LIMIT = 10;
 const MAP_CACHE_FRESH_MS = 45000;
 const MAP_PAYLOAD_CACHE = new Map();
+const LATEST_MAP_PAYLOAD_CACHE = new Map();
 const STATIC_MAP_CACHE = new Map();
 let CARD_TEMPLATE = null;
 let MOWER_TEMPLATE = null;
@@ -515,6 +516,8 @@ class NavimowerMapCard extends HTMLElement {
     this._staticRenderKey = null;
     this._mapStaticSignature = null;
     this._activeSessionDrawable = false;
+    this._connected = false;
+    this._refreshAfterReconnect = false;
   }
 
   setConfig(config) {
@@ -589,7 +592,19 @@ class NavimowerMapCard extends HTMLElement {
     };
   }
 
+  connectedCallback() {
+    this._connected = true;
+    if (this._refreshAfterReconnect && this._config && this._hass) {
+      this._refreshAfterReconnect = false;
+      this._mapKey = null;
+      this._maybeLoadMap();
+      this._updateLive(true);
+    }
+  }
+
   disconnectedCallback() {
+    this._connected = false;
+    this._refreshAfterReconnect = true;
     this._pointers.clear();
     this._panStart = null;
     this._pinchStart = null;
@@ -1163,12 +1178,25 @@ class NavimowerMapCard extends HTMLElement {
     if (key === this._mapKey) return;
     if (key === this._failedMapKey && Date.now() < this._retryAfter) return;
 
+    const expectedDailyRevision = finiteNumber(attrs.daily_trails_revision, null);
     const cachedEntry = MAP_PAYLOAD_CACHE.get(key);
-    if (cachedEntry?.payload) {
+    const cachedDailyRevision = finiteNumber(cachedEntry?.payload?.daily_trails?.revision, null);
+    const exactCacheCurrent = expectedDailyRevision === null || cachedDailyRevision === expectedDailyRevision;
+    if (cachedEntry?.payload && exactCacheCurrent) {
       this._loadError = null;
       this._applyMapPayload(cachedEntry.payload, attrs, key);
       this._queueRender({ shell: true, history: true, trail: true, mower: true, footer: true, controls: true, sessions: true, message: true });
       if (Date.now() - Number(cachedEntry.cachedAt || 0) < MAP_CACHE_FRESH_MS) return;
+    } else {
+      // Show the latest known payload immediately while the current dynamic
+      // trail/zone revision is refreshed in the background. This avoids a
+      // blank or noticeably slower card when returning to the dashboard.
+      const latestEntry = LATEST_MAP_PAYLOAD_CACHE.get(apiPath);
+      if (latestEntry?.payload) {
+        this._loadError = null;
+        this._applyMapPayload(latestEntry.payload, attrs, latestEntry.key || key);
+        this._queueRender({ shell: true, history: true, trail: true, mower: true, footer: true, controls: true, sessions: true, message: true });
+      }
     }
 
     this._loadingMap = true;
@@ -1178,7 +1206,9 @@ class NavimowerMapCard extends HTMLElement {
       const path = String(apiPath).replace(/^\/api\//, "").replace(/^\/+/, "");
       const payload = await this._hass.callApi("GET", path);
       const nextPayload = payload || {};
-      cacheSet(MAP_PAYLOAD_CACHE, key, { payload: nextPayload, cachedAt: Date.now() });
+      const cachedAt = Date.now();
+      cacheSet(MAP_PAYLOAD_CACHE, key, { payload: nextPayload, cachedAt });
+      cacheSet(LATEST_MAP_PAYLOAD_CACHE, apiPath, { payload: nextPayload, cachedAt, key });
       this._applyMapPayload(nextPayload, attrs, key);
     } catch (error) {
       this._loadError = `Map load failed: ${error?.message || error}`;
@@ -1711,6 +1741,24 @@ class NavimowerMapCard extends HTMLElement {
     const mowerState = this._state(this._mowerEntity());
     const status = this._text(this._resolved.status_entity, mapAttrs.activity || this._mapPayload?.activity || "unknown");
     const normalizedStatus = String(status || "").toLowerCase();
+    const mowerActivity = String(mowerState?.attributes?.activity || mowerState?.attributes?.state || "").toLowerCase();
+    const mapActivity = String(mapAttrs.activity || this._mapPayload?.activity || "").toLowerCase();
+    const returning = normalizedStatus.includes("return") || normalizedStatus.includes("going home")
+      || mowerActivity.includes("return") || mapActivity.includes("return");
+    const docked = normalizedStatus === "docked" || normalizedStatus.includes("charging")
+      || mowerActivity === "docked" || mowerActivity.includes("charging") || mapActivity === "docked";
+    const activeSessionId = mapAttrs.active_session_id
+      ?? this._mapPayload?.active_session?.id
+      ?? this._mapPayload?.current_cycle_session_id
+      ?? null;
+    const includeReturnTrail = mapAttrs.include_return_trail !== false
+      && this._mapPayload?.include_return_trail !== false;
+    const cuttingTrailActive = mapAttrs.trail_active === true
+      || this._mapPayload?.trail_active === true
+      || normalizedStatus === "mowing"
+      || normalizedStatus.includes("edge mow");
+    const recordTrail = cuttingTrailActive
+      || (Boolean(activeSessionId) && !docked && (!returning || includeReturnTrail));
     return {
       x: this._number(this._resolved.x_entity),
       y: this._number(this._resolved.y_entity),
@@ -1718,10 +1766,11 @@ class NavimowerMapCard extends HTMLElement {
       status,
       zone: this._text(this._resolved.zone_entity, mapAttrs.current_physical_zone || this._mapPayload?.current_physical_zone || "—"),
       battery: this._number(this._resolved.battery_entity),
-      trailActive: mapAttrs.trail_active === true
-        || this._mapPayload?.trail_active === true
-        || normalizedStatus === "mowing"
-        || normalizedStatus.includes("edge mow"),
+      trailActive: cuttingTrailActive,
+      recordTrail,
+      returning,
+      activeSessionId,
+      includeReturnTrail,
       mapActivity: mapAttrs.activity || null,
       mapZone: mapAttrs.current_physical_zone || null,
       mowerState: mowerState?.state || null,
@@ -1738,7 +1787,7 @@ class NavimowerMapCard extends HTMLElement {
     let trailChanged = false;
     let sessionDrawableChanged = false;
 
-    if (next.trailActive && next.x !== null && next.y !== null) {
+    if (next.recordTrail && next.x !== null && next.y !== null) {
       const key = `${next.x.toFixed(3)},${next.y.toFixed(3)}`;
       if (key !== this._lastPointKey) {
         const priorPoint = this._trail.at(-1);
@@ -1770,7 +1819,8 @@ class NavimowerMapCard extends HTMLElement {
       || !sameValue(previous?.mowerActivity, next.mowerActivity);
     const shellChanged = first || !sameValue(previous?.scheduleEnabled, next.scheduleEnabled)
       || !sameValue(previous?.scheduleUpdated, next.scheduleUpdated);
-    const trailStateChanged = first || trailChanged || !sameValue(previous?.trailActive, next.trailActive);
+    const trailStateChanged = first || trailChanged || !sameValue(previous?.recordTrail, next.recordTrail)
+      || !sameValue(previous?.trailActive, next.trailActive);
 
     this._lastLiveSnapshot = next;
     this._queueRender({

@@ -1,19 +1,20 @@
 # Changelog
 
+## 0.2.1 - 2026-08-03
+
+- Continued drawing the active route while the mower returns to the dock when the integration has `include_return_trail` enabled.
+- Matched live card route collection to the backend active-session lifecycle instead of stopping as soon as the mower leaves the cutting state.
+- Added revision-aware payload-cache validation so a newly opened or reconnected card does not reuse daily-trail data older than the Map data entity.
+- Added a latest-payload stale-while-revalidate fallback so the base map can appear immediately while current dynamic route data is refreshed.
+- Added reconnect handling and return-route regression coverage.
+
 ## 0.2.0 - 2026-08-03
 
-- Added Map API schema v5 daily-zone-trail rendering for the Today view.
-- Today now keeps the latest same-day mowing trail for every zone instead of stacking every session route.
-- When a confirmed new cycle first enters a zone, the previous same-day trail for only that zone disappears; other zones remain visible.
-- Kept full session routes and session pulse controls for History, so replacing the Today trail does not delete historical data.
-- Added schema-v4 fallback for integrations that do not provide `daily_trails`.
-- Refresh the map payload when the active session or `zone_states_revision` changes, allowing a zone reset to appear without reloading the dashboard.
-- Kept static map geometry cached independently from dynamic cycle/progress revisions.
-- Added optional `schedule_switch_entity` discovery and visual-editor override.
-- The Schedule chip now uses the global schedule switch when available and no longer claims that the global scheduler is On merely because weekday periods are configured.
-- Added an optional Global schedule master toggle to the Schedule dialog when a compatible switch entity exists.
-- Added schema-v5 `zone_states` as the primary source for zone marker coverage and zone detail timestamps.
-- Added regression tests for per-zone daily trail replacement, active-trail separation, global schedule state, and schema-v4 compatibility.
+- Added Map API schema v5 per-zone daily trails while retaining schema v4 session fallback.
+- Replaced only the previous same-day route of a zone when a new cycle enters that zone; other zones remain visible and full sessions remain available in History.
+- Added optional global mowing-schedule switch detection and `schedule_switch_entity`.
+- Made the Schedule header state reflect the global switch when available and show `Configured` when only day periods are known.
+- Added a Global schedule master control to the schedule dialog when a writable switch entity exists.
 
 ## 0.1.18 - 2026-08-02
 

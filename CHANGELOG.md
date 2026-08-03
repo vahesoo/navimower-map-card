@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.0 - 2026-08-03
+
+- Added Map API schema v5 daily-zone-trail rendering for the Today view.
+- Today now keeps the latest same-day mowing trail for every zone instead of stacking every session route.
+- When a confirmed new cycle first enters a zone, the previous same-day trail for only that zone disappears; other zones remain visible.
+- Kept full session routes and session pulse controls for History, so replacing the Today trail does not delete historical data.
+- Added schema-v4 fallback for integrations that do not provide `daily_trails`.
+- Refresh the map payload when the active session or `zone_states_revision` changes, allowing a zone reset to appear without reloading the dashboard.
+- Kept static map geometry cached independently from dynamic cycle/progress revisions.
+- Added optional `schedule_switch_entity` discovery and visual-editor override.
+- The Schedule chip now uses the global schedule switch when available and no longer claims that the global scheduler is On merely because weekday periods are configured.
+- Added an optional Global schedule master toggle to the Schedule dialog when a compatible switch entity exists.
+- Added schema-v5 `zone_states` as the primary source for zone marker coverage and zone detail timestamps.
+- Added regression tests for per-zone daily trail replacement, active-trail separation, global schedule state, and schema-v4 compatibility.
+
+## 0.1.18 - 2026-08-02
+
+- Fixed the H2 mower marker disappearing after the v0.1.17 performance refactor.
+- Create the persistent mower artwork in the SVG namespace instead of cloning an XHTML `<g>` from an HTML template.
+- Added a regression check for the SVG namespace-safe mower template path.
+
 ## 0.1.17 - 2026-08-02
 
 - Added module-level caching for map API payloads and prepared static SVG layers. Returning to the same dashboard restores the base map without repeating geometry normalization, coordinate projection, zone-label collision layout, and static SVG generation.

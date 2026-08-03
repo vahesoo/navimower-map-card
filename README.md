@@ -36,7 +36,7 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 
 - Home Assistant 2026.6 or newer
 - [`Navimower`](https://github.com/vahesoo/NaviMower) integration
-- Navimower v0.2.9 or newer is recommended for dense battery telemetry, stable counters and channel state, supported cutting-height detection, and three-day history
+- Navimower v0.3.0 or newer is recommended for zone-state sensors, Map API schema v5, retained per-zone daily trails, and stable task progress
 - HACS is recommended for installation and updates
 
 ## Installation with HACS
@@ -101,11 +101,14 @@ The selected zone IDs are sent to `navimower.mow` in the same order in which the
 
 The **Schedule** button in the card header opens the weekly schedule editor.
 
-- Orange (`#FF5A00`): at least one enabled mowing period exists
-- Grey: the schedule is off, empty, or unavailable
+- Orange (`#FF5A00`): the global mowing schedule is on
+- Grey: the global schedule is off, empty, unavailable, or only configured without a readable master switch
+
+When a compatible global schedule switch is available, the editor also shows a **Global schedule** master toggle. This turns the complete weekly plan on or off without deleting its periods. The card auto-detects `switch.<mower>_mowing_schedule_enabled` and `switch.<mower>_schedule_enabled`, or it can be selected manually with `schedule_switch_entity`.
 
 The editor supports:
 
+- enabling and disabling the global schedule when a switch entity is available
 - enabling and disabling weekdays
 - multiple mowing periods per day
 - 15-minute start and end time steps
@@ -138,7 +141,9 @@ The relevant map payload fields are:
 
 ## Today and three-day history
 
-The default map is **Today**. It shows the retained mowing routes and session times from the current calendar day, including the live active trail. The **History** button in the card header offers three day choices:
+The default map is **Today**. With Navimower v0.3.0 or newer, the integration supplies one retained current-day trail per zone. When a confirmed new mowing cycle first enters a zone, only that zone's earlier same-day trail is removed; trails in other zones remain visible. The active cycle is drawn separately as a live trail.
+
+The full session routes are still retained by the integration for the History view and session pulse buttons. The **History** button in the card header offers three day choices:
 
 - Today
 - the previous date in compact `DD.MM` format
@@ -157,29 +162,43 @@ trail_opacity: 0.55
 
 There are no separate active-trail or old-trail color and opacity controls.
 
-Navimower v0.2.6 map API schema v4 returns cycle-aware sessions and separate route fragments:
+Navimower v0.3.0 Map API schema v5 adds prepared daily zone trails while keeping cycle-aware session history:
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
+  "daily_trails": {
+    "date": "2026-08-03",
+    "revision": 18,
+    "zones": [
+      {
+        "zone_id": 13,
+        "cycle_id": "session-42",
+        "active": false,
+        "segments": [
+          [[1.2, 3.4], [1.3, 3.5]]
+        ]
+      }
+    ]
+  },
   "trail_segments": [
-    [[1.2, 3.4], [1.3, 3.5]],
     [[4.1, 5.2], [4.2, 5.3]]
   ],
   "sessions": [
     {
-      "id": "session-1",
-      "started_at": "2026-07-30T16:15:00+03:00",
+      "id": "session-42",
+      "started_at": "2026-08-03T16:15:00+03:00",
       "ended_at": null,
       "active": true,
       "segments": [
-        [[1.2, 3.4], [1.3, 3.5]],
         [[4.1, 5.2], [4.2, 5.3]]
       ]
     }
   ]
 }
 ```
+
+Older schema-v4 integrations remain compatible; without `daily_trails`, Today falls back to the earlier session-based rendering.
 
 The card renders every segment separately so missing position data during a pause, reload, or restart does not create a false straight line. Intentional cycle boundaries remain separate even when the next cycle starts within five minutes. Completed backend session stubs with no drawable route are filtered out, while a newly active session remains visible until its route has enough points to be selected. The older flat `trail` and `points` fields remain supported as a fallback.
 
@@ -310,6 +329,7 @@ heading_entity: sensor.tont_heading
 battery_entity: sensor.tont_battery
 zone_entity: sensor.tont_current_physical_zone
 schedule_entity: sensor.tont_schedule
+schedule_switch_entity: switch.tont_mowing_schedule_enabled
 ```
 
 The selected mower entity is used as the status entity unless `status_entity` is explicitly set.
@@ -351,7 +371,9 @@ Verify that the Navimower integration is loaded and that its map-data sensor is 
 
 ### Schedule button remains grey
 
-Check that the schedule sensor is available and contains at least one enabled day with a mowing period. Set `schedule_entity` manually when automatic discovery does not find it.
+The orange chip represents the **global** schedule state, not merely the presence of configured weekday periods. Check whether a global switch is available and select it with `schedule_switch_entity` when automatic discovery does not find it. Without a readable global switch or an explicit `global_enabled` attribute, the tooltip reports **Configured** and the chip remains grey instead of incorrectly claiming the schedule is on.
+
+The separate weekday switches inside the dialog edit individual days. They are not Home Assistant entities and do not replace the global schedule switch.
 
 ## Development
 

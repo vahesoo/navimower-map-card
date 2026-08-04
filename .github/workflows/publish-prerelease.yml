@@ -36,6 +36,8 @@ jobs:
           TAG="v$VERSION"
           NOTES=".github/release-notes/$VERSION.md"
           test -f "$NOTES"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             test "$(git rev-list -n 1 "$TAG")" = "$GITHUB_SHA"
           else

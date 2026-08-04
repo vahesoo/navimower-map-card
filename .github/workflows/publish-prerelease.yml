@@ -1,0 +1,49 @@
+name: Publish card prerelease
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+      - src/navimower-map-card.js
+      - .github/release-notes/**
+
+permissions:
+  contents: write
+
+jobs:
+  prerelease:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test card
+        run: npm test
+      - name: Publish beta tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          case "$VERSION" in
+            *-beta*) ;;
+            *) echo "Version $VERSION is not a beta; skipping prerelease"; exit 0 ;;
+          esac
+          TAG="v$VERSION"
+          NOTES=".github/release-notes/$VERSION.md"
+          test -f "$NOTES"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            test "$(git rev-list -n 1 "$TAG")" = "$GITHUB_SHA"
+          else
+            git tag -a "$TAG" -m "Navimower Map Card $VERSION"
+            git push origin "$TAG"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --prerelease --title "Navimower Map Card $VERSION" --notes-file "$NOTES"
+          else
+            gh release create "$TAG" --prerelease --title "Navimower Map Card $VERSION" --notes-file "$NOTES"
+          fi

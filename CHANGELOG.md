@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2-beta1 - 2026-08-04
+
+- Added a visual **Mower icon size** slider and kept the mower marker at a constant on-screen size while the map is zoomed.
+- Replaced hexadecimal text boxes with Home Assistant native color inputs for colors that always have an explicit value; the optional map background remains clearable so it can inherit the Home Assistant theme.
+- Reworked the weekly schedule editor for mobile use: edit any number of collapsed or expanded days, then save all changed days from one persistent bottom action bar.
+- Added a matching global discard action, unsaved-day indicators, sequential per-day service calls, and protection against closing out the batch state before a failed day is corrected.
+- Added beta-specific smoke coverage for fixed marker scaling, color selectors, global schedule saving, and source/distribution version parity.
+
 ## 0.2.1 - 2026-08-03
 
 - Continued drawing the active route while the mower returns to the dock when the integration has `include_return_trail` enabled.

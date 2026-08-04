@@ -16,7 +16,7 @@ await import("../src/navimower-map-card.js");
 const sourceText = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const Card = customElements.get("navimower-map-card");
 
-assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.2.1";'));
+assert.ok(sourceText.includes('const NAVIMOWER_MAP_CARD_VERSION = "0.2.2-beta1";'));
 assert.equal(typeof Card, "function");
 assert.equal(window.customCards.length, 1);
 assert.equal(window.customCards[0].type, "navimower-map-card");

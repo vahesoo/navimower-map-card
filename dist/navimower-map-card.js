@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.2.1
+ * Version 0.2.2-beta1
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.2.1";
+const NAVIMOWER_MAP_CARD_VERSION = "0.2.2-beta1";
 const VIEW_SIZE = 1000;
 const MAP_CACHE_LIMIT = 10;
 const MAP_CACHE_FRESH_MS = 45000;
@@ -211,7 +211,7 @@ const LABELS = Object.freeze({
   map_legend_opacity: "Map legend background opacity",
   zone_label_font_size: "Zone label font size",
   zone_label_opacity: "Zone label opacity",
-  mower_scale: "Mower marker scale",
+  mower_scale: "Mower icon size",
   dock_scale: "Dock marker scale",
   zone_fill_color: "Zone fill color",
   zone_fill_opacity: "Zone fill opacity",
@@ -329,7 +329,9 @@ class NavimowerMapCard extends HTMLElement {
 
   static getConfigForm() {
     const entitySelector = (domain) => ({ entity: domain ? { domain } : {} });
-    const colorField = (name) => ({ name, selector: { text: {} } });
+    const colorField = (name, allowBlank = false) => ({
+      name, selector: { text: allowBlank ? {} : { type: "color" } },
+    });
     return {
       schema: [
         {
@@ -420,9 +422,9 @@ class NavimowerMapCard extends HTMLElement {
                 { name: "zone_label_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
                 { name: "zone_fill_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
                 { name: "trail_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
-                { name: "mower_scale", selector: { number: { min: 0.5, max: 2.5, step: 0.1, mode: "box" } } },
+                { name: "mower_scale", selector: { number: { min: 0.5, max: 2.5, step: 0.1, mode: "slider" } } },
                 { name: "dock_scale", selector: { number: { min: 0.5, max: 2.5, step: 0.1, mode: "box" } } },
-                colorField("map_background_color"),
+                colorField("map_background_color", true),
                 colorField("zone_fill_color"),
                 colorField("zone_stroke_color"),
                 colorField("trail_color"),
@@ -497,6 +499,7 @@ class NavimowerMapCard extends HTMLElement {
     this._scheduleStatus = {};
     this._scheduleStatusTimers = {};
     this._scheduleSwitchBusy = false;
+    this._scheduleBatchSaving = false;
     this._commandBusy = false;
     this._commandStatus = null;
     this._domReady = false;
@@ -830,7 +833,8 @@ class NavimowerMapCard extends HTMLElement {
         .nm-schedule-chevron { flex: 0 0 auto; cursor: pointer; color: var(--secondary-text-color);
           --mdc-icon-size: 24px; transform: rotate(-90deg); transition: transform .15s ease; }
         .nm-schedule-day.expanded .nm-schedule-chevron { transform: rotate(0deg); }
-        .nm-schedule-day-body[hidden], .nm-schedule-day-actions[hidden] { display: none; }
+        .nm-schedule-day-body[hidden] { display: none; }
+        .nm-schedule-day.dirty { background: color-mix(in srgb, var(--primary-color) 5%, transparent); }
         .nm-schedule-periods { margin: 10px 0 4px 48px; }
         .nm-schedule-period { margin: 0 0 10px; padding: 10px; border-radius: 10px;
           background: var(--secondary-background-color); }
@@ -850,12 +854,16 @@ class NavimowerMapCard extends HTMLElement {
           background: color-mix(in srgb, var(--primary-color) 11%, transparent); }
         .nm-schedule-add { min-height: 36px; padding: 7px 11px; border: 1px dashed var(--divider-color);
           border-radius: 9px; cursor: pointer; color: var(--primary-color); background: transparent; font: inherit; }
-        .nm-schedule-day-actions { display: flex; justify-content: flex-end; gap: 8px; margin: 10px 0 0 48px; }
-        .nm-schedule-day-actions button { min-height: 36px; padding: 7px 13px; border: 0; border-radius: 9px;
-          cursor: pointer; font: inherit; font-weight: 600; }
-        .nm-schedule-save { color: var(--text-primary-color, #fff); background: var(--primary-color); }
-        .nm-schedule-save:disabled { opacity: .5; cursor: default; }
-        .nm-schedule-discard { color: var(--primary-text-color); background: var(--secondary-background-color); }
+        .nm-schedule-global-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+          padding: 12px 14px; border-top: 1px solid var(--divider-color);
+          background: var(--card-background-color, var(--ha-card-background, #fff)); }
+        .nm-schedule-global-summary { flex: 1; min-width: 0; color: var(--secondary-text-color);
+          font-size: .84rem; font-weight: 600; }
+        .nm-schedule-global-actions button { min-height: 42px; padding: 8px 14px; border: 0;
+          border-radius: 10px; cursor: pointer; font: inherit; font-weight: 650; }
+        .nm-schedule-global-actions button:disabled { opacity: .5; cursor: default; }
+        .nm-schedule-discard-all { color: var(--primary-text-color); background: var(--secondary-background-color); }
+        .nm-schedule-save-all { color: var(--text-primary-color, #fff); background: var(--primary-color); }
         .nm-sessions { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 2px 0;
           color: var(--secondary-text-color); font-size: .84rem; }
         .nm-session { appearance: none; display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px;
@@ -881,8 +889,11 @@ class NavimowerMapCard extends HTMLElement {
           .nm-sessions { font-size: .81rem; }
           .nm-schedule-dialog { max-width: none; max-height: calc(100vh - 20px); }
           .nm-schedule-body { padding-left: 4px; padding-right: 4px; }
-          .nm-schedule-periods, .nm-schedule-day-actions { margin-left: 0; }
+          .nm-schedule-periods { margin-left: 0; }
           .nm-schedule-times { grid-template-columns: 1fr auto 1fr auto; gap: 5px; }
+          .nm-schedule-global-actions { flex-wrap: wrap; padding: 10px; }
+          .nm-schedule-global-summary { flex-basis: 100%; }
+          .nm-schedule-global-actions button { flex: 1 1 0; min-height: 46px; }
         }
       </style>`;
     }
@@ -1885,7 +1896,7 @@ class NavimowerMapCard extends HTMLElement {
     const x = this._number(this._resolved.x_entity);
     const y = this._number(this._resolved.y_entity);
     const heading = this._number(this._resolved.heading_entity);
-    const renderKey = `${x}|${y}|${heading}|${this._config.mower_scale}|${this._layout.scale}`;
+    const renderKey = `${x}|${y}|${heading}|${this._config.mower_scale}|${this._layout.scale}|${this._view.scale}`;
     if (renderKey === this._mowerRenderKey) return;
     this._mowerRenderKey = renderKey;
     if (x === null || y === null) {
@@ -1895,7 +1906,8 @@ class NavimowerMapCard extends HTMLElement {
     const cx = this._layout.sx(x);
     const cy = this._layout.sy(y);
     const degrees = Number.isFinite(heading) ? 90 - heading : 90;
-    const scale = .37 * clamp(finiteNumber(this._config.mower_scale, 1), .5, 2.5);
+    const zoom = Math.max(1, finiteNumber(this._view?.scale, 1));
+    const scale = .37 * clamp(finiteNumber(this._config.mower_scale, 1), .5, 2.5) / zoom;
     this._mowerGroup.setAttribute("transform",
       `translate(${cx.toFixed(1)},${cy.toFixed(1)}) rotate(${degrees.toFixed(1)}) scale(${scale.toFixed(4)}) translate(-60,-79.5)`);
     this._mowerGroup.style.display = "";
@@ -2235,6 +2247,8 @@ class NavimowerMapCard extends HTMLElement {
       return;
     }
     const rows = this._scheduleDraft.map((day, index) => this._renderScheduleDay(day, index)).join("");
+    const dirtyCount = this._dirtyScheduleDayIndexes().length;
+    const scheduleSaving = this._scheduleBatchSaving || this._scheduleDraft.some((day) => day._saving);
     const switchEntity = this._scheduleSwitchEntity();
     const enabled = this._scheduleEnabled();
     const master = switchEntity ? `
@@ -2245,6 +2259,14 @@ class NavimowerMapCard extends HTMLElement {
           <div class="nm-schedule-master-sub">${escapeHtml(this._scheduleSwitchBusy ? "Updating…" : (enabled ? "On" : "Off"))}</div>
         </div>
       </div>` : "";
+    const actions = dirtyCount || scheduleSaving ? `
+      <div class="nm-schedule-global-actions">
+        <div class="nm-schedule-global-summary">${escapeHtml(scheduleSaving
+          ? "Saving schedule…"
+          : `${dirtyCount} unsaved ${dirtyCount === 1 ? "day" : "days"}`)}</div>
+        <button type="button" class="nm-schedule-discard-all" data-schedule-action="discard-all" ${scheduleSaving ? "disabled" : ""}>Discard changes</button>
+        <button type="button" class="nm-schedule-save-all" data-schedule-action="save-all" ${dirtyCount && !scheduleSaving ? "" : "disabled"}>${escapeHtml(scheduleSaving ? "Saving…" : `Save ${dirtyCount} ${dirtyCount === 1 ? "day" : "days"}`)}</button>
+      </div>` : "";
     this._modalHostEl.innerHTML = `
       <div class="nm-backdrop" data-schedule-action="backdrop">
         <div class="nm-dialog nm-schedule-dialog" role="dialog" aria-modal="true" aria-label="Mowing schedule">
@@ -2253,6 +2275,7 @@ class NavimowerMapCard extends HTMLElement {
             <button type="button" class="nm-schedule-close" data-schedule-action="close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>
           </div>
           <div class="nm-schedule-body">${master}${rows}</div>
+          ${actions}
         </div>
       </div>`;
     this._attachScheduleDialogBaseEvents();
@@ -2270,13 +2293,12 @@ class NavimowerMapCard extends HTMLElement {
 
   _renderScheduleDay(day, index) {
     const status = this._scheduleStatus[day.key];
-    const statusText = status?.text || "";
+    const statusText = status?.text || (day._dirty ? "Unsaved" : "");
     const count = day.periods.length;
     const sub = day.enabled ? (count ? `${count} ${count === 1 ? "period" : "periods"}` : "Off") : "Off";
     const periods = day.periods.map((period, periodIndex) => this._renderSchedulePeriod(index, period, periodIndex)).join("");
-    const canSave = day._dirty && !day._saving;
     return `
-      <div class="nm-schedule-day ${day.enabled ? "on" : "off"} ${day._expanded ? "expanded" : ""}" data-schedule-day="${index}">
+      <div class="nm-schedule-day ${day.enabled ? "on" : "off"} ${day._expanded ? "expanded" : ""} ${day._dirty ? "dirty" : ""}" data-schedule-day="${index}">
         <div class="nm-schedule-day-head">
           <ha-switch data-schedule-action="toggle-day" data-day-index="${index}"></ha-switch>
           <div class="nm-schedule-day-name" data-schedule-action="toggle-expand" data-day-index="${index}">
@@ -2291,10 +2313,6 @@ class NavimowerMapCard extends HTMLElement {
             ${periods}
             <button type="button" class="nm-schedule-add" data-schedule-action="add-period" data-day-index="${index}">+ Add period</button>
           </div>
-        </div>
-        <div class="nm-schedule-day-actions" ${day._dirty ? "" : "hidden"}>
-          <button type="button" class="nm-schedule-discard" data-schedule-action="discard-day" data-day-index="${index}" ${canSave ? "" : "hidden"}>Discard</button>
-          <button type="button" class="nm-schedule-save" data-schedule-action="save-day" data-day-index="${index}" ${canSave ? "" : "disabled"}>Save</button>
         </div>
       </div>`;
   }
@@ -2325,6 +2343,10 @@ class NavimowerMapCard extends HTMLElement {
       globalSwitch.disabled = this._scheduleSwitchBusy;
       globalSwitch.addEventListener("change", (event) => this._toggleGlobalSchedule(Boolean(event.target.checked)));
     }
+    this._modalHostEl.querySelector("[data-schedule-action='discard-all']")
+      ?.addEventListener("click", () => this._discardAllScheduleChanges());
+    this._modalHostEl.querySelector("[data-schedule-action='save-all']")
+      ?.addEventListener("click", () => this._saveAllScheduleChanges());
     this._modalHostEl.querySelectorAll("[data-schedule-action='toggle-day']").forEach((element) => {
       const day = this._scheduleDraft[Number(element.dataset.dayIndex)];
       element.checked = day.enabled;
@@ -2397,6 +2419,38 @@ class NavimowerMapCard extends HTMLElement {
     this._modalHostEl.querySelectorAll("[data-schedule-action='save-day']").forEach((element) => {
       element.addEventListener("click", () => this._saveScheduleDay(Number(element.dataset.dayIndex)));
     });
+  }
+
+  _dirtyScheduleDayIndexes() {
+    return (this._scheduleDraft || [])
+      .map((day, index) => day?._dirty ? index : null)
+      .filter((index) => index !== null);
+  }
+
+  _discardAllScheduleChanges() {
+    if (this._scheduleBatchSaving || !this._scheduleDraft) return;
+    for (const dayIndex of this._dirtyScheduleDayIndexes()) {
+      const expanded = this._scheduleDraft[dayIndex]._expanded;
+      const key = this._scheduleDraft[dayIndex].key;
+      this._scheduleDraft[dayIndex] = this._buildScheduleDay(this._scheduleServerDays, dayIndex);
+      this._scheduleDraft[dayIndex]._expanded = expanded;
+      this._clearScheduleStatus(key);
+    }
+    this._renderDialog();
+  }
+
+  async _saveAllScheduleChanges() {
+    if (this._scheduleBatchSaving) return;
+    const dirtyIndexes = this._dirtyScheduleDayIndexes();
+    if (!dirtyIndexes.length) return;
+    this._scheduleBatchSaving = true;
+    this._renderDialog();
+    for (const dayIndex of dirtyIndexes) {
+      await this._saveScheduleDay(dayIndex);
+      if (this._scheduleDraft?.[dayIndex]?._dirty) break;
+    }
+    this._scheduleBatchSaving = false;
+    this._renderDialog();
   }
 
   _discardScheduleDay(dayIndex) {
@@ -2626,7 +2680,8 @@ class NavimowerMapCard extends HTMLElement {
     // The H2 artwork points upwards. Navimower heading 0 points east, so add
     // 90 degrees before applying the live heading.
     const degrees = Number.isFinite(headingDegrees) ? 90 - headingDegrees : 90;
-    const scale = .37 * clamp(finiteNumber(this._config.mower_scale, 1), .5, 2.5);
+    const zoom = Math.max(1, finiteNumber(this._view?.scale, 1));
+    const scale = .37 * clamp(finiteNumber(this._config.mower_scale, 1), .5, 2.5) / zoom;
     return `<g class="nm-h2-mower" transform="translate(${cx.toFixed(1)},${cy.toFixed(1)}) rotate(${degrees.toFixed(1)}) scale(${scale.toFixed(4)}) translate(-60,-79.5)" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.38))">${H2_MOWER_SVG}</g>`;
   }
 
@@ -3032,6 +3087,8 @@ class NavimowerMapCard extends HTMLElement {
     const left = this._view.cx - size / 2;
     const top = this._view.cy - size / 2;
     this._svgEl.setAttribute("viewBox", `${left.toFixed(2)} ${top.toFixed(2)} ${size.toFixed(2)} ${size.toFixed(2)}`);
+    this._mowerRenderKey = null;
+    this._renderMower();
     this._syncTouchAction();
   }
 

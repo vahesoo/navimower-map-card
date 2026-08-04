@@ -25,7 +25,9 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 - Automatic filtering of completed history records that contain no drawable route
 - Mow, Pause, and Dock controls directly below the map
 - Integrated **Mow now** dialog with ordered zone selection and progress reset/continue choice
-- Integrated weekly **Schedule** editor
+- Integrated weekly **Schedule** editor with one mobile-friendly global Save action
+- Configurable fixed-size mower icon that stays readable while the map is zoomed
+- Home Assistant native color pickers in the visual card editor
 - Automatic related-entity discovery from one `lawn_mower` entity
 - Visual card editor and optional YAML configuration
 - Mouse-wheel zoom, pinch zoom, pan, configurable initial focus, and optional browser-side view memory
@@ -110,7 +112,8 @@ The editor supports:
 - multiple mowing periods per day
 - 15-minute start and end time steps
 - all zones or selected zones for each period
-- separate Save and Discard actions for each weekday
+- editing several weekdays before saving
+- one persistent **Save changed days** action and one global discard action
 
 Schedule changes are saved through `navimower.set_schedule`. No separate scheduler card or JavaScript resource is required.
 

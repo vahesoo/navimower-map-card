@@ -1,0 +1,28 @@
+name: Kick beta1 builder
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  kick:
+    if: github.head_ref == 'feature/0.2.2-beta1-card-controls'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Trigger branch builder
+        shell: bash
+        run: |
+          printf '\n' >> .github/workflows/build-0.2.2-beta1.yml
+          git rm .github/workflows/kick-beta1-builder.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/build-0.2.2-beta1.yml
+          git commit -m "Trigger 0.2.2-beta1 builder"
+          git push origin HEAD:${{ github.head_ref }}

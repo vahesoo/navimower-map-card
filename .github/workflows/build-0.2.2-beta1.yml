@@ -29,7 +29,9 @@ jobs:
           node-version: "22"
 
       - name: Apply beta1 changes
-        run: python scripts/prepare-beta1.py
+        run: |
+          python scripts/prepare-beta1.py
+          sed -i 's/0\.2\.1/0.2.2-beta1/g' tests/smoke.mjs
 
       - name: Build and test
         run: npm test

@@ -41,7 +41,10 @@ jobs:
           ];
           for (const file of files) {
             const before = fs.readFileSync(file, 'utf8');
-            const after = before.replaceAll('0.2.2-beta1', '0.2.2');
+            let after = before.replaceAll('0.2.2-beta1', '0.2.2');
+            if (file === 'tests/beta1.mjs') {
+              after = after.replaceAll('0\\.2\\.2-beta1', '0\\.2\\.2');
+            }
             if (before === after && !before.includes('0.2.2')) {
               throw new Error(`Expected 0.2.2 version marker in ${file}`);
             }

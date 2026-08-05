@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0-beta1 - 2026-08-05
+
+- Added Navimower integration `0.4.0-beta1` completed-session render archive support.
+- Kept only the active session as a live polyline; completed sessions no longer fall back to historical point or daily-trail lines.
+- Rendered completed blade-on routes as even-odd SVG mowed-area paths while retaining dock, pause, return, and inter-zone travel as separate strokes.
+- Loaded the retained session index and only the selected day's completed render artifacts.
+- Added retained-day History choices instead of the previous fixed three-day selector.
+- Requested lightweight map payloads and discarded legacy completed route points before caching.
+- Closed the schedule dialog after a fully successful batch save while keeping failed edits open.
+- Constrained the card to its allocated dashboard width and stabilized SVG outline weight across map extents and zoom levels.
+- Split the distributable into a small loader, the tested 0.2.2 core, and the 0.3 archive compatibility layer without adding dependencies.
+
 ## 0.2.2 - 2026-08-05
 
 - Added a visual **Mower icon size** slider and kept the mower marker at a constant on-screen size while the map is zoomed.

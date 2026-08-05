@@ -3,9 +3,16 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const source = resolve(root, "src/navimower-map-card.js");
-const target = resolve(root, "dist/navimower-map-card.js");
+const files = [
+  "navimower-map-card.js",
+  "navimower-map-card-core.js",
+  "navimower-map-card-v030.js",
+];
 
-await mkdir(dirname(target), { recursive: true });
-await copyFile(source, target);
-console.log(`Built ${target}`);
+await mkdir(resolve(root, "dist"), { recursive: true });
+for (const filename of files) {
+  const source = resolve(root, "src", filename);
+  const target = resolve(root, "dist", filename);
+  await copyFile(source, target);
+  console.log(`Built ${target}`);
+}

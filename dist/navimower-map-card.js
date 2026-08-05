@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.2.2-beta1
+ * Version 0.2.2
  *
  * Private-cloud Navimower map geometry with live MQTT position, trail,
  * channels, sessions, visual configuration, and touch-friendly zoom/pan.
  * No external JavaScript dependencies.
  */
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.2.2-beta1";
+const NAVIMOWER_MAP_CARD_VERSION = "0.2.2";
 const VIEW_SIZE = 1000;
 const MAP_CACHE_LIMIT = 10;
 const MAP_CACHE_FRESH_MS = 45000;

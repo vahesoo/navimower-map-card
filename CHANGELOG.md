@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.2-beta1 - 2026-08-04
+## 0.2.2 - 2026-08-05
 
 - Added a visual **Mower icon size** slider and kept the mower marker at a constant on-screen size while the map is zoomed.
 - Replaced hexadecimal text boxes with Home Assistant native color inputs for colors that always have an explicit value; the optional map background remains clearable so it can inherit the Home Assistant theme.

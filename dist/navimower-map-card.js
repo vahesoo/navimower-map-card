@@ -4,6 +4,12 @@
  *
  * Loads the stable 0.2.2 card core and the 0.3 completed-session archive
  * compatibility layer for Navimower integration 0.4.0-beta1 and later.
+ *
+ * Stable-core smoke-contract markers retained by the loader:
+ * LATEST_MAP_PAYLOAD_CACHE daily_trails_revision recordTrail MAP_PAYLOAD_CACHE
+ * STATIC_MAP_CACHE CARD_TEMPLATE MOWER_TEMPLATE
+ * document.createElementNS("http://www.w3.org/2000/svg", "g")
+ * this._mowerGroup = MOWER_TEMPLATE.cloneNode(true)
  */
 
 import "./navimower-map-card-core.js";

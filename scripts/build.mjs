@@ -7,6 +7,7 @@ const files = [
   "navimower-map-card.js",
   "navimower-map-card-core.js",
   "navimower-map-card-v030.js",
+  "navimower-map-card-v031.js",
 ];
 
 await mkdir(resolve(root, "dist"), { recursive: true });

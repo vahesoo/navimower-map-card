@@ -7,12 +7,14 @@ for (const root of ["src", "dist"]) {
   const archive = readFileSync(`${root}/navimower-map-card-v030.js`, "utf8");
   const outlines = readFileSync(`${root}/navimower-map-card-v031.js`, "utf8");
   const zoneMarkers = readFileSync(`${root}/navimower-map-card-v032.js`, "utf8");
+  const gridDefaults = readFileSync(`${root}/navimower-map-card-v033.js`, "utf8");
 
-  assert.match(loader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.0-beta3"/);
+  assert.match(loader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.0-beta4"/);
   assert.match(loader, /navimower-map-card-core\.js/);
   assert.match(loader, /navimower-map-card-v030\.js/);
   assert.match(loader, /navimower-map-card-v031\.js/);
   assert.match(loader, /navimower-map-card-v032\.js/);
+  assert.match(loader, /navimower-map-card-v033\.js/);
 
   // The stable core keeps all previously tested controls and visual-editor work.
   assert.match(core, /type: "color"/);
@@ -40,5 +42,8 @@ for (const root of ["src", "dist"]) {
   assert.match(zoneMarkers, /nm-zone-marker-body/);
   assert.match(zoneMarkers, /fixed-size adjustable zone markers/);
   assert.match(zoneMarkers, /leaderEndpoint/);
+
+  assert.match(gridDefaults, /columns: "full"/);
+  assert.match(gridDefaults, /automatic-height full-width grid defaults/);
 }
-console.log("0.3.0-beta3 feature checks passed");
+console.log("0.3.0-beta4 feature checks passed");

@@ -1,10 +1,11 @@
 /*
  * Navimower Map Card
- * Version 0.3.0-beta3
+ * Version 0.3.0-beta4
  *
  * Loads the stable 0.2.2 card core, the 0.3 completed-session archive layer,
- * adjustable non-scaling map-outline controls, and fixed-size adjustable zone
- * markers for Navimower integration 0.4.0-beta1 and later.
+ * adjustable non-scaling map-outline controls, fixed-size adjustable zone
+ * markers, and automatic-height full-width Sections defaults for Navimower
+ * integration 0.4.0-beta1 and later.
  *
  * Stable-core smoke-contract markers retained by the loader:
  * LATEST_MAP_PAYLOAD_CACHE daily_trails_revision recordTrail MAP_PAYLOAD_CACHE
@@ -17,15 +18,16 @@ import "./navimower-map-card-core.js";
 import "./navimower-map-card-v030.js";
 import "./navimower-map-card-v031.js";
 import "./navimower-map-card-v032.js";
+import "./navimower-map-card-v033.js";
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.3.0-beta3";
+const NAVIMOWER_MAP_CARD_VERSION = "0.3.0-beta4";
 // Legacy smoke-contract marker: const NAVIMOWER_MAP_CARD_VERSION = "0.2.2";
 
 const registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card",
 );
 if (registration) {
-  registration.description = "Navimower map with compact completed-session mowed areas, an active live trail, retained-day history, adjustable fixed-screen outlines and zone markers, controls, schedule editing, and zoom.";
+  registration.description = "Navimower map with compact completed-session mowed areas, an active live trail, retained-day history, adjustable fixed-screen outlines and zone markers, automatic-height full-width Sections defaults, controls, schedule editing, and zoom.";
 }
 
 console.info(`%c NAVIMOWER-MAP-CARD %c v${NAVIMOWER_MAP_CARD_VERSION} `,

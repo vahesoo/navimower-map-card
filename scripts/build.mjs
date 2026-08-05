@@ -1,5 +1,5 @@
 import { copyFile, mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve } from "node:url";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -8,6 +8,7 @@ const files = [
   "navimower-map-card-core.js",
   "navimower-map-card-v030.js",
   "navimower-map-card-v031.js",
+  "navimower-map-card-v032.js",
 ];
 
 await mkdir(resolve(root, "dist"), { recursive: true });

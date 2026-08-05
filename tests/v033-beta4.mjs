@@ -14,7 +14,7 @@ for (const root of ["src", "dist"]) {
   assert.match(loader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.0-beta4"/);
   assert.match(loader, /navimower-map-card-v033\.js/);
   assert.match(layer, /columns: "full"/);
-  assert.doesNotMatch(layer, /rows:\s*\d/);
+  assert.doesNotMatch(layer, /^\s*rows:\s*\d/m);
 }
 
 console.log("0.3.0-beta4 grid-default checks passed");

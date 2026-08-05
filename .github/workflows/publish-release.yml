@@ -36,6 +36,7 @@ jobs:
             'package.json',
             'src/navimower-map-card.js',
             'dist/navimower-map-card.js',
+            'tests/smoke.mjs',
             'tests/beta1.mjs',
           ];
           for (const file of files) {
@@ -69,6 +70,7 @@ jobs:
           test "$(node -p "require('./package.json').version")" = "0.2.2"
           cmp -s src/navimower-map-card.js dist/navimower-map-card.js
           grep -q 'NAVIMOWER_MAP_CARD_VERSION = "0.2.2"' src/navimower-map-card.js
+          grep -q 'NAVIMOWER_MAP_CARD_VERSION = "0.2.2"' tests/smoke.mjs
           grep -q '^## 0.2.2 - 2026-08-05$' CHANGELOG.md
           test -f .github/release-notes/0.2.2.md
 
@@ -78,7 +80,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json src/navimower-map-card.js dist/navimower-map-card.js tests/beta1.mjs CHANGELOG.md
+          git add package.json src/navimower-map-card.js dist/navimower-map-card.js tests/smoke.mjs tests/beta1.mjs CHANGELOG.md
           if ! git diff --cached --quiet; then
             git commit -m "Release Navimower Map Card 0.2.2"
             git push origin HEAD:main

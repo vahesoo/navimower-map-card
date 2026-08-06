@@ -49,7 +49,7 @@ for (const root of ["src", "dist"]) {
   assert.match(gridDefaults, /automatic-height full-width grid defaults/);
 
   assert.match(editorRefinements, /normalizeHexColor/);
-  assert.match(editorRefinements, /_hex/);
+  assert.match(editorRefinements, /navimower_hex/);
   assert.match(editorRefinements, /SCHEDULE_CLOSE_DELAY_MS = 2500/);
   assert.match(editorRefinements, /delayedScheduleDialogClose/);
   assert.doesNotMatch(editorRefinements, /concurrenc|semaphore|Promise\.allSettled/i);

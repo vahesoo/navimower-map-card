@@ -4,16 +4,14 @@ on:
   push:
     branches: [main]
     paths:
+      - package.json
+      - src/navimower-map-card.js
+      - .github/release-notes/**
       - .github/workflows/publish-release.yml
-      - .github/release-notes/0.2.2.md
   workflow_dispatch:
 
 permissions:
   contents: write
-
-concurrency:
-  group: navimower-map-card-release-0.2.2
-  cancel-in-progress: false
 
 jobs:
   release:
@@ -26,88 +24,52 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Promote 0.2.2-beta1 to 0.2.2
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const fs = require('node:fs');
-          const files = [
-            'package.json',
-            'src/navimower-map-card.js',
-            'dist/navimower-map-card.js',
-            'tests/smoke.mjs',
-            'tests/beta1.mjs',
-          ];
-          for (const file of files) {
-            const before = fs.readFileSync(file, 'utf8');
-            let after = before.replaceAll('0.2.2-beta1', '0.2.2');
-            if (file === 'tests/beta1.mjs') {
-              after = after.replaceAll('0\\.2\\.2-beta1', '0\\.2\\.2');
-            }
-            if (before === after && !before.includes('0.2.2')) {
-              throw new Error(`Expected 0.2.2 version marker in ${file}`);
-            }
-            fs.writeFileSync(file, after);
-          }
-
-          const changelogPath = 'CHANGELOG.md';
-          const changelog = fs.readFileSync(changelogPath, 'utf8');
-          const promoted = changelog.replace(
-            '## 0.2.2-beta1 - 2026-08-04',
-            '## 0.2.2 - 2026-08-05'
-          );
-          if (promoted === changelog && !changelog.includes('## 0.2.2 - 2026-08-05')) {
-            throw new Error('Could not promote the 0.2.2 changelog heading');
-          }
-          fs.writeFileSync(changelogPath, promoted);
-          NODE
-
       - name: Build and test
         run: npm test
 
-      - name: Verify release parity
+      - name: Read stable version
+        id: version
         shell: bash
         run: |
           set -euo pipefail
-          test "$(node -p "require('./package.json').version")" = "0.2.2"
-          cmp -s src/navimower-map-card.js dist/navimower-map-card.js
-          grep -q 'NAVIMOWER_MAP_CARD_VERSION = "0.2.2"' src/navimower-map-card.js
-          grep -q 'NAVIMOWER_MAP_CARD_VERSION = "0.2.2"' tests/smoke.mjs
-          grep -q '^## 0.2.2 - 2026-08-05$' CHANGELOG.md
-          test -f .github/release-notes/0.2.2.md
+          VERSION="$(node -p "require('./package.json').version")"
+          case "$VERSION" in
+            *-*) echo "Version $VERSION is a prerelease; skipping stable publication"; echo "publish=false" >> "$GITHUB_OUTPUT" ;;
+            *) echo "publish=true" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Commit stable release metadata
+      - name: Verify release files
+        if: steps.version.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json src/navimower-map-card.js dist/navimower-map-card.js tests/smoke.mjs tests/beta1.mjs CHANGELOG.md
-          if ! git diff --cached --quiet; then
-            git commit -m "Release Navimower Map Card 0.2.2"
-            git push origin HEAD:main
-          fi
+          test -f ".github/release-notes/${VERSION}.md"
+          grep -q "NAVIMOWER_MAP_CARD_VERSION = \"${VERSION}\"" src/navimower-map-card.js
+          grep -q "NAVIMOWER_MAP_CARD_VERSION = \"${VERSION}\"" dist/navimower-map-card.js
+          git diff --exit-code
 
-      - name: Tag and publish stable release
+      - name: Tag and publish latest release
+        if: steps.version.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          VERSION=0.2.2
-          TAG="v$VERSION"
-          NOTES=".github/release-notes/$VERSION.md"
-          git fetch origin main --tags
-          RELEASE_SHA=$(git rev-parse origin/main)
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            test "$(git rev-list -n 1 "$TAG")" = "$RELEASE_SHA"
+          TAG="v${VERSION}"
+          NOTES=".github/release-notes/${VERSION}.md"
+          git fetch --tags origin
+          if git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null; then
+            test "$(git rev-list -n 1 "${TAG}")" = "${GITHUB_SHA}"
           else
-            git tag -a "$TAG" "$RELEASE_SHA" -m "Navimower Map Card $VERSION"
-            git push origin "$TAG"
+            git tag -a "${TAG}" "${GITHUB_SHA}" -m "Navimower Map Card ${VERSION}"
+            git push origin "${TAG}"
           fi
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --latest --title "Navimower Map Card $VERSION" --notes-file "$NOTES"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --latest --title "Navimower Map Card ${VERSION}" --notes-file "${NOTES}"
           else
-            gh release create "$TAG" --latest --title "Navimower Map Card $VERSION" --notes-file "$NOTES"
+            gh release create "${TAG}" --latest --target "${GITHUB_SHA}" --title "Navimower Map Card ${VERSION}" --notes-file "${NOTES}"
           fi

@@ -180,7 +180,6 @@ function patchCard() {
   if (typeof originalSetConfig === "function") {
     proto.setConfig = function colorSetConfig(config) {
       const normalized = normalizeColorEditorConfig(config, this._config || {});
-      if (config && typeof config === "object") Object.assign(config, normalized);
       return originalSetConfig.call(this, normalized);
     };
   }

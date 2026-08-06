@@ -10,7 +10,7 @@ for (const root of ["src", "dist"]) {
   const gridDefaults = readFileSync(`${root}/navimower-map-card-v033.js`, "utf8");
   const editorRefinements = readFileSync(`${root}/navimower-map-card-v034.js`, "utf8");
 
-  assert.match(loader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.0-beta5"/);
+  assert.match(loader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.0-beta6"/);
   assert.match(loader, /navimower-map-card-core\.js/);
   assert.match(loader, /navimower-map-card-v030\.js/);
   assert.match(loader, /navimower-map-card-v031\.js/);
@@ -18,7 +18,6 @@ for (const root of ["src", "dist"]) {
   assert.match(loader, /navimower-map-card-v033\.js/);
   assert.match(loader, /navimower-map-card-v034\.js/);
 
-  // The stable core keeps all previously tested controls and visual-editor work.
   assert.match(core, /type: "color"/);
   assert.match(core, /const zoom = Math\.max\(1, finiteNumber\(this\._view\?\.scale, 1\)\)/);
   assert.match(core, /data-schedule-action="save-all"/);
@@ -48,10 +47,12 @@ for (const root of ["src", "dist"]) {
   assert.match(gridDefaults, /columns: "full"/);
   assert.match(gridDefaults, /automatic-height full-width grid defaults/);
 
+  assert.match(editorRefinements, /NAVIMOWER_MAP_CARD_V034_VERSION = "0\.3\.0-beta6"/);
   assert.match(editorRefinements, /normalizeHexColor/);
   assert.match(editorRefinements, /navimower_hex/);
   assert.match(editorRefinements, /SCHEDULE_CLOSE_DELAY_MS = 2500/);
   assert.match(editorRefinements, /delayedScheduleDialogClose/);
+  assert.doesNotMatch(editorRefinements, /Object\.assign\(config/);
   assert.doesNotMatch(editorRefinements, /concurrenc|semaphore|Promise\.allSettled/i);
 }
-console.log("0.3.0-beta5 feature checks passed");
+console.log("0.3.0-beta6 feature checks passed");

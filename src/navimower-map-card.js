@@ -4,8 +4,8 @@
  *
  * Loads the stable 0.2.2 card core, the 0.3 completed-session archive layer,
  * adjustable non-scaling map-outline controls, fixed-size adjustable zone
- * markers, automatic-height full-width Sections defaults, and the stable
- * schedule-dialog refinement for Navimower integration 0.4.0 and later.
+ * markers, automatic-height full-width Sections defaults, and the cache-safe
+ * stable schedule-dialog refinement for Navimower integration 0.4.0 and later.
  * Manual HEX editor fields are not included.
  *
  * Stable-core smoke-contract markers retained by the loader:
@@ -20,7 +20,7 @@ import "./navimower-map-card-v030.js";
 import "./navimower-map-card-v031.js";
 import "./navimower-map-card-v032.js";
 import "./navimower-map-card-v033.js";
-import "./navimower-map-card-v034.js";
+import "./navimower-map-card-v034s.js";
 
 const NAVIMOWER_MAP_CARD_VERSION = "0.3.0";
 // Legacy smoke-contract marker: const NAVIMOWER_MAP_CARD_VERSION = "0.2.2";

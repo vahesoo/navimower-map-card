@@ -5,7 +5,10 @@ on:
     branches: [main]
     paths:
       - package.json
+      - hacs.json
       - src/navimower-map-card.js
+      - src/navimower-map-card-v030-stable.js
+      - src/navimower-map-card-v034s.js
       - .github/release-notes/**
       - .github/workflows/publish-release.yml
   workflow_dispatch:
@@ -47,8 +50,10 @@ jobs:
         run: |
           set -euo pipefail
           test -f ".github/release-notes/${VERSION}.md"
-          grep -q "NAVIMOWER_MAP_CARD_VERSION = \"${VERSION}\"" src/navimower-map-card.js
-          grep -q "NAVIMOWER_MAP_CARD_VERSION = \"${VERSION}\"" dist/navimower-map-card.js
+          test "$(node -p "require('./hacs.json').filename")" = "navimower-map-card-v030-stable.js"
+          grep -q "NAVIMOWER_MAP_CARD_VERSION = \"${VERSION}\"" src/navimower-map-card-v030-stable.js
+          grep -q 'navimower-map-card-v034s.js' src/navimower-map-card-v030-stable.js
+          grep -q 'navimower-map-card-v034s.js' dist/navimower-map-card-v030-stable.js
           git diff --exit-code
 
       - name: Tag and publish latest release
@@ -64,12 +69,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch --tags origin
+
           if git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null; then
-            test "$(git rev-list -n 1 "${TAG}")" = "${GITHUB_SHA}"
-          else
+            TAG_SHA="$(git rev-list -n 1 "${TAG}")"
+            if [ "${TAG_SHA}" != "${GITHUB_SHA}" ]; then
+              if gh release view "${TAG}" >/dev/null 2>&1; then
+                echo "Refusing to move ${TAG} while a published release still exists"
+                exit 1
+              fi
+              git push origin ":refs/tags/${TAG}"
+              git tag -d "${TAG}"
+            fi
+          fi
+
+          if ! git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null; then
             git tag -a "${TAG}" "${GITHUB_SHA}" -m "Navimower Map Card ${VERSION}"
             git push origin "${TAG}"
           fi
+
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release edit "${TAG}" --latest --title "Navimower Map Card ${VERSION}" --notes-file "${NOTES}"
           else

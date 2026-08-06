@@ -21,10 +21,6 @@ export const COLOR_FIELDS = Object.freeze([
   Object.freeze({ key: "dock_color", label: "Dock", defaultValue: "#37474F" }),
 ]);
 
-function hasOwn(object, key) {
-  return Object.prototype.hasOwnProperty.call(object || {}, key);
-}
-
 export function normalizeHexColor(value, { allowBlank = false } = {}) {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
@@ -38,35 +34,16 @@ export function normalizeHexColor(value, { allowBlank = false } = {}) {
   return `#${digits.toUpperCase()}`;
 }
 
-function resolvedColor(config, previous, field) {
-  const hexKey = `${field.key}_hex`;
-  const pickerValue = config?.[field.key];
-  const hexValue = config?.[hexKey];
-  const previousPicker = previous?.[field.key];
-  const previousHex = previous?.[hexKey];
-  const pickerChanged = hasOwn(config, field.key) && pickerValue !== previousPicker;
-  const hexChanged = hasOwn(config, hexKey) && hexValue !== previousHex;
-  const pickerColor = normalizeHexColor(pickerValue, field);
-  const manualColor = normalizeHexColor(hexValue, field);
-
-  if (hexChanged && manualColor !== null) return manualColor;
-  if (pickerChanged && pickerColor !== null) return pickerColor;
-  if (manualColor !== null) return manualColor;
-  if (pickerColor !== null) return pickerColor;
-
-  const previousManual = normalizeHexColor(previousHex, field);
-  if (previousManual !== null) return previousManual;
-  const previousColor = normalizeHexColor(previousPicker, field);
-  if (previousColor !== null) return previousColor;
-  return field.defaultValue;
-}
-
 export function normalizeColorEditorConfig(config = {}, previous = {}) {
   const normalized = { ...(config || {}) };
   for (const field of COLOR_FIELDS) {
-    const value = resolvedColor(config, previous, field);
-    normalized[field.key] = value;
-    normalized[`${field.key}_hex`] = value;
+    const current = normalizeHexColor(config?.[field.key], field);
+    const prior = normalizeHexColor(previous?.[field.key], field);
+    normalized[field.key] = current !== null
+      ? current
+      : prior !== null
+        ? prior
+        : field.defaultValue;
   }
   return normalized;
 }
@@ -82,9 +59,10 @@ function findSchema(node, name) {
   return null;
 }
 
-function hexField(field) {
+function manualHexField(field) {
   return {
-    name: `${field.key}_hex`,
+    name: field.key,
+    navimower_hex: true,
     selector: { text: {} },
   };
 }
@@ -94,15 +72,16 @@ export function extendColorConfigForm(form) {
   const appearanceGrid = findSchema(next, "appearance_grid");
   if (appearanceGrid && Array.isArray(appearanceGrid.schema)) {
     for (const field of COLOR_FIELDS) {
-      const helperName = `${field.key}_hex`;
-      if (appearanceGrid.schema.some((item) => item?.name === helperName)) continue;
+      if (appearanceGrid.schema.some(
+        (item) => item?.name === field.key && item?.navimower_hex === true,
+      )) continue;
       const pickerIndex = appearanceGrid.schema.findIndex(
-        (item) => item?.name === field.key,
+        (item) => item?.name === field.key && item?.navimower_hex !== true,
       );
       appearanceGrid.schema.splice(
         pickerIndex >= 0 ? pickerIndex + 1 : appearanceGrid.schema.length,
         0,
-        hexField(field),
+        manualHexField(field),
       );
     }
   }
@@ -111,13 +90,13 @@ export function extendColorConfigForm(form) {
     ? next.computeLabel
     : null;
   next.computeLabel = (schema) => {
-    const field = COLOR_FIELDS.find(
-      (item) => `${item.key}_hex` === schema?.name,
-    );
-    if (field) {
-      return field.allowBlank
-        ? `${field.label} HEX (blank = theme)`
-        : `${field.label} HEX`;
+    if (schema?.navimower_hex === true) {
+      const field = COLOR_FIELDS.find((item) => item.key === schema?.name);
+      if (field) {
+        return field.allowBlank
+          ? `${field.label} HEX (blank = theme)`
+          : `${field.label} HEX`;
+      }
     }
     return originalComputeLabel?.(schema) || schema?.name || "";
   };

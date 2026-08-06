@@ -1,20 +1,20 @@
 /*
  * Navimower Map Card
- * Version 0.3.0-beta7
+ * Version 0.3.0
  *
  * Loads the stable 0.2.2 card core, the 0.3 completed-session archive layer,
  * adjustable non-scaling map-outline controls, fixed-size adjustable zone
- * markers, automatic-height full-width Sections defaults, and a cache-safe
- * beta7 schedule-dialog refinement for Navimower integration 0.4.0-beta2 and
- * later. Manual HEX editor fields are not included.
+ * markers, automatic-height full-width Sections defaults, and the stable
+ * schedule-dialog refinement for Navimower integration 0.4.0 and later.
+ * Manual HEX editor fields are not included.
  */
 import "./navimower-map-card-core.js";
 import "./navimower-map-card-v030.js";
 import "./navimower-map-card-v031.js";
 import "./navimower-map-card-v032.js";
 import "./navimower-map-card-v033.js";
-import "./navimower-map-card-v034b7.js";
-const NAVIMOWER_MAP_CARD_VERSION = "0.3.0-beta7";
+import "./navimower-map-card-v034.js";
+const NAVIMOWER_MAP_CARD_VERSION = "0.3.0";
 const registration = globalThis.window?.customCards?.find?.((card) => card.type === "navimower-map-card");
 if (registration) registration.description = "Navimower map with compact completed-session mowed areas, an active live trail, retained-day history, adjustable fixed-screen outlines and zone markers, native color controls, delayed schedule-save closing, automatic-height full-width Sections defaults, controls, and zoom.";
 console.info(`%c NAVIMOWER-MAP-CARD %c v${NAVIMOWER_MAP_CARD_VERSION} `,

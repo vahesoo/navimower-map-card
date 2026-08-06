@@ -28,37 +28,34 @@ const initial = normalizeColorEditorConfig({
   map_background_color: "",
 });
 assert.equal(initial.zone_fill_color, "#81C784");
-assert.equal(initial.zone_fill_color_hex, "#81C784");
 assert.equal(initial.map_background_color, "");
-assert.equal(initial.map_background_color_hex, "");
+assert.equal(Object.keys(initial).some((key) => key.endsWith("_hex")), false);
 
 const pickerChanged = normalizeColorEditorConfig({
   ...initial,
   zone_fill_color: "#123456",
 }, initial);
 assert.equal(pickerChanged.zone_fill_color, "#123456");
-assert.equal(pickerChanged.zone_fill_color_hex, "#123456");
 
+// The picker and text selector share this same configuration key. A value from
+// either control therefore follows the same normalization path.
 const manualChanged = normalizeColorEditorConfig({
   ...pickerChanged,
-  zone_fill_color_hex: "abc",
+  zone_fill_color: "abc",
 }, pickerChanged);
 assert.equal(manualChanged.zone_fill_color, "#AABBCC");
-assert.equal(manualChanged.zone_fill_color_hex, "#AABBCC");
 
 const invalidManual = normalizeColorEditorConfig({
   ...manualChanged,
-  zone_fill_color_hex: "not-a-color",
+  zone_fill_color: "not-a-color",
 }, manualChanged);
 assert.equal(invalidManual.zone_fill_color, "#AABBCC");
-assert.equal(invalidManual.zone_fill_color_hex, "#AABBCC");
 
 const themeBackground = normalizeColorEditorConfig({
   ...invalidManual,
-  map_background_color_hex: "",
-}, { ...invalidManual, map_background_color: "#112233", map_background_color_hex: "#112233" });
+  map_background_color: "",
+}, { ...invalidManual, map_background_color: "#112233" });
 assert.equal(themeBackground.map_background_color, "");
-assert.equal(themeBackground.map_background_color_hex, "");
 
 const form = extendColorConfigForm({
   schema: [{
@@ -72,11 +69,16 @@ const form = extendColorConfigForm({
 });
 const appearance = form.schema[0].schema;
 for (const field of COLOR_FIELDS) {
-  const pickerIndex = appearance.findIndex((item) => item.name === field.key);
-  const helperIndex = appearance.findIndex((item) => item.name === `${field.key}_hex`);
-  assert.equal(helperIndex, pickerIndex + 1);
-  assert.deepEqual(appearance[helperIndex].selector, { text: {} });
-  assert.match(form.computeLabel(appearance[helperIndex]), /HEX/);
+  const pickerIndex = appearance.findIndex(
+    (item) => item.name === field.key && item.navimower_hex !== true,
+  );
+  const manualIndex = appearance.findIndex(
+    (item) => item.name === field.key && item.navimower_hex === true,
+  );
+  assert.equal(manualIndex, pickerIndex + 1);
+  assert.equal(appearance[manualIndex].name, appearance[pickerIndex].name);
+  assert.deepEqual(appearance[manualIndex].selector, { text: {} });
+  assert.match(form.computeLabel(appearance[manualIndex]), /HEX/);
 }
 assert.equal(form.computeLabel({ name: "unrelated" }), "Original unrelated");
 
@@ -98,6 +100,7 @@ for (const root of ["src", "dist"]) {
   assert.match(source, /this\._scheduleDialogOpen = true/);
   assert.match(source, /this\._scheduleDialogOpen = false/);
   assert.match(source, /SCHEDULE_CLOSE_DELAY_MS/);
+  assert.match(source, /navimower_hex/);
   assert.doesNotMatch(source, /concurrenc|semaphore|Promise\.allSettled/i);
 }
 

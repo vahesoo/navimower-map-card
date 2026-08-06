@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0-beta5 - 2026-08-06
+
+- Added synchronized manual HEX fields beside every color picker in the visual editor.
+- Accept three- and six-digit HEX input, normalize it to uppercase six-digit form, and reject invalid values without changing the active color.
+- Keep the optional map background clearable so it can continue inheriting the Home Assistant theme.
+- Keep the schedule dialog open for 2.5 seconds after a successful batch save so the Saved confirmation remains visible before automatic closing.
+- Keep the schedule dialog open on validation or service errors and when another edit becomes dirty during the confirmation delay.
+- Recommend Navimower integration `0.4.0-beta2` so the card's existing lightweight map query omits completed-session and legacy daily-trail payloads.
+- Keep completed-session render requests fully parallel; no request queue or concurrency limiter was added.
+
 ## 0.3.0-beta1 - 2026-08-05
 
 - Added Navimower integration `0.4.0-beta1` completed-session render archive support.

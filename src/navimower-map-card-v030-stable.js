@@ -2,17 +2,7 @@
  * Navimower Map Card
  * Version 0.3.0
  *
- * Loads the stable 0.2.2 card core, the 0.3 completed-session archive layer,
- * adjustable non-scaling map-outline controls, fixed-size adjustable zone
- * markers, automatic-height full-width Sections defaults, and the cache-safe
- * stable schedule-dialog refinement for Navimower integration 0.4.0 and later.
- * Manual HEX editor fields are not included.
- *
- * Stable-core smoke-contract markers retained by the loader:
- * LATEST_MAP_PAYLOAD_CACHE daily_trails_revision recordTrail MAP_PAYLOAD_CACHE
- * STATIC_MAP_CACHE CARD_TEMPLATE MOWER_TEMPLATE
- * document.createElementNS("http://www.w3.org/2000/svg", "g")
- * this._mowerGroup = MOWER_TEMPLATE.cloneNode(true)
+ * Stable HACS loader with a filename not used by any beta release.
  */
 
 import "./navimower-map-card-core.js";
@@ -23,7 +13,6 @@ import "./navimower-map-card-v033.js";
 import "./navimower-map-card-v034s.js";
 
 const NAVIMOWER_MAP_CARD_VERSION = "0.3.0";
-// Legacy smoke-contract marker: const NAVIMOWER_MAP_CARD_VERSION = "0.2.2";
 
 const registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card",

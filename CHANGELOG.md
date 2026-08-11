@@ -70,7 +70,7 @@
 - Continued drawing the active route while the mower returns to the dock when the integration has `include_return_trail` enabled.
 - Matched live card route collection to the backend active-session lifecycle instead of stopping as soon as the mower leaves the cutting state.
 - Added revision-aware payload-cache validation so a newly opened or reconnected card does not reuse daily-trail data older than the Map data entity.
-- Added a latest-payload stale-while-revalidate fallback so the base map can appear immediately while current dynamic route data is refreshed from the integration in the background.
+- Added a latest-payload stale-while-revalidate fallback so the base map can appear immediately while current dynamic route data is refreshed.
 - Added reconnect handling and return-route regression coverage.
 
 ## 0.2.0 - 2026-08-03

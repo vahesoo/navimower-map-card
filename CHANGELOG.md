@@ -63,7 +63,7 @@
 - Replaced hexadecimal text boxes with Home Assistant native color inputs for colors that always have an explicit value; the optional map background remains clearable so it can inherit the Home Assistant theme.
 - Reworked the weekly schedule editor for mobile use: edit any number of collapsed or expanded days, then save all changed days from one persistent bottom action bar.
 - Added a matching global discard action, unsaved-day indicators, sequential per-day service calls, and protection against closing out the batch state before a failed day is corrected.
-- Added beta-specific smoke coverage for fixed marker scaling, color selectors, global schedule saving, and source/distribution version parity.
+- Added beta-specific smoke coverage for fixed marker scaling, color selectors, global schedule saving, source/distribution version parity.
 
 ## 0.2.1 - 2026-08-03
 
@@ -162,7 +162,7 @@ All notable changes to this project are documented here.
 ## 0.1.10 - 2026-07-30
 
 - Added `Schedule` text beside the calendar icon in the card header.
-- Added schedule-state styling: Navimow orange (`#FF5A00`) when at least one enabled schedule period exists, grey when the schedule is off or unavailable.
+- Added schedule-state styling: Navimow orange (`#FF5A00`) when at least one enabled mowing period exists, grey when the schedule is off or unavailable.
 - Added Navimower map API v3 segmented-trail support for active and completed sessions.
 - Rendered each `trail_segments` / `segments` fragment separately so short pauses, reloads, and restarts do not create false connecting lines.
 - Kept `trail` and `points` fallback support for older Navimower integration versions.
@@ -188,7 +188,7 @@ All notable changes to this project are documented here.
 ## 0.1.7 - 2026-07-30
 
 - Integrated Mow, Pause, and Dock controls into the bottom of the map card.
-- The Mow button resumes an active paused job immediately; when no resumable job exists, it opens the zone-aware Mow now dialog.
+- The Mow button resumes an active paused mowing job immediately; when no resumable job exists, it opens the zone-aware Mow now dialog.
 - Added ordered zone selection: selected zone numbers follow the tap order and the same ordered ID list is passed to `navimower.mow`.
 - Added the `Clear previous mowing progress` option for the integration service's `reset` parameter.
 - Bundled the Mow now dialog into the existing `navimower-map-card.js` resource; no separate frontend resource is required.
@@ -228,13 +228,13 @@ All notable changes to this project are documented here.
 - Increased the default active-trail opacity and made session legend dots use the same configured fade range as the rendered routes.
 - Added configurable `map_background_color`; leaving it empty continues to use the active Home Assistant theme.
 - Added `show_doodles` and `doodle_opacity` controls to YAML and the visual editor.
-- Expanded smoke tests and documentation for the new appearance, time-format, interaction, and doodle behavior.
+- Expanded smoke tests for the new appearance, time-format, interaction, and doodle behavior.
 
 ## 0.1.2 - 2026-07-30
 - Made each session-time entry clickable or tappable. The selected session route pulses three times in a temporary highlight layer and then returns to the unchanged normal map.
 - Kept all non-selected sessions unchanged during route highlighting; no dimming, recoloring, or persistent selection state is used.
 - Split SVG rendering into ordered base, history, current-trail, highlight, details, labels, mower, and UI layers.
-- Moved zone boundaries, obstacles, no-mow areas, tunnels, channels, charging station, labels, mower, and UI layers.
+- Moved zone boundaries, obstacles, no-mow areas, tunnels, channels, charging station, labels, and legend above mowing trails so important details are not hidden.
 - Added configurable `zone_label_opacity` in YAML and the visual editor for zone names and progress percentages.
 - Reused one trail-segmentation path for active, historical, and highlighted routes and expanded smoke tests for the new behavior.
 

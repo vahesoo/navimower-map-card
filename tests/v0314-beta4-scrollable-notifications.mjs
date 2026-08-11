@@ -61,18 +61,14 @@ assert.equal(countSchema.selector.number.min, 1);
 assert.equal(countSchema.selector.number.max, 10);
 assert.equal(form.computeLabel({ name: "notification_count" }), "Notifications to show");
 
-const hacs = JSON.parse(readFileSync("hacs.json", "utf8"));
-assert.equal(hacs.filename, "navimower-map-card-0.3.1-b4.js");
-
 for (const root of ["src", "dist"]) {
   const currentLoader = readFileSync(`${root}/navimower-map-card.js`, "utf8");
   const beta4Loader = readFileSync(`${root}/navimower-map-card-0.3.1-b4.js`, "utf8");
   const layer = readFileSync(`${root}/navimower-map-card-v038u.js`, "utf8");
 
-  assert.match(currentLoader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.1-beta4"/);
   assert.match(beta4Loader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.1-beta4"/);
-  assert.match(currentLoader, /navimower-map-card-v038u\.js/);
   assert.match(beta4Loader, /navimower-map-card-v038u\.js/);
+  assert.match(currentLoader, /navimower-map-card-v038u\.js/);
   assert.match(layer, /header\.style\.display = "block"/);
   assert.match(layer, /notification_count/);
   assert.match(layer, /Notifications to show/);

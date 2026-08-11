@@ -26,8 +26,9 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 - Mow, Pause, and Dock controls directly below the map
 - Integrated **Mow now** dialog with ordered zone selection and progress reset/continue choice
 - Integrated weekly **Schedule** editor with one mobile-friendly global Save action
-- Integrated **Notifications** panel with unread indication, per-message **Mark as read**, and **Mark all as read**
+- Compact **Notifications** panel with per-message **Mark as read**, **Mark all as read**, and expandable message bodies
 - Configurable notification page size and optional mark-all-read behavior when the dialog is opened
+- Two-row header with a separate configurable title row and a wrapping History / Notifications / Schedule action row
 - Configurable fixed-size mower icon that stays readable while the map is zoomed
 - Home Assistant native color pickers in the visual card editor
 - Automatic related-entity discovery from one `lawn_mower` entity
@@ -54,13 +55,13 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 
 HACS installs and registers the card resource automatically. You do not need to add a Lovelace resource manually.
 
-For 0.3.1 prereleases, each beta uses a unique cache-safe JavaScript filename. **0.3.1-beta2** is distributed as:
+For 0.3.1 prereleases, each beta uses a unique cache-safe JavaScript filename. **0.3.1-beta3** is distributed as:
 
 ```text
-dist/navimower-map-card-0.3.1-b2.js
+dist/navimower-map-card-0.3.1-b3.js
 ```
 
-Beta1 remains `navimower-map-card-0.3.1-b1.js`, later betas use matching `-bN.js` names, and stable 0.3.1 will use `navimower-map-card-0.3.1.js`. This prevents a browser or Android WebView from silently reusing the previous beta module URL.
+Beta1 remains `navimower-map-card-0.3.1-b1.js`, beta2 remains `navimower-map-card-0.3.1-b2.js`, later betas use matching `-bN.js` names, and stable 0.3.1 will use `navimower-map-card-0.3.1.js`. This prevents a browser or Android WebView from silently reusing the previous beta module URL.
 
 ## Basic configuration
 
@@ -130,7 +131,7 @@ The **Notifications** label and bell in the header use the retained `Latest noti
 - Orange (`#FF5A00`) with `mdi:bell-badge-outline`: at least one retained notification is unread
 - Grey with `mdi:bell-outline`: all retained notifications are read, or no unread state is present
 
-The dialog shows the notification timestamp, title and content. Unread rows have an orange dot and an orange **Mark as read** action at the end of the timestamp row. Once the integration refreshes that message as `read: true`, the action disappears. The beta1 vendor-code text is no longer shown in that row.
+The beta3 dialog is compact by default. Each item initially shows only its timestamp and title. An unread item has an orange **Mark as read** action at the end of the timestamp row. Clicking the title expands or collapses the notification body; when that title is unread, the same click also calls the one-message read action. Clicking **Mark as read** itself leaves the body collapsed. Once the integration refreshes that message as `read: true`, its read action disappears.
 
 When at least one retained message is unread, **Mark all as read** is shown at the top center of the dialog. The card calls only Home Assistant actions:
 
@@ -270,12 +271,15 @@ When `remember_view` is enabled, the view is stored only in that browser's local
 
 ## Appearance
 
-The visual editor exposes the current display, notification and appearance settings. A representative YAML configuration is:
+The visual editor exposes the current display, notification and appearance settings. The General section pairs **Mower entity** with its Auto-detect toggle and **Title** with a **Show title** toggle. The card title is rendered on its own header row; turn `show_title` off to hide that row.
+
+A representative YAML configuration is:
 
 ```yaml
 type: custom:navimower-map-card
 entity: lawn_mower.tont
 title: Navimower Map
+show_title: true
 
 auto_entities: true
 show_status: true
@@ -318,6 +322,8 @@ dock_color: "#37474f"
 ```
 
 Leaving `map_background_color` empty uses the current Home Assistant theme's secondary background color.
+
+The Advanced editor keeps **Live trail point cap** (`trail_length`). This still limits the number of browser-side points retained for the active/fallback live trail; it does not limit the integration's completed mowed-area history. Existing YAML values continue to work unchanged.
 
 ## Frontend performance
 
@@ -373,7 +379,7 @@ Existing YAML containing removed keys will still load, but those keys have no ef
 
 ### `Custom element doesn't exist: navimower-map-card`
 
-Confirm that HACS installed the dashboard card and created its current resource under `/hacsfiles/navimower-map-card/`. For 0.3.1-beta2 the filename ends in `navimower-map-card-0.3.1-b2.js`.
+Confirm that HACS installed the dashboard card and created its current resource under `/hacsfiles/navimower-map-card/`. For 0.3.1-beta3 the filename ends in `navimower-map-card-0.3.1-b3.js`.
 
 Then refresh the frontend. On Android, clear the Home Assistant app or WebView cache if an older resource remains loaded.
 

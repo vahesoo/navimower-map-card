@@ -1,33 +1,19 @@
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const files = [
-  "navimower-map-card.js",
-  "navimower-map-card-v030-stable.js",
-  "navimower-map-card-0.3.1-b1.js",
-  "navimower-map-card-0.3.1-b2.js",
-  "navimower-map-card-0.3.1-b3.js",
-  "navimower-map-card-0.3.1-b4.js",
-  "navimower-map-card-0.3.1-b5.js",
-  "navimower-map-card-core.js",
-  "navimower-map-card-v030.js",
-  "navimower-map-card-v031.js",
-  "navimower-map-card-v032.js",
-  "navimower-map-card-v033.js",
-  "navimower-map-card-v034s.js",
-  "navimower-map-card-v035n.js",
-  "navimower-map-card-v036n.js",
-  "navimower-map-card-v037u.js",
-  "navimower-map-card-v038u.js",
-  "navimower-map-card-v039r.js",
-];
+const srcDir = resolve(root, "src");
+const distDir = resolve(root, "dist");
+const source = resolve(srcDir, "navimower-map-card.js");
+const target = resolve(distDir, "navimower-map-card.js");
 
-await mkdir(resolve(root, "dist"), { recursive: true });
-for (const filename of files) {
-  const source = resolve(root, "src", filename);
-  const target = resolve(root, "dist", filename);
-  await copyFile(source, target);
-  console.log(`Built ${target}`);
+const sourceJs = (await readdir(srcDir)).filter((name) => name.endsWith(".js"));
+if (sourceJs.length !== 1 || sourceJs[0] !== "navimower-map-card.js") {
+  throw new Error(`src must contain exactly navimower-map-card.js; found: ${sourceJs.join(", ")}`);
 }
+
+await rm(distDir, { recursive: true, force: true });
+await mkdir(distDir, { recursive: true });
+await copyFile(source, target);
+console.log(`Built ${target}`);

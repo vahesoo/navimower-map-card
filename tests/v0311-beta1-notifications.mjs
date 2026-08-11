@@ -63,16 +63,18 @@ assert.notEqual(formatNotificationTimestamp(1786430000000, {
 }), "Time unavailable");
 
 const hacs = JSON.parse(readFileSync("hacs.json", "utf8"));
-assert.equal(hacs.filename, "navimower-map-card-v031-beta1.js");
+assert.equal(hacs.filename, "navimower-map-card-0.3.1-b1.js");
 
 for (const root of ["src", "dist"]) {
   const loader = readFileSync(`${root}/navimower-map-card.js`, "utf8");
-  const hacsLoader = readFileSync(`${root}/navimower-map-card-v031-beta1.js`, "utf8");
+  const hacsLoader = readFileSync(`${root}/navimower-map-card-0.3.1-b1.js`, "utf8");
   const layer = readFileSync(`${root}/navimower-map-card-v035n.js`, "utf8");
   assert.match(loader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.1-beta1"/);
   assert.match(hacsLoader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.1-beta1"/);
   assert.match(loader, /navimower-map-card-v035n\.js/);
   assert.match(hacsLoader, /navimower-map-card-v035n\.js/);
+  assert.match(hacsLoader, /0\.3\.1-b1/);
+  assert.match(hacsLoader, /stable release will use 0\.3\.1\.js/);
   assert.match(layer, /mdi:bell-badge-outline/);
   assert.match(layer, /mdi:bell-outline/);
   assert.match(layer, /#FF5A00/);
@@ -84,6 +86,6 @@ for (const root of ["src", "dist"]) {
 }
 
 assert.equal(readFileSync("src/navimower-map-card-v035n.js", "utf8"), readFileSync("dist/navimower-map-card-v035n.js", "utf8"));
-assert.equal(readFileSync("src/navimower-map-card-v031-beta1.js", "utf8"), readFileSync("dist/navimower-map-card-v031-beta1.js", "utf8"));
+assert.equal(readFileSync("src/navimower-map-card-0.3.1-b1.js", "utf8"), readFileSync("dist/navimower-map-card-0.3.1-b1.js", "utf8"));
 
 console.log("0.3.1-beta1 notification panel checks passed");

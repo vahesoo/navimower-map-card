@@ -1,8 +1,8 @@
 /*
  * Navimower Map Card 0.3.1-beta4 UI refinement.
  *
- * Fixes the beta3 two-row title layout and replaces notification pagination
- * with one compact scrollable list. notification_count is the only list-size setting.
+ * Fixes the beta3 title row and replaces notification pagination with one
+ * compact scrollable list. notification_count is the only list-size setting.
  */
 
 import {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.1-beta6 - 2026-08-11
+
+- Flattened the accumulated core + patch-layer chain into one cumulative `src/navimower-map-card.js` runtime while preserving the complete beta5 behavior.
+- Reduced `src/` and `dist/` to exactly one JavaScript file each; `dist/navimower-map-card.js` is an exact build copy of the source.
+- Changed HACS back to the stable `navimower-map-card.js` filename instead of creating a new cache-busting loader filename for every beta.
+- Reworked the build so it deletes/recreates `dist/` and refuses a second source runtime JavaScript file.
+- Added a permanent layout guard that rejects extra runtime files, version-specific local loader imports, or source/distribution drift.
+- Documented the single-runtime rule and the explicit process required if a future architecture genuinely needs multiple runtime files.
+- Made beta/stable publishing version-bump driven: implementation, tests and documentation land first; the final `package.json` version change triggers publication.
+- Kept the beta line cumulative: the final tested beta remains the stable-release candidate without a later step that merges previous beta runtime files.
+
 ## 0.3.1-beta5 - 2026-08-11
 
 - Added a dedicated **Resume** control for Navimower integration `0.4.2-beta3` and later, calling only `navimower.resume` for the selected mower.

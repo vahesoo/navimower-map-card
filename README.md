@@ -55,13 +55,13 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 
 HACS installs and registers the card resource automatically. You do not need to add a Lovelace resource manually.
 
-For 0.3.1 prereleases, each beta uses a unique cache-safe JavaScript filename. **0.3.1-beta3** is distributed as:
+Current prereleases and stable releases use one HACS runtime asset:
 
 ```text
-dist/navimower-map-card-0.3.1-b3.js
+dist/navimower-map-card.js
 ```
 
-Beta1 remains `navimower-map-card-0.3.1-b1.js`, beta2 remains `navimower-map-card-0.3.1-b2.js`, later betas use matching `-bN.js` names, and stable 0.3.1 will use `navimower-map-card-0.3.1.js`. This prevents a browser or Android WebView from silently reusing the previous beta module URL.
+The runtime filename intentionally stays stable. Beta history is retained by Git commits, tags and GitHub releases rather than by keeping version-specific JavaScript loaders on `main`.
 
 ## Basic configuration
 

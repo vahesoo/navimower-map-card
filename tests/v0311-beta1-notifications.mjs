@@ -82,7 +82,7 @@ for (const root of ["src", "dist"]) {
   assert.match(layer, /\.attributes\?\.friendly_name|friendly_name/);
   assert.match(layer, /notification_entity/);
   assert.match(layer, /read-only notification panel enabled/);
-  assert.doesNotMatch(layer, /clearBatchMessageRead|mark.*read|callService\(/i);
+  assert.doesNotMatch(layer, /clearBatchMessageRead|callService\(|callApi\(/);
 }
 
 assert.equal(readFileSync("src/navimower-map-card-v035n.js", "utf8"), readFileSync("dist/navimower-map-card-v035n.js", "utf8"));

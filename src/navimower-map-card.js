@@ -1,13 +1,13 @@
 /*
  * Navimower Map Card
- * Version 0.3.1-beta4
+ * Version 0.3.1-beta5
  *
  * Loads the stable 0.2.2 card core, the 0.3 completed-session archive layer,
  * adjustable non-scaling map-outline controls, fixed-size adjustable zone
  * markers, automatic-height full-width Sections defaults, the cache-safe stable
  * schedule refinement, account-scoped notification read controls, compact
- * notification UI, and the beta4 title/scrollable-notification refinements for
- * Navimower integration 0.4.2-beta2+.
+ * scrollable notification UI, and conditional retained-task Resume controls for
+ * Navimower integration 0.4.2-beta3+.
  * Manual HEX editor fields are not included.
  *
  * Stable-core smoke-contract markers retained by the loader:
@@ -27,15 +27,16 @@ import "./navimower-map-card-v035n.js";
 import "./navimower-map-card-v036n.js";
 import "./navimower-map-card-v037u.js";
 import "./navimower-map-card-v038u.js";
+import "./navimower-map-card-v039r.js";
 
-const NAVIMOWER_MAP_CARD_VERSION = "0.3.1-beta4";
+const NAVIMOWER_MAP_CARD_VERSION = "0.3.1-beta5";
 // Legacy smoke-contract marker: const NAVIMOWER_MAP_CARD_VERSION = "0.2.2";
 
 const registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card",
 );
 if (registration) {
-  registration.description = "Navimower map with completed mowed areas, compact scrollable account-scoped notifications, fixed two-row title header, schedule editing, controls, and zoom.";
+  registration.description = "Navimower map with completed mowed areas, conditional retained-task Resume, compact scrollable account-scoped notifications, schedule editing, controls, and zoom.";
 }
 
 console.info(`%c NAVIMOWER-MAP-CARD %c v${NAVIMOWER_MAP_CARD_VERSION} `,

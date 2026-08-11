@@ -55,8 +55,10 @@ for (const workflow of [
   ".github/workflows/publish-release.yml",
 ]) {
   const text = readFileSync(workflow, "utf8");
-  assert.match(text, /paths:\n\s+- package\.json/);
-  assert.doesNotMatch(text, /paths:[\s\S]*src\/navimower-map-card\.js/);
+  const trigger = text.split("\npermissions:")[0];
+  assert.match(trigger, /paths:\n\s+- package\.json/);
+  assert.doesNotMatch(trigger, /src\/navimower-map-card\.js/);
+  assert.doesNotMatch(trigger, /release-notes/);
 }
 
 console.log("0.3.1-beta6 single-runtime regression checks passed");

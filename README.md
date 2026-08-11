@@ -4,7 +4,7 @@
 
 A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo/NaviMower) custom integration.
 
-It combines the mower map, live MQTT position, mowing history, direct mower controls, ordered zone mowing, and weekly schedule editing in one HACS-managed Lovelace card.
+It combines the mower map, live MQTT position, mowing history, direct mower controls, ordered zone mowing, weekly schedule editing, and account-scoped Navimow notifications in one HACS-managed Lovelace card.
 
 > [!IMPORTANT]
 > This card is built for the **Navimower** integration and uses the custom element `custom:navimower-map-card`.
@@ -26,6 +26,8 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 - Mow, Pause, and Dock controls directly below the map
 - Integrated **Mow now** dialog with ordered zone selection and progress reset/continue choice
 - Integrated weekly **Schedule** editor with one mobile-friendly global Save action
+- Integrated **Notifications** panel with unread indication, per-message **Mark as read**, and **Mark all as read**
+- Configurable notification page size and optional mark-all-read behavior when the dialog is opened
 - Configurable fixed-size mower icon that stays readable while the map is zoomed
 - Home Assistant native color pickers in the visual card editor
 - Automatic related-entity discovery from one `lawn_mower` entity
@@ -39,6 +41,7 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 - Home Assistant 2026.6 or newer
 - [`Navimower`](https://github.com/vahesoo/NaviMower) integration
 - Navimower v0.2.9 or newer is recommended for dense battery telemetry, stable counters and channel state, supported cutting-height detection, and three-day history
+- Navimower **0.4.2-beta2 or later** is required for the card's notification read actions
 - HACS is recommended for installation and updates
 
 ## Installation with HACS
@@ -51,11 +54,13 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 
 HACS installs and registers the card resource automatically. You do not need to add a Lovelace resource manually.
 
-The distributed frontend file is:
+For 0.3.1 prereleases, each beta uses a unique cache-safe JavaScript filename. **0.3.1-beta2** is distributed as:
 
 ```text
-dist/navimower-map-card.js
+dist/navimower-map-card-0.3.1-b2.js
 ```
+
+Beta1 remains `navimower-map-card-0.3.1-b1.js`, later betas use matching `-bN.js` names, and stable 0.3.1 will use `navimower-map-card-0.3.1.js`. This prevents a browser or Android WebView from silently reusing the previous beta module URL.
 
 ## Basic configuration
 
@@ -74,8 +79,9 @@ The card automatically looks for related Navimower entities on the same Home Ass
 - battery
 - current physical zone
 - mowing schedule
+- Latest notification
 
-Every detected entity can be overridden in the visual editor or YAML.
+Every core detected entity can be overridden in the visual editor or YAML. The notification sensor is normally discovered automatically from the selected mower/device.
 
 ## What the card controls
 
@@ -116,6 +122,31 @@ The editor supports:
 - one persistent **Save changed days** action and one global discard action
 
 Schedule changes are saved through `navimower.set_schedule`. No separate scheduler card or JavaScript resource is required.
+
+### Notifications
+
+The **Notifications** label and bell in the header use the retained `Latest notification` sensor state:
+
+- Orange (`#FF5A00`) with `mdi:bell-badge-outline`: at least one retained notification is unread
+- Grey with `mdi:bell-outline`: all retained notifications are read, or no unread state is present
+
+The dialog shows the notification timestamp, title and content. Unread rows have an orange dot and an orange **Mark as read** action at the end of the timestamp row. Once the integration refreshes that message as `read: true`, the action disappears. The beta1 vendor-code text is no longer shown in that row.
+
+When at least one retained message is unread, **Mark all as read** is shown at the top center of the dialog. The card calls only Home Assistant actions:
+
+- `navimower.mark_notification_read` with the vendor `message_id`
+- `navimower.mark_all_notifications_read`
+
+The browser never calls the Navimow private cloud directly and never changes `read` optimistically. Navimower performs the vendor request, immediately refreshes the Device notification feed, and the card follows the resulting sensor state. Read state is scoped to the private-cloud Navimow account used by that mower's config entry.
+
+Opening the dialog does **not** mark anything read by default. The visual editor and YAML expose:
+
+```yaml
+notification_mark_read_on_open: false
+notification_page_size: 3
+```
+
+`notification_page_size` accepts `1` through `5`, matching the integration's current retained `recent` notification list. If `notification_mark_read_on_open` is enabled, opening the dialog explicitly calls **Mark all notifications as read** for that mower/account context.
 
 ## Map terminology
 
@@ -239,7 +270,7 @@ When `remember_view` is enabled, the view is stored only in that browser's local
 
 ## Appearance
 
-The visual editor exposes the current display and appearance settings. A representative YAML configuration is:
+The visual editor exposes the current display, notification and appearance settings. A representative YAML configuration is:
 
 ```yaml
 type: custom:navimower-map-card
@@ -259,6 +290,9 @@ show_gate_areas: true
 show_map_legend: true
 show_session_legend: true
 session_count: 6
+
+notification_mark_read_on_open: false
+notification_page_size: 3
 
 enable_zoom: true
 initial_zoom: 1.25
@@ -295,6 +329,7 @@ The live update path watches only the entities used by the card:
 - status, zone, or battery changes update only the footer
 - mower availability changes update only the existing controls
 - schedule changes update only the schedule state and open editor
+- Latest notification changes update the Notifications header state and an open notification dialog
 - unrelated Home Assistant entity updates cause no card redraw
 
 The static card template and embedded mower artwork are parsed once per loaded frontend module. The mower SVG and Mow, Pause, and Dock buttons remain mounted and are updated in place rather than being recreated for every telemetry event. Render requests arriving in the same browser frame are coalesced.
@@ -330,7 +365,7 @@ show_doodles:
 doodle_opacity:
 ```
 
-The old standalone Mow now and Scheduler cards are also unnecessary. Both interfaces are included in `navimower-map-card.js`.
+The old standalone Mow now and Scheduler cards are also unnecessary. Both interfaces are included in the current card resource.
 
 Existing YAML containing removed keys will still load, but those keys have no effect and can be deleted.
 
@@ -338,11 +373,7 @@ Existing YAML containing removed keys will still load, but those keys have no ef
 
 ### `Custom element doesn't exist: navimower-map-card`
 
-Confirm that HACS installed the dashboard card and created the resource:
-
-```text
-/hacsfiles/navimower-map-card/navimower-map-card.js
-```
+Confirm that HACS installed the dashboard card and created its current resource under `/hacsfiles/navimower-map-card/`. For 0.3.1-beta2 the filename ends in `navimower-map-card-0.3.1-b2.js`.
 
 Then refresh the frontend. On Android, clear the Home Assistant app or WebView cache if an older resource remains loaded.
 
@@ -358,6 +389,10 @@ Verify that the Navimower integration is loaded and that its map-data sensor is 
 
 Check that the schedule sensor is available and contains at least one enabled day with a mowing period. Set `schedule_entity` manually when automatic discovery does not find it.
 
+### Notification read action fails
+
+Use Navimower integration 0.4.2-beta2 or later and confirm that the selected mower's **Latest notification** sensor is available. Read state belongs to the private-cloud Navimow account used by that mower's config entry; reading a message under another shared Navimow account does not change this account's state.
+
 ## Development
 
 The project has no runtime dependencies.
@@ -366,23 +401,24 @@ The project has no runtime dependencies.
 npm test
 ```
 
-Edit the source file:
+Edit source files under:
 
 ```text
-src/navimower-map-card.js
+src/
 ```
 
-Rebuild the HACS distribution file:
+Rebuild the HACS distribution files:
 
 ```bash
 npm run build
 ```
 
-Commit both the source and generated `dist/navimower-map-card.js` files.
+Commit both changed source files and their generated `dist/` counterparts.
 
 ## Current limitations
 
 - Multi-mower configurations need broader real-world testing.
+- The integration currently retains up to five recent Device notifications for the card, so the visual-editor page-size control is limited to 1–5.
 - Doodle geometry remains available through the integration but is intentionally not rendered until its native world scale can be determined reliably.
 - Command labels and dialog text are currently English-only.
 

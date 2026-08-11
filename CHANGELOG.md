@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.1-beta2 - 2026-08-11
+
+- Added **Notifications** text before the header bell; the text and icon now share the same neutral/read versus Navimow-orange unread state.
+- Added an orange **Mark all as read** action at the top center of the Notifications dialog whenever at least one retained notification is unread.
+- Replaced the vendor-code text at the end of each unread timestamp row with an orange **Mark as read** action; it disappears after the refreshed `Latest notification` sensor reports that message as read.
+- Use the vendor `message_id` for one-message actions and call only `navimower.mark_notification_read` / `navimower.mark_all_notifications_read`; the card never calls the private Navimow cloud directly.
+- Keep Home Assistant sensor state authoritative after writes instead of optimistically changing notification `read` flags in the browser.
+- Added visual-editor/YAML option `notification_mark_read_on_open`, default `false`; when enabled, opening the dialog explicitly marks all retained Device notifications read for the selected mower/account context.
+- Added visual-editor/YAML option `notification_page_size`, default `3`, range `1`–`5` to match the integration's current retained recent-message limit.
+- Require Navimower integration `0.4.2-beta2` or later for notification read actions; read state remains scoped to the private-cloud Navimow account used by the mower config entry.
+- Added the cache-safe HACS loader `navimower-map-card-0.3.1-b2.js` and a separate beta2 notification implementation module so beta1 browser/WebView cache entries are not overwritten under the same module URL.
+
 ## 0.3.1-beta1 - 2026-08-11
 
 - Added a read-only **Notifications** panel opened from a new bell icon in the card header.
@@ -91,7 +103,7 @@
 
 ## 0.1.15 - 2026-08-01
 
-- Updated the card runtime and package version to `0.1.15`.
+- Updated all active package and runtime version references to `0.1.15`.
 - Updated the recommended backend version to Navimower v0.2.8.
 - Retained the automatic cutting-height capability handling introduced in v0.1.14, including hiding unsupported or invalid height values.
 - No map-data schema change is required; Navimower Map API v4 remains supported.

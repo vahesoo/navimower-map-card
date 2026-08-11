@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.1-beta3 - 2026-08-11
+
+- Collapsed notification bodies by default so each item initially shows only its timestamp row and title; clicking the title expands/collapses the content.
+- Made an unread title click also call `navimower.mark_notification_read` for that vendor `message_id`, while the timestamp-row **Mark as read** action remains available without expanding content.
+- Kept **Mark all as read** in the dialog header and removed the redundant unread dot from the compact list layout.
+- Moved the configured card title onto its own row and placed History, Notifications, and Schedule on a separate wrapping action row underneath.
+- Added `show_title`, default `true`, in YAML and the visual editor.
+- Reworked the visual-editor General section so Mower entity/Auto-detect and Title/Show title form two balanced columns, with a dedicated external **Title** caption.
+- Kept `trail_length` because it still limits the browser-side active/fallback live trail; relabelled it **Live trail point cap** and clarified that completed mowed-area history is unaffected.
+- Added the cache-safe HACS loader `navimower-map-card-0.3.1-b3.js` and separate beta3 UI module; beta1/beta2 module URLs remain unchanged.
+
 ## 0.3.1-beta2 - 2026-08-11
 
 - Added **Notifications** text before the header bell; the text and icon now share the same neutral/read versus Navimow-orange unread state.

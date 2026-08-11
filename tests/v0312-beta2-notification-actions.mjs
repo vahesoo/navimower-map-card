@@ -78,18 +78,13 @@ assert.deepEqual(fields, ["notification_mark_read_on_open", "notification_page_s
 assert.equal(form.computeLabel({ name: "notification_mark_read_on_open" }), "Mark notifications as read when opening");
 assert.equal(form.computeLabel({ name: "notification_page_size" }), "Notifications per page");
 
-const hacs = JSON.parse(readFileSync("hacs.json", "utf8"));
-assert.equal(hacs.filename, "navimower-map-card-0.3.1-b2.js");
-
 for (const root of ["src", "dist"]) {
-  const currentLoader = readFileSync(`${root}/navimower-map-card.js`, "utf8");
   const beta2Loader = readFileSync(`${root}/navimower-map-card-0.3.1-b2.js`, "utf8");
   const beta2Layer = readFileSync(`${root}/navimower-map-card-v036n.js`, "utf8");
 
-  assert.match(currentLoader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.1-beta2"/);
   assert.match(beta2Loader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.1-beta2"/);
-  assert.match(currentLoader, /navimower-map-card-v036n\.js/);
   assert.match(beta2Loader, /navimower-map-card-v036n\.js/);
+  assert.doesNotMatch(beta2Loader, /navimower-map-card-v037u\.js/);
   assert.match(beta2Loader, /0\.3\.1-b2/);
   assert.match(beta2Loader, /stable release will use 0\.3\.1\.js/);
 
@@ -112,4 +107,4 @@ for (const root of ["src", "dist"]) {
 assert.equal(readFileSync("src/navimower-map-card-v036n.js", "utf8"), readFileSync("dist/navimower-map-card-v036n.js", "utf8"));
 assert.equal(readFileSync("src/navimower-map-card-0.3.1-b2.js", "utf8"), readFileSync("dist/navimower-map-card-0.3.1-b2.js", "utf8"));
 
-console.log("0.3.1-beta2 notification action checks passed");
+console.log("0.3.1-beta2 historical notification action checks passed");

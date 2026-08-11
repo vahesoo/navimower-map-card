@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.1-beta5 - 2026-08-11
+
+- Added a dedicated **Resume** control for Navimower integration `0.4.2-beta3` and later, calling only `navimower.resume` for the selected mower.
+- Show Resume only when the action exists and the mower is paused, docked, or charging; older integrations keep the previous control layout with no unsupported button.
+- When Resume is visible, show **Resume** and **Mow** side by side on the primary control row while **Pause** and **Dock** remain below.
+- Kept **Mow** available as a genuinely new mowing action: with the dedicated Resume action present, Mow opens the existing zone-aware dialog instead of implicitly resuming a paused task.
+- Preserved the historical paused-Mow fallback on older integrations that do not expose `navimower.resume`.
+- Kept docked/charging Resume explicitly model/firmware dependent; the card does not claim that a vendor-retained task exists merely because the mower is at the dock.
+- Added beta5 regression coverage for service detection, paused/docked/charging eligibility, Mow/Resume separation, HACS filename, source/dist parity, and the cache-safe `navimower-map-card-0.3.1-b5.js` loader.
+
+## 0.3.1-beta4 - 2026-08-11
+
+- Fixed the configured card title disappearing after the beta3 two-row header change by reasserting the intended header layout after the stable core renders its inline flex style.
+- Replaced Notifications Previous/Next pagination with one vertically scrollable list suitable for mouse wheel, trackpad, and touch scrolling.
+- Added `notification_count`, labelled **Notifications to show**, with range 1–10 and default 5.
+- Removed `notification_page_size` from the active beta configuration and visual editor instead of retaining it as a fallback.
+- Kept the unread Notifications header state based on the full retained `Latest notification.recent` list even when fewer rows are displayed.
+- Added the cache-safe HACS loader `navimower-map-card-0.3.1-b4.js` and beta4 regression coverage.
+
 ## 0.3.1-beta3 - 2026-08-11
 
 - Collapsed notification bodies by default so each item initially shows only its timestamp row and title; clicking the title expands/collapses the content.

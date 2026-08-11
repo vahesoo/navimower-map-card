@@ -63,14 +63,14 @@
 - Replaced hexadecimal text boxes with Home Assistant native color inputs for colors that always have an explicit value; the optional map background remains clearable so it can inherit the Home Assistant theme.
 - Reworked the weekly schedule editor for mobile use: edit any number of collapsed or expanded days, then save all changed days from one persistent bottom action bar.
 - Added a matching global discard action, unsaved-day indicators, sequential per-day service calls, and protection against closing out the batch state before a failed day is corrected.
-- Added beta-specific smoke coverage for fixed marker scaling, color selectors, global schedule saving, source/distribution version parity.
+- Added beta-specific smoke coverage for fixed marker scaling, color selectors, global schedule saving, and source/distribution version parity.
 
 ## 0.2.1 - 2026-08-03
 
 - Continued drawing the active route while the mower returns to the dock when the integration has `include_return_trail` enabled.
 - Matched live card route collection to the backend active-session lifecycle instead of stopping as soon as the mower leaves the cutting state.
 - Added revision-aware payload-cache validation so a newly opened or reconnected card does not reuse daily-trail data older than the Map data entity.
-- Added a latest-payload stale-while-revalidate fallback so the base map can appear immediately while current dynamic route data is refreshed.
+- Added a latest-payload stale-while-revalidate fallback so the base map can appear immediately while current dynamic route data is refreshed from the integration in the background.
 - Added reconnect handling and return-route regression coverage.
 
 ## 0.2.0 - 2026-08-03
@@ -162,7 +162,7 @@ All notable changes to this project are documented here.
 ## 0.1.10 - 2026-07-30
 
 - Added `Schedule` text beside the calendar icon in the card header.
-- Added schedule-state styling: Navimow orange (`#FF5A00`) when at least one enabled mowing period exists, grey when the schedule is off or unavailable.
+- Added schedule-state styling: Navimow orange (`#FF5A00`) when at least one enabled schedule period exists, grey when the schedule is off or unavailable.
 - Added Navimower map API v3 segmented-trail support for active and completed sessions.
 - Rendered each `trail_segments` / `segments` fragment separately so short pauses, reloads, and restarts do not create false connecting lines.
 - Kept `trail` and `points` fallback support for older Navimower integration versions.
@@ -228,7 +228,7 @@ All notable changes to this project are documented here.
 - Increased the default active-trail opacity and made session legend dots use the same configured fade range as the rendered routes.
 - Added configurable `map_background_color`; leaving it empty continues to use the active Home Assistant theme.
 - Added `show_doodles` and `doodle_opacity` controls to YAML and the visual editor.
-- Expanded smoke tests for the new appearance, time-format, interaction, and doodle behavior.
+- Expanded smoke tests and documentation for the new appearance, time-format, interaction, and doodle behavior.
 
 ## 0.1.2 - 2026-07-30
 - Made each session-time entry clickable or tappable. The selected session route pulses three times in a temporary highlight layer and then returns to the unchanged normal map.

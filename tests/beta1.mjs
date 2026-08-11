@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 for (const root of ["src", "dist"]) {
-  const loader = readFileSync(`${root}/navimower-map-card.js`, "utf8");
-  const hacsLoader = readFileSync(`${root}/navimower-map-card-v030-stable.js`, "utf8");
+  const currentLoader = readFileSync(`${root}/navimower-map-card.js`, "utf8");
+  const stableLoader = readFileSync(`${root}/navimower-map-card-v030-stable.js`, "utf8");
   const core = readFileSync(`${root}/navimower-map-card-core.js`, "utf8");
   const archive = readFileSync(`${root}/navimower-map-card-v030.js`, "utf8");
   const outlines = readFileSync(`${root}/navimower-map-card-v031.js`, "utf8");
@@ -11,15 +11,15 @@ for (const root of ["src", "dist"]) {
   const gridDefaults = readFileSync(`${root}/navimower-map-card-v033.js`, "utf8");
   const stable = readFileSync(`${root}/navimower-map-card-v034s.js`, "utf8");
 
-  for (const currentLoader of [loader, hacsLoader]) {
-    assert.match(currentLoader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.0"/);
-    assert.match(currentLoader, /navimower-map-card-core\.js/);
-    assert.match(currentLoader, /navimower-map-card-v030\.js/);
-    assert.match(currentLoader, /navimower-map-card-v031\.js/);
-    assert.match(currentLoader, /navimower-map-card-v032\.js/);
-    assert.match(currentLoader, /navimower-map-card-v033\.js/);
-    assert.match(currentLoader, /navimower-map-card-v034s\.js/);
-    assert.doesNotMatch(currentLoader, /navimower-map-card-v034\.js|navimower-map-card-v034b7\.js/);
+  assert.match(stableLoader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.0"/);
+  for (const loader of [currentLoader, stableLoader]) {
+    assert.match(loader, /navimower-map-card-core\.js/);
+    assert.match(loader, /navimower-map-card-v030\.js/);
+    assert.match(loader, /navimower-map-card-v031\.js/);
+    assert.match(loader, /navimower-map-card-v032\.js/);
+    assert.match(loader, /navimower-map-card-v033\.js/);
+    assert.match(loader, /navimower-map-card-v034s\.js/);
+    assert.doesNotMatch(loader, /navimower-map-card-v034\.js|navimower-map-card-v034b7\.js/);
   }
   assert.match(core, /type: "color"/);
   assert.match(core, /data-schedule-action="save-all"/);

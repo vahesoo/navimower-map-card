@@ -6,12 +6,14 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const files = [
   "navimower-map-card.js",
   "navimower-map-card-v030-stable.js",
+  "navimower-map-card-0.3.1-b1.js",
   "navimower-map-card-core.js",
   "navimower-map-card-v030.js",
   "navimower-map-card-v031.js",
   "navimower-map-card-v032.js",
   "navimower-map-card-v033.js",
   "navimower-map-card-v034s.js",
+  "navimower-map-card-v035n.js",
 ];
 
 await mkdir(resolve(root, "dist"), { recursive: true });

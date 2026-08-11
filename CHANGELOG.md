@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.1-beta1 - 2026-08-11
+
+- Added a read-only **Notifications** panel opened from a new bell icon in the card header.
+- Auto-detect the Navimower 0.4.1 **Latest notification** sensor, including both current `*_latest_notification` and earlier `*_notification` entity-ID forms plus same-device discovery.
+- Show notification date/time, title, content and vendor code when supplied by the integration.
+- Display three notifications per page by default and page through the integration's retained recent messages without adding a beta1 visual-editor setting yet.
+- Use the vendor `read` boolean: any retained unread message makes the bell Navimow orange (`#FF5A00`) with `mdi:bell-badge-outline`; otherwise it stays grey with `mdi:bell-outline`.
+- Keep unread rows visually marked with a small orange dot while leaving vendor read state untouched; opening the panel never marks a message read.
+- Treat the badge as the unread state of the sensor's retained recent set (currently up to five messages), not as a claim about older Device-feed history that is not present in Home Assistant.
+- Added the versioned HACS loader `navimower-map-card-0.3.1-b1.js`; later 0.3.1 betas use matching `-bN.js` filenames and stable 0.3.1 will use `navimower-map-card-0.3.1.js` so browser/WebView module URLs change between builds.
+- Recommend Navimower integration 0.4.1 or later for notification support. Existing map, history, controls and schedule behavior remain unchanged.
+
 ## 0.3.0-beta5 - 2026-08-06
 
 - Added synchronized manual HEX fields beside every color picker in the visual editor.
@@ -70,7 +82,7 @@
 
 - Added automatic collision avoidance for zone markers and labels.
 - Nearby zone labels are repositioned to the nearest free location instead of being drawn on top of each other.
-- Added subtle leader lines from displaced labels back to their original zone anchors.
+- Added subtle leader lines from displaced labels back to their original zone anchor.
 - Zone labels also avoid the map legend and visible Gate-area labels.
 - Added the `avoid_zone_label_overlap` option, enabled by default and available in the visual editor.
 - Updated the recommended backend version to Navimower v0.2.9.

@@ -9,7 +9,7 @@
 - Use the vendor `read` boolean: any retained unread message makes the bell Navimow orange (`#FF5A00`) with `mdi:bell-badge-outline`; otherwise it stays grey with `mdi:bell-outline`.
 - Keep unread rows visually marked with a small orange dot while leaving vendor read state untouched; opening the panel never marks a message read.
 - Treat the badge as the unread state of the sensor's retained recent set (currently up to five messages), not as a claim about older Device-feed history that is not present in Home Assistant.
-- Added a never-before-used `navimower-map-card-v031-beta1.js` HACS loader to avoid reuse of the 0.3.0 stable browser/WebView module cache.
+- Added the versioned HACS loader `navimower-map-card-0.3.1-b1.js`; later 0.3.1 betas use matching `-bN.js` filenames and stable 0.3.1 will use `navimower-map-card-0.3.1.js` so browser/WebView module URLs change between builds.
 - Recommend Navimower integration 0.4.1 or later for notification support. Existing map, history, controls and schedule behavior remain unchanged.
 
 ## 0.3.0-beta5 - 2026-08-06

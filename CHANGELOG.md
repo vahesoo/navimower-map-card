@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.1-beta3 - 2026-08-11
+
+- Collapsed notification bodies by default so each item initially shows only its timestamp row and title; clicking the title expands/collapses the content.
+- Made an unread title click also call `navimower.mark_notification_read` for that vendor `message_id`, while the timestamp-row **Mark as read** action remains available without expanding content.
+- Kept **Mark all as read** in the dialog header and removed the redundant unread dot from the compact list layout.
+- Moved the configured card title onto its own row and placed History, Notifications, and Schedule on a separate wrapping action row underneath.
+- Added `show_title`, default `true`, in YAML and the visual editor.
+- Reworked the visual-editor General section so Mower entity/Auto-detect and Title/Show title form two balanced columns, with a dedicated external **Title** caption.
+- Kept `trail_length` because it still limits the browser-side active/fallback live trail; relabelled it **Live trail point cap** and clarified that completed mowed-area history is unaffected.
+- Added the cache-safe HACS loader `navimower-map-card-0.3.1-b3.js` and separate beta3 UI module; beta1/beta2 module URLs remain unchanged.
+
 ## 0.3.1-beta2 - 2026-08-11
 
 - Added **Notifications** text before the header bell; the text and icon now share the same neutral/read versus Navimow-orange unread state.
@@ -177,7 +188,7 @@ All notable changes to this project are documented here.
 ## 0.1.7 - 2026-07-30
 
 - Integrated Mow, Pause, and Dock controls into the bottom of the map card.
-- The Mow button resumes an active paused mowing job immediately; when no resumable job exists, it opens the zone-aware Mow now dialog.
+- The Mow button resumes an active paused job immediately; when no resumable job exists, it opens the zone-aware Mow now dialog.
 - Added ordered zone selection: selected zone numbers follow the tap order and the same ordered ID list is passed to `navimower.mow`.
 - Added the `Clear previous mowing progress` option for the integration service's `reset` parameter.
 - Bundled the Mow now dialog into the existing `navimower-map-card.js` resource; no separate frontend resource is required.
@@ -223,7 +234,7 @@ All notable changes to this project are documented here.
 - Made each session-time entry clickable or tappable. The selected session route pulses three times in a temporary highlight layer and then returns to the unchanged normal map.
 - Kept all non-selected sessions unchanged during route highlighting; no dimming, recoloring, or persistent selection state is used.
 - Split SVG rendering into ordered base, history, current-trail, highlight, details, labels, mower, and UI layers.
-- Moved zone boundaries, obstacles, no-mow areas, tunnels, channels, charging station, labels, and legend above mowing trails so important details are not hidden.
+- Moved zone boundaries, obstacles, no-mow areas, tunnels, channels, charging station, labels, mower, and UI layers.
 - Added configurable `zone_label_opacity` in YAML and the visual editor for zone names and progress percentages.
 - Reused one trail-segmentation path for active, historical, and highlighted routes and expanded smoke tests for the new behavior.
 

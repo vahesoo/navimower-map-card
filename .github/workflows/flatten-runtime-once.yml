@@ -1,0 +1,144 @@
+name: Flatten map card runtime once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/flatten-runtime-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  flatten:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify current layered runtime before migration
+        run: npm test
+
+      - name: Bundle layered runtime into one source file
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes esbuild@0.25.9 src/navimower-map-card.js \
+            --bundle \
+            --format=esm \
+            --target=es2022 \
+            --charset=utf8 \
+            --legal-comments=inline \
+            --outfile=/tmp/navimower-map-card.js
+          node --check /tmp/navimower-map-card.js
+
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const path = "/tmp/navimower-map-card.js";
+          let source = readFileSync(path, "utf8");
+          const needle = '"0.3.1-beta5"';
+          const index = source.lastIndexOf(needle);
+          if (index < 0) throw new Error("Could not find current beta5 entry version in bundled runtime");
+          source = `${source.slice(0, index)}"0.3.1-beta6"${source.slice(index + needle.length)}`;
+          if (!source.includes("NAVIMOWER_MAP_CARD_VERSION")) {
+            throw new Error("Bundled runtime lost the public version export");
+          }
+          writeFileSync(path, source);
+          NODE
+          node --check /tmp/navimower-map-card.js
+
+      - name: Replace runtime tree and install permanent layout guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/navimower-map-card.js src/navimower-map-card.js
+          find src -maxdepth 1 -type f -name '*.js' ! -name 'navimower-map-card.js' -delete
+          rm -rf dist
+          mkdir -p dist
+          cp src/navimower-map-card.js dist/navimower-map-card.js
+
+          cat > scripts/build.mjs <<'EOF'
+          import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
+          import { dirname, resolve } from "node:path";
+          import { fileURLToPath } from "node:url";
+
+          const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+          const srcDir = resolve(root, "src");
+          const distDir = resolve(root, "dist");
+          const source = resolve(srcDir, "navimower-map-card.js");
+          const target = resolve(distDir, "navimower-map-card.js");
+
+          const sourceJs = (await readdir(srcDir)).filter((name) => name.endsWith(".js"));
+          if (sourceJs.length !== 1 || sourceJs[0] !== "navimower-map-card.js") {
+            throw new Error(`src must contain exactly navimower-map-card.js; found: ${sourceJs.join(", ")}`);
+          }
+
+          await rm(distDir, { recursive: true, force: true });
+          await mkdir(distDir, { recursive: true });
+          await copyFile(source, target);
+          console.log(`Built ${target}`);
+          EOF
+
+          cat > scripts/check-runtime-layout.mjs <<'EOF'
+          import assert from "node:assert/strict";
+          import { readFile, readdir } from "node:fs/promises";
+
+          const expected = ["navimower-map-card.js"];
+          const jsFiles = async (dir) => (await readdir(dir)).filter((name) => name.endsWith(".js")).sort();
+
+          assert.deepEqual(await jsFiles("src"), expected, "src must contain exactly one runtime JavaScript file");
+          assert.deepEqual(await jsFiles("dist"), expected, "dist must contain exactly one runtime JavaScript file");
+
+          const source = await readFile("src/navimower-map-card.js", "utf8");
+          const dist = await readFile("dist/navimower-map-card.js", "utf8");
+          assert.equal(dist, source, "dist/navimower-map-card.js must be an exact build copy of src/navimower-map-card.js");
+          assert.doesNotMatch(source, /(?:from\s+|import\s*)["']\.\/navimower-map-card-/,
+            "runtime must not reintroduce version-specific local loader imports");
+
+          console.log("Single-runtime layout checks passed");
+          EOF
+
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const packagePath = "package.json";
+          const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
+          pkg.scripts = {
+            build: "node scripts/build.mjs",
+            check: "node scripts/check-runtime-layout.mjs && node --check src/navimower-map-card.js && node --check dist/navimower-map-card.js",
+            test: "npm run build && npm run check && npm run smoke",
+            smoke: "node tests/smoke.mjs"
+          };
+          writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+          const hacsPath = "hacs.json";
+          const hacs = JSON.parse(readFileSync(hacsPath, "utf8"));
+          hacs.filename = "navimower-map-card.js";
+          writeFileSync(hacsPath, `${JSON.stringify(hacs, null, 2)}\n`);
+
+          const smokePath = "tests/smoke.mjs";
+          let smoke = readFileSync(smokePath, "utf8");
+          smoke = smoke.replace(
+            'assert.ok(sourceText.includes(\'const NAVIMOWER_MAP_CARD_VERSION = "0.2.2";\'));',
+            'assert.ok(sourceText.includes("NAVIMOWER_MAP_CARD_VERSION"));'
+          );
+          writeFileSync(smokePath, smoke);
+          NODE
+
+      - name: Verify flattened runtime
+        run: npm test
+
+      - name: Commit flattened runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A src dist scripts/build.mjs scripts/check-runtime-layout.mjs package.json hacs.json tests/smoke.mjs
+          git diff --cached --check
+          git commit -m "Flatten map card runtime"
+          git push origin HEAD:main

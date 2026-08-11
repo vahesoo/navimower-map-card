@@ -52,17 +52,11 @@ assert.equal(form.computeLabel({ name: "trail_length" }), "Live trail point cap"
 assert.match(form.computeHelper({ name: "trail_length" }), /active\/fallback trail only/i);
 assert.match(form.computeHelper({ name: "trail_length" }), /Completed mowed-area history is unaffected/i);
 
-const hacs = JSON.parse(readFileSync("hacs.json", "utf8"));
-assert.equal(hacs.filename, "navimower-map-card-0.3.1-b3.js");
-
 for (const root of ["src", "dist"]) {
-  const currentLoader = readFileSync(`${root}/navimower-map-card.js`, "utf8");
   const beta3Loader = readFileSync(`${root}/navimower-map-card-0.3.1-b3.js`, "utf8");
   const layer = readFileSync(`${root}/navimower-map-card-v037u.js`, "utf8");
 
-  assert.match(currentLoader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.1-beta3"/);
   assert.match(beta3Loader, /NAVIMOWER_MAP_CARD_VERSION = "0\.3\.1-beta3"/);
-  assert.match(currentLoader, /navimower-map-card-v037u\.js/);
   assert.match(beta3Loader, /navimower-map-card-v037u\.js/);
   assert.match(beta3Loader, /0\.3\.1-b3/);
   assert.match(beta3Loader, /stable will use 0\.3\.1\.js/);
@@ -95,4 +89,4 @@ const beta2Source = readFileSync("src/navimower-map-card-v036n.js", "utf8");
 assert.match(beta2Source, /NAVIMOWER_MAP_CARD_V036N_VERSION = "0\.3\.1-beta2"/);
 assert.doesNotMatch(beta2Source, /0\.3\.1-beta3/);
 
-console.log("0.3.1-beta3 compact notification/header checks passed");
+console.log("0.3.1-beta3 historical compact notification/header checks passed");

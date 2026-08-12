@@ -8,7 +8,7 @@ assert.ok(
 );
 assert.match(pkg.scripts.build, /scripts\/build\.mjs/);
 assert.match(pkg.scripts.check, /check-runtime-layout\.mjs/);
-assert.match(pkg.scripts.test, /v0316-beta6-single-runtime\.mjs/);
+assert.match(pkg.scripts.test, /single-runtime\.mjs/);
 
 const expectedRuntime = ["navimower-map-card.js"];
 for (const root of ["src", "dist"]) {
@@ -64,4 +64,4 @@ for (const workflow of [
   assert.doesNotMatch(trigger, /release-notes/);
 }
 
-console.log("0.3.1 beta6/stable single-runtime regression checks passed");
+console.log("0.3.1 single-runtime regression checks passed");

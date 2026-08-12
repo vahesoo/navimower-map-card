@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-assert.equal(pkg.version, "0.3.1-beta6");
+assert.ok(
+  ["0.3.1-beta6", "0.3.1"].includes(pkg.version),
+  `expected 0.3.1-beta6 or stable 0.3.1, got ${pkg.version}`,
+);
 assert.match(pkg.scripts.build, /scripts\/build\.mjs/);
 assert.match(pkg.scripts.check, /check-runtime-layout\.mjs/);
 assert.match(pkg.scripts.test, /v0316-beta6-single-runtime\.mjs/);
@@ -61,4 +64,4 @@ for (const workflow of [
   assert.doesNotMatch(trigger, /release-notes/);
 }
 
-console.log("0.3.1-beta6 single-runtime regression checks passed");
+console.log("0.3.1 beta6/stable single-runtime regression checks passed");

@@ -1,0 +1,14 @@
+type: custom:navimower-map-card
+entity: lawn_mower.tont
+
+# Default: detect the mower model from Home Assistant.
+mower_icon: auto
+mower_scale: 1
+
+# Manual override values when needed:
+# h2       -> H1 / H2
+# i_light  -> i-series light artwork
+# i_dark   -> i-series dark artwork
+# i2_lidar -> i2 LiDAR
+# x3       -> X3 series
+# x4       -> X4 series

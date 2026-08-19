@@ -3,8 +3,8 @@ import { readFileSync, readdirSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 assert.ok(
-  ["0.3.2-beta2", "0.3.2"].includes(pkg.version),
-  `expected 0.3.2-beta2 or stable 0.3.2, got ${pkg.version}`,
+  pkg.version === "0.3.2",
+  `expected stable 0.3.2, got ${pkg.version}`,
 );
 assert.match(pkg.scripts.build, /scripts\/build\.mjs/);
 assert.match(pkg.scripts.check, /check-runtime-layout\.mjs/);
@@ -19,7 +19,7 @@ for (const root of ["src", "dist"]) {
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
 assert.equal(dist, source, "dist must remain an exact build copy of src");
-assert.match(source, /0\.3\.2-beta2/);
+assert.match(source, /var NAVIMOWER_MAP_CARD_VERSION2 = "0\.3\.2";/);
 assert.doesNotMatch(source, /(?:from\s+|import\s*)["']\.\/navimower-map-card-/);
 
 for (const marker of [
@@ -79,4 +79,16 @@ assert.match(source, /this\._mowerModelResolved032 = true/);
 assert.match(source, /const artwork = ensureMowerArtwork032\(this\)/);
 assert.match(source, /if \(!key\) return ""/);
 
-console.log("0.3.2-beta2 single-runtime regression checks passed");
+const readme = readFileSync("README.md", "utf8");
+assert.doesNotMatch(readme, /notification_page_size/);
+assert.doesNotMatch(readme, /navimower-map-card-0\.3\.1-b3\.js/);
+assert.match(readme, /notification_count: 5/);
+assert.match(readme, /mower-artwork\.yaml/);
+const advanced = readFileSync("examples/advanced.yaml", "utf8");
+assert.doesNotMatch(advanced, /show_tunnels|tunnel_color|session_count|notification_page_size/);
+assert.match(advanced, /history_days: 3/);
+assert.match(advanced, /notification_count: 5/);
+assert.match(advanced, /mower_icon: auto/);
+assert.match(readFileSync("examples/mower-artwork.yaml", "utf8"), /i2_lidar|x3|x4/);
+
+console.log("0.3.2 stable single-runtime regression checks passed");

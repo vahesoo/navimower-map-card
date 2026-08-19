@@ -6165,12 +6165,12 @@ this._mowerModel032 = this._mowerModel032 || "";
     return "<g class=\"nm-h2-mower nm-mower-" + key.replaceAll("_", "-") + "\" transform=\"" + mowerTransform032(this, cx, cy, headingDegrees) + "\" style=\"filter:drop-shadow(0 1px 2px rgba(0,0,0,.38))\">" + spec.markup + "</g>";
   };
 
-  console.info("[Navimower Map Card] 0.3.2-beta2 flicker-safe mower artwork enabled");
+  console.info("[Navimower Map Card] 0.3.2 model-aware mower artwork enabled");
 }
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.2-beta2";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.2";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );

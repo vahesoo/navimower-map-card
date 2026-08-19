@@ -7,3 +7,5 @@ y_entity: sensor.tont_position_y
 heading_entity: sensor.tont_heading
 battery_entity: sensor.tont_battery
 zone_entity: sensor.tont_current_physical_zone
+schedule_entity: sensor.tont_schedule
+notification_entity: sensor.tont_latest_notification

@@ -1,28 +1,46 @@
 type: custom:navimower-map-card
 entity: lawn_mower.tont
+title: Navimower Map
+show_title: true
+
 auto_entities: true
 show_status: true
 show_zone: true
 show_battery: true
 show_position: false
 show_zone_labels: true
+avoid_zone_label_overlap: true
+show_vf_off_areas: true
 show_channels: true
-show_tunnels: true
+show_gate_areas: true
 show_map_legend: true
 show_session_legend: true
-session_count: 6
+history_days: 3
+
+notification_mark_read_on_open: false
+notification_count: 5
+
 enable_zoom: true
 initial_zoom: 1.25
 initial_focus: map
 remember_view: true
 max_zoom: 8
+
+map_background_color: "#e6e6e6"
 map_legend_opacity: 0.58
 zone_label_font_size: 20
+zone_label_opacity: 0.8
+
 zone_fill_color: "#81c784"
 zone_fill_opacity: 0.22
 zone_stroke_color: "#43a047"
 trail_color: "#43a047"
-trail_opacity: 0.4
-channel_color: "#8e24aa"
-tunnel_color: "#039be5"
+trail_opacity: 0.55
+off_limit_color: "#FF5A00"
+vf_off_color: "#2F80ED"
+channel_color: "#686868"
+gate_area_color: "#8e24aa"
 dock_color: "#37474f"
+
+mower_icon: auto
+mower_scale: 1

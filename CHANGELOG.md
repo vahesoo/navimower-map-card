@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.2 - 2026-08-19
+
+### Added
+
+- Model-aware mower artwork with automatic H1/H2, i-series, i2 LiDAR, X3 and X4 selection.
+- Manual `mower_icon` override in YAML and the visual editor, including separate light/dark i-series artwork.
+- Configurable `history_days` from 1 to 31, defaulting to Today plus the two preceding calendar days.
+
+### Changed
+
+- History always offers the configured calendar-day range, including dates without sessions, and shows all sessions from the selected day.
+- `show_session_legend` controls only the session-time row; legacy `session_count` no longer limits History.
+- README and YAML examples now document the current Resume, Notifications, History, VisionFence and mower-artwork options instead of removed beta-era settings.
+
+### Fixed
+
+- Automatic mower artwork no longer flashes the H1/H2 fallback while Home Assistant is still resolving an X3, X4 or i-series model.
+- Manual mower-artwork overrides remain immediate while `auto` waits only when the model is genuinely unresolved.
+
 ## 0.3.2-beta2
 
 ### Fixed

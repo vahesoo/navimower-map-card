@@ -32,7 +32,20 @@ jobs:
           start = text.index(start_marker) + len(start_marker)
           end = text.index(end_marker, start)
           lines = text[start:end].splitlines()
-          Path('/tmp/prepare-032-beta1.mjs').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          code = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          replacements = {
+              'group.setAttribute("class", `nm-h2-mower nm-mower-${key.replaceAll("_", "-")}`);': 'group.setAttribute("class", "nm-h2-mower nm-mower-" + key.replaceAll("_", "-"));',
+              'return `translate(${Number(cx).toFixed(1)},${Number(cy).toFixed(1)}) rotate(${degrees.toFixed(1)}) scale(${scale.toFixed(4)}) translate(${(-spec.width / 2).toFixed(2)},${(-spec.height / 2).toFixed(2)})`;': 'return "translate(" + Number(cx).toFixed(1) + "," + Number(cy).toFixed(1) + ") rotate(" + degrees.toFixed(1) + ") scale(" + scale.toFixed(4) + ") translate(" + (-spec.width / 2).toFixed(2) + "," + (-spec.height / 2).toFixed(2) + ")";',
+              'const historyBarKey = `${visible}|${selected ?? "today"}|${count}`;': 'const historyBarKey = [visible, selected ?? "today", count].join("|");',
+              'return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${value}">${escapeHtml2(label)}</button>`;': 'return "<button type=\\"button\\" class=\\"nm-history-choice" + (active ? " active" : "") + "\\" data-history-offset=\\"" + value + "\\">" + escapeHtml2(label) + "</button>";',
+              'const renderKey = `${x}|${y}|${heading}|${iconKey}|${this._config.mower_scale}|${this._layout.scale}|${this._view.scale}`;': 'const renderKey = [x, y, heading, iconKey, this._config.mower_scale, this._layout.scale, this._view.scale].join("|");',
+              'return `<g class="nm-h2-mower nm-mower-${key.replaceAll("_", "-")}" transform="${mowerTransform032(this, cx, cy, headingDegrees)}" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.38))">${spec.markup}</g>`;': 'return "<g class=\\"nm-h2-mower nm-mower-" + key.replaceAll("_", "-") + "\\" transform=\\"" + mowerTransform032(this, cx, cy, headingDegrees) + "\\" style=\\"filter:drop-shadow(0 1px 2px rgba(0,0,0,.38))\\">" + spec.markup + "</g>";',
+          }
+          for old, new in replacements.items():
+              if old not in code:
+                  raise SystemExit(f'missing builder template marker: {old[:80]}')
+              code = code.replace(old, new)
+          Path('/tmp/prepare-032-beta1.mjs').write_text(code)
           PY
           node /tmp/prepare-032-beta1.mjs
           node <<'NODE'

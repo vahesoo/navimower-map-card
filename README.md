@@ -343,7 +343,7 @@ The live update path watches only the entities used by the card:
 - Latest notification changes update the Notifications header state and an open notification dialog
 - unrelated Home Assistant entity updates cause no card redraw
 
-The static card template and embedded mower artwork are kept inside the single HACS runtime; the selected mower artwork is swapped in place without external asset requests. With `mower_icon: auto`, a recognizable model from entity attributes is used immediately; otherwise the mower stays hidden during the short device-registry lookup so a wrong H1/H2 fallback never flashes before the correct X3/X4/i-series artwork appears. The mower SVG and Mow, Pause, and Dock buttons remain mounted and are updated in place rather than being recreated for every telemetry event. Render requests arriving in the same browser frame are coalesced.
+The static card template and embedded mower artwork are kept inside the single HACS runtime; the selected mower artwork is swapped in place without external asset requests. With `mower_icon: auto`, a recognizable model from entity attributes is used immediately; otherwise the mower stays hidden during the short device-registry lookup so a wrong H1/H2 fallback never flashes before the correct X3/X4/i-series artwork appears. The mower artwork and control buttons remain mounted and are updated in place rather than being recreated for every telemetry event. Render requests arriving in the same browser frame are coalesced.
 
 Cached map payloads use stale-while-revalidate behavior: the latest prepared map is restored immediately, and current dynamic data is refreshed from the integration in the background. Daily-trail revisions are validated before a cached payload is accepted, so returning to a dashboard does not leave a newer route hidden until a full page refresh. Cache entries are bounded in memory and map/configuration changes create a new cache key.
 
@@ -371,6 +371,7 @@ heading_entity: sensor.tont_heading
 battery_entity: sensor.tont_battery
 zone_entity: sensor.tont_current_physical_zone
 schedule_entity: sensor.tont_schedule
+notification_entity: sensor.tont_latest_notification
 ```
 
 The selected mower entity is used as the status entity unless `status_entity` is explicitly set.
@@ -412,7 +413,7 @@ Check that the schedule sensor is available and contains at least one enabled da
 
 ### Notification read action fails
 
-Use Navimower integration 0.4.2-beta2 or later and confirm that the selected mower's **Latest notification** sensor is available. Read state belongs to the private-cloud Navimow account used by that mower's config entry; reading a message under another shared Navimow account does not change this account's state.
+Use Navimower integration 0.4.2 or later and confirm that the selected mower's **Latest notification** sensor is available. Read state belongs to the private-cloud Navimow account used by that mower's config entry; reading a message under another shared Navimow account does not change this account's state.
 
 ## Development
 
@@ -439,7 +440,7 @@ Commit both changed source files and their generated `dist/` counterparts.
 ## Current limitations
 
 - Multi-mower configurations need broader real-world testing.
-- The integration currently retains up to five recent Device notifications for the card, so the visual-editor page-size control is limited to 1–5.
+- The current Navimower sensor exposes at most five recent notification rows in Home Assistant state attributes; `notification_count` accepts 1–10 but cannot display more rows than the sensor provides.
 - Doodle geometry remains available through the integration but is intentionally not rendered until its native world scale can be determined reliably.
 - Command labels and dialog text are currently English-only.
 

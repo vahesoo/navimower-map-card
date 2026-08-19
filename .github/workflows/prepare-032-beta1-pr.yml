@@ -45,12 +45,7 @@ jobs:
               if old not in code:
                   raise SystemExit(f'missing builder template marker: {old[:80]}')
               code = code.replace(old, new)
-          lock_block = """const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
-lock.version = '0.3.2-beta1';
-if (lock.packages?.['']) lock.packages[''].version = '0.3.2-beta1';
-fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\\n');
-
-"""
+          lock_block = "const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));\nlock.version = '0.3.2-beta1';\nif (lock.packages?.['']) lock.packages[''].version = '0.3.2-beta1';\nfs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\\n');\n\n"
           if lock_block not in code:
               raise SystemExit('package-lock builder block not found')
           code = code.replace(lock_block, '')

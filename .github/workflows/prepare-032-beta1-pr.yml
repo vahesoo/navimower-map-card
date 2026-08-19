@@ -1,0 +1,64 @@
+name: Prepare 0.3.2-beta1 branch once
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/prepare-032-beta1-pr.yml
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/0.3.2-beta1
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build clean release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('.github/workflows/prepare-032-beta1.yml').read_text()
+          start_marker = "          node <<'NODE'\n"
+          end_marker = "\n          NODE\n"
+          start = text.index(start_marker) + len(start_marker)
+          end = text.index(end_marker, start)
+          lines = text[start:end].splitlines()
+          Path('/tmp/prepare-032-beta1.mjs').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n')
+          PY
+          node /tmp/prepare-032-beta1.mjs
+          node <<'NODE'
+          const fs = require('fs');
+          const sourcePath = 'src/navimower-map-card.js';
+          let source = fs.readFileSync(sourcePath, 'utf8');
+          source = source.replace('  session_count: "Maximum sessions shown",', '  session_count: "Maximum sessions shown",\n  history_days: "History days",\n  mower_icon: "Mower icon",');
+          source = source.replace('  LABELS.history_days = "History days";\n  LABELS.mower_icon = "Mower icon";\n', '');
+          source = source.replace('/LIDAR|LIDAR/.test(compact)', '/LIDAR/.test(compact)');
+          fs.writeFileSync(sourcePath, source);
+          const testPath = 'tests/single-runtime.mjs';
+          let tests = fs.readFileSync(testPath, 'utf8');
+          tests = tests.replace(/assert\.doesNotMatch\(source, \/session_count:[^\n]+\n/, '');
+          fs.writeFileSync(testPath, tests);
+          NODE
+          rm -rf .github/tmp-032-icons
+          rm -f .github/workflows/prepare-032-beta1.yml
+      - name: Validate prepared beta
+        run: npm test
+      - name: Commit prepared beta
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Prepare 0.3.2-beta1"
+          git push origin HEAD:release/0.3.2-beta1

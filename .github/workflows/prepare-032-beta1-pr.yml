@@ -45,6 +45,15 @@ jobs:
               if old not in code:
                   raise SystemExit(f'missing builder template marker: {old[:80]}')
               code = code.replace(old, new)
+          lock_block = """const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+lock.version = '0.3.2-beta1';
+if (lock.packages?.['']) lock.packages[''].version = '0.3.2-beta1';
+fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\\n');
+
+"""
+          if lock_block not in code:
+              raise SystemExit('package-lock builder block not found')
+          code = code.replace(lock_block, '')
           Path('/tmp/prepare-032-beta1.cjs').write_text(code)
           PY
           node /tmp/prepare-032-beta1.cjs

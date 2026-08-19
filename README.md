@@ -14,8 +14,8 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 
 - Decoded Navimow map geometry with zones, Off-limit areas, VF-off areas, Channels, Gate areas, and charging station
 - Live MQTT mower position and heading
-- Day-based map history for Today and the two preceding dates
-- Three-day History selector with matching routes and session times for each day
+- Configurable day-based map history, defaulting to Today and the two preceding dates
+- Configurable History selector with matching routes and session times for each day
 - Gap-aware trail segments for pauses, integration reloads, and Home Assistant restarts
 - Clickable session times that briefly pulse the selected session route at the original three-pulse tempo
 - Interactive zone labels with progress, mowing times, and cutting height when the mower supports automatic height control
@@ -29,7 +29,7 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 - Compact **Notifications** panel with per-message **Mark as read**, **Mark all as read**, and expandable message bodies
 - Configurable notification page size and optional mark-all-read behavior when the dialog is opened
 - Two-row header with a separate configurable title row and a wrapping History / Notifications / Schedule action row
-- Configurable fixed-size mower icon that stays readable while the map is zoomed
+- Model-aware mower artwork with automatic H/i/X-series selection, manual override, and configurable fixed size
 - Home Assistant native color pickers in the visual card editor
 - Automatic related-entity discovery from one `lawn_mower` entity
 - Visual card editor and optional YAML configuration
@@ -171,15 +171,16 @@ The relevant map payload fields are:
 }
 ```
 
-## Today and three-day history
+## Today and configurable history
 
-The default map is **Today**. It shows the retained mowing routes and session times from the current calendar day, including the live active trail. The **History** button in the card header offers three day choices:
+The default map is **Today**. It shows the retained mowing routes and session times from the current calendar day, including the live active trail. The **History** button in the card header offers a configurable number of calendar days. `history_days` accepts `1` through `31` and defaults to `3`, so the default choices are **Today** plus the two preceding dates in compact `DD.MM` format. Days remain selectable even when no mowing session was recorded on that date. Selecting a date filters both map routes and session buttons to that calendar day, and all sessions from the selected day are shown.
 
-- Today
-- the previous date in compact `DD.MM` format
-- the date two days ago in compact `DD.MM` format
+```yaml
+history_days: 3
+show_session_legend: true
+```
 
-For example, on 31 August the choices are **Today**, **30.08**, and **29.08**. Selecting an earlier date filters both the map routes and session buttons to that calendar day. This intentionally keeps the interface simple; multiple sessions on the same day are displayed together and remain individually selectable from the session row.
+`show_session_legend` controls only the session-time row. The legacy `session_count` YAML key is accepted for compatibility but no longer limits History.
 
 Clicking a session time draws that session temporarily above the selected map and pulses it three times. The original 600 ms pulse speed is retained, while `forwards` fill mode removes the brief extra color flash after the third pulse.
 
@@ -293,7 +294,7 @@ show_channels: true
 show_gate_areas: true
 show_map_legend: true
 show_session_legend: true
-session_count: 6
+history_days: 3
 
 notification_mark_read_on_open: false
 notification_page_size: 3
@@ -319,6 +320,8 @@ vf_off_color: "#2F80ED"
 channel_color: "#686868"
 gate_area_color: "#8e24aa"
 dock_color: "#37474f"
+mower_icon: auto
+mower_scale: 1
 ```
 
 Leaving `map_background_color` empty uses the current Home Assistant theme's secondary background color.
@@ -338,7 +341,7 @@ The live update path watches only the entities used by the card:
 - Latest notification changes update the Notifications header state and an open notification dialog
 - unrelated Home Assistant entity updates cause no card redraw
 
-The static card template and embedded mower artwork are parsed once per loaded frontend module. The mower SVG and Mow, Pause, and Dock buttons remain mounted and are updated in place rather than being recreated for every telemetry event. Render requests arriving in the same browser frame are coalesced.
+The static card template and embedded mower artwork are kept inside the single HACS runtime; the selected mower artwork is swapped in place without external asset requests. The mower SVG and Mow, Pause, and Dock buttons remain mounted and are updated in place rather than being recreated for every telemetry event. Render requests arriving in the same browser frame are coalesced.
 
 Cached map payloads use stale-while-revalidate behavior: the latest prepared map is restored immediately, and current dynamic data is refreshed from the integration in the background. Daily-trail revisions are validated before a cached payload is accepted, so returning to a dashboard does not leave a newer route hidden until a full page refresh. Cache entries are bounded in memory and map/configuration changes create a new cache key.
 

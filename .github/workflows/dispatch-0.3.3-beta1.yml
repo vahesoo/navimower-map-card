@@ -1,0 +1,156 @@
+name: Dispatch 0.3.3-beta1 preparation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/dispatch-0.3.3-beta1.yml
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/0.3.3-beta1
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Prepare corrected i_dark beta
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import json
+
+          version = "0.3.3-beta1"
+          chunks = Path(".github/tmp-033-idark")
+          png = "".join((chunks / f"{i:02d}.txt").read_text().strip() for i in range(6))
+          assert len(png) == 21900, len(png)
+          assert png.startswith("iVBORw0KGgo"), "staged i_dark payload is not PNG"
+
+          src_path = Path("src/navimower-map-card.js")
+          src = src_path.read_text()
+          start_marker = '  i_dark: { width: 85, height: 120, markup: "'
+          start = src.index(start_marker)
+          end_marker = '\\"/>" },'
+          end = src.index(end_marker, start) + len(end_marker)
+          old = src[start:end]
+          assert "data:image/webp;base64," in old, "expected current WebP i_dark artwork"
+          new = (
+              '  i_dark: { width: 85, height: 120, markup: '
+              '"<image width=\\"85\\" height=\\"120\\" href=\\"data:image/png;base64,'
+              + png
+              + '\\"/>" },'
+          )
+          src = src[:start] + new + src[end:]
+          old_version = 'var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.2";'
+          assert old_version in src
+          src = src.replace(old_version, f'var NAVIMOWER_MAP_CARD_VERSION2 = "{version}";', 1)
+          src_path.write_text(src)
+
+          package_path = Path("package.json")
+          package = json.loads(package_path.read_text())
+          assert package["version"] == "0.3.2"
+          package["version"] = version
+          package_path.write_text(json.dumps(package, indent=2) + "\n")
+
+          test_path = Path("tests/single-runtime.mjs")
+          test = test_path.read_text()
+          test = test.replace(
+              'pkg.version === "0.3.2",\n  `expected stable 0.3.2, got ${pkg.version}`',
+              'pkg.version === "0.3.3-beta1",\n  `expected 0.3.3-beta1, got ${pkg.version}`',
+              1,
+          )
+          test = test.replace(
+              'assert.match(source, /var NAVIMOWER_MAP_CARD_VERSION2 = "0\\.3\\.2";/);',
+              'assert.match(source, /var NAVIMOWER_MAP_CARD_VERSION2 = "0\\.3\\.3-beta1";/);',
+              1,
+          )
+          anchor = 'assert.doesNotMatch(source, /(?:from\\s+|import\\s*)["\']\\.\\/navimower-map-card-/);\n'
+          assert anchor in test
+          artwork_guards = (
+              'assert.match(source, /i_dark:\\s*\\{\\s*width:\\s*85,\\s*height:\\s*120,[^\\n]*data:image\\/png;base64,/);\n'
+              'assert.doesNotMatch(source, /i_dark:[^\\n]*data:image\\/webp;base64/);\n'
+          )
+          test = test.replace(anchor, anchor + artwork_guards, 1)
+          test = test.replace(
+              'console.log("0.3.2 stable single-runtime regression checks passed");',
+              'console.log("0.3.3-beta1 single-runtime regression checks passed");',
+              1,
+          )
+          assert 'pkg.version === "0.3.3-beta1"' in test
+          assert '0\\.3\\.3-beta1' in test
+          test_path.write_text(test)
+
+          changelog_path = Path("CHANGELOG.md")
+          changelog = changelog_path.read_text()
+          heading = "# Changelog\n\n"
+          assert changelog.startswith(heading)
+          entry = """## 0.3.3-beta1 - 2026-08-19
+
+          ### Fixed
+
+          - Rebuild the manual `i_dark` mower artwork from the original 60 px source asset (`16076.svg`) instead of the earlier WebP conversion.
+          - Preserve the source asset's transparent 2x PNG raster inside the existing single JavaScript runtime, keeping the 85x120 geometry and mower scaling/heading behavior unchanged.
+          - Keep automatic model selection and every other mower artwork unchanged while `mower_icon: i_dark` uses the corrected source image.
+
+          """
+          changelog_path.write_text(heading + entry + changelog[len(heading):])
+
+          notes = Path(f".github/release-notes/{version}.md")
+          notes.write_text("""# Navimower Map Card 0.3.3-beta1
+
+          This prerelease is a focused mower-artwork test build on top of stable 0.3.2.
+
+          ## Fixed
+
+          - Rebuilt the manual `i_dark` mower artwork directly from the supplied original 60 px SVG source (`16076.svg`).
+          - The embedded image now preserves that source asset's transparent 2x PNG raster instead of the earlier WebP conversion.
+          - The corrected artwork keeps the same 85x120 geometry, map-size normalization, heading rotation and manual `mower_icon: i_dark` selection behavior.
+          - Other mower artwork, automatic model detection, History, Notifications, Schedule and mower controls are unchanged.
+
+          ## Packaging
+
+          The beta continues to ship as a single HACS runtime file, `navimower-map-card.js`. No SVG/PNG helper assets or temporary preparation files are included in the release tree.
+
+          Install `0.3.3-beta1` as a prerelease and verify `mower_icon: i_dark` before this fix is promoted to stable.
+          """)
+          PY
+
+      - name: Build and test
+        run: npm test
+
+      - name: Validate focused beta
+        shell: bash
+        run: |
+          grep -q 'var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.3-beta1";' src/navimower-map-card.js
+          grep -q 'i_dark:.*data:image/png;base64,' src/navimower-map-card.js
+          if grep -q 'i_dark:.*data:image/webp;base64,' src/navimower-map-card.js; then
+            echo "i_dark still contains WebP"
+            exit 1
+          fi
+          cmp -s src/navimower-map-card.js dist/navimower-map-card.js
+          git diff --check
+
+      - name: Remove release-branch preparation files
+        shell: bash
+        run: |
+          rm -rf .github/tmp-033-idark
+          rm -f .github/workflows/prepare-0.3.3-beta1.yml
+
+      - name: Commit prepared beta
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Prepare Navimower Map Card 0.3.3-beta1"
+          git push origin HEAD:release/0.3.3-beta1

@@ -5966,16 +5966,23 @@ function autoMowerIcon032(model) {
   if ((/^I2/.test(compact) || /\bI2\b/.test(raw)) && /LIDAR/.test(compact)) return "i2_lidar";
   if (/^I/.test(compact) || /\bI[12]\b/.test(raw) || /AWD/.test(raw)) return "i_light";
   if (/^H/.test(compact) || /\bH[12]\b/.test(raw)) return "h2";
-  return "h2";
+  return null;
 }
 function mowerIconKey032(card) {
   const configured = mowerIconConfig032(card?._config?.mower_icon);
-  return configured === "auto" ? autoMowerIcon032(mowerModel032(card)) : configured;
+  if (configured !== "auto") return configured;
+  const detected = autoMowerIcon032(mowerModel032(card));
+  if (detected) return detected;
+  return card?._mowerModelResolved032 ? "h2" : null;
 }
 function ensureMowerArtwork032(card) {
   const group = card?._mowerGroup;
   if (!group) return null;
   const key = mowerIconKey032(card);
+  if (!key) {
+    group.style.display = "none";
+    return null;
+  }
   if (card._mowerArtworkKey032 !== key) {
     group.innerHTML = MOWER_ICON_SPECS_032[key].markup;
     group.dataset.mowerIcon = key;
@@ -6103,6 +6110,10 @@ node.splice(mowerIndex, 0, iconField);
   const originalRegistryResolve = proto._resolveEntitiesFromRegistry;
   if (typeof originalRegistryResolve === "function") {
     proto._resolveEntitiesFromRegistry = async function beta032RegistryResolve(...args) {
+      this._mowerModelResolved032 = false;
+      if (mowerIconConfig032(this?._config?.mower_icon) === "auto" && !autoMowerIcon032(mowerModel032(this))) {
+        if (this._mowerGroup) this._mowerGroup.style.display = "none";
+      }
       const result = await originalRegistryResolve.apply(this, args);
       if (this._deviceId && this._hass?.callWS) {
         try {
@@ -6113,6 +6124,7 @@ this._mowerModel032 = String(device?.model || device?.model_id || "").trim();
 this._mowerModel032 = this._mowerModel032 || "";
         }
       }
+      this._mowerModelResolved032 = true;
       this._mowerArtworkKey032 = null;
       ensureMowerArtwork032(this);
       this._mowerRenderKey = null;
@@ -6134,7 +6146,11 @@ this._mowerModel032 = this._mowerModel032 || "";
       this._mowerGroup.style.display = "none";
       return;
     }
-    ensureMowerArtwork032(this);
+    const artwork = ensureMowerArtwork032(this);
+    if (!artwork) {
+      this._mowerGroup.style.display = "none";
+      return;
+    }
     const cx = this._layout.sx(x);
     const cy = this._layout.sy(y);
     this._mowerGroup.setAttribute("transform", mowerTransform032(this, cx, cy, heading));
@@ -6144,16 +6160,17 @@ this._mowerModel032 = this._mowerModel032 || "";
 
   proto._mower = function beta032MowerMarkup(cx, cy, headingDegrees) {
     const key = mowerIconKey032(this);
+    if (!key) return "";
     const spec = MOWER_ICON_SPECS_032[key] || MOWER_ICON_SPECS_032.h2;
     return "<g class=\"nm-h2-mower nm-mower-" + key.replaceAll("_", "-") + "\" transform=\"" + mowerTransform032(this, cx, cy, headingDegrees) + "\" style=\"filter:drop-shadow(0 1px 2px rgba(0,0,0,.38))\">" + spec.markup + "</g>";
   };
 
-  console.info("[Navimower Map Card] 0.3.2-beta1 configurable history and mower artwork enabled");
+  console.info("[Navimower Map Card] 0.3.2-beta2 flicker-safe mower artwork enabled");
 }
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.2-beta1";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.2-beta2";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );

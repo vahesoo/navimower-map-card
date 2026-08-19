@@ -23,13 +23,13 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 - Optional VisionFence / VF-off geometry visibility for cleaner perimeter-style maps
 - Cached static map geometry and selective live-layer updates for faster dashboard reopening
 - Automatic filtering of completed history records that contain no drawable route
-- Mow, Pause, and Dock controls directly below the map
+- Conditional Resume plus Mow, Pause, and Dock controls directly below the map
 - Integrated **Mow now** dialog with ordered zone selection and progress reset/continue choice
 - Integrated weekly **Schedule** editor with one mobile-friendly global Save action
 - Compact **Notifications** panel with per-message **Mark as read**, **Mark all as read**, and expandable message bodies
-- Configurable notification page size and optional mark-all-read behavior when the dialog is opened
+- Configurable retained-notification count and optional mark-all-read behavior when the dialog is opened
 - Two-row header with a separate configurable title row and a wrapping History / Notifications / Schedule action row
-- Model-aware mower artwork with automatic H/i/X-series selection, manual override, and configurable fixed size
+- Model-aware mower artwork for H1/H2, i-series, i2 LiDAR, X3 and X4, with flicker-safe automatic detection and manual override
 - Home Assistant native color pickers in the visual card editor
 - Automatic related-entity discovery from one `lawn_mower` entity
 - Visual card editor and optional YAML configuration
@@ -41,8 +41,8 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 
 - Home Assistant 2026.6 or newer
 - [`Navimower`](https://github.com/vahesoo/NaviMower) integration
-- Navimower v0.2.9 or newer is recommended for dense battery telemetry, stable counters and channel state, supported cutting-height detection, and three-day history
-- Navimower **0.4.2-beta2 or later** is required for the card's notification read actions
+- Navimower **0.4.2 or later** is recommended for the complete Notifications read-action and dedicated Resume experience
+- Older compatible Navimower versions can still render the map/history, but newer integration features are exposed only when their Home Assistant actions/entities exist
 - HACS is recommended for installation and updates
 
 ## Installation with HACS
@@ -86,12 +86,14 @@ Every core detected entity can be overridden in the visual editor or YAML. The n
 
 ## What the card controls
 
-### Mow, Pause, and Dock
+### Resume, Mow, Pause, and Dock
 
-The card includes three direct mower controls below the map.
+The card keeps the normal mower controls below the map and adds a dedicated **Resume** action when the installed Navimower integration exposes `navimower.resume`.
 
-- **Mow** resumes an active paused job immediately.
-- When no resumable job exists, **Mow** opens the integrated Mow now dialog.
+- **Resume** appears conditionally for paused, docked, or charging states when the action is available. It calls only `navimower.resume` and does not send a new zone selection.
+- **Mow** is the explicit new/restart mowing action and opens the integrated zone-aware Mow now dialog when dedicated Resume support is available.
+- Older Navimower versions without `navimower.resume` retain the previous paused-Mow compatibility behavior.
+- A docked/charging Resume button means the action is available; whether the mower still retains an interrupted vendor task remains model/firmware dependent.
 - **Pause** pauses the current mower task.
 - **Dock** sends the mower to the charging station.
 
@@ -131,7 +133,7 @@ The **Notifications** label and bell in the header use the retained `Latest noti
 - Orange (`#FF5A00`) with `mdi:bell-badge-outline`: at least one retained notification is unread
 - Grey with `mdi:bell-outline`: all retained notifications are read, or no unread state is present
 
-The beta3 dialog is compact by default. Each item initially shows only its timestamp and title. An unread item has an orange **Mark as read** action at the end of the timestamp row. Clicking the title expands or collapses the notification body; when that title is unread, the same click also calls the one-message read action. Clicking **Mark as read** itself leaves the body collapsed. Once the integration refreshes that message as `read: true`, its read action disappears.
+The notification dialog is compact by default. Each item initially shows only its timestamp and title. An unread item has an orange **Mark as read** action at the end of the timestamp row. Clicking the title expands or collapses the notification body; when that title is unread, the same click also calls the one-message read action. Clicking **Mark as read** itself leaves the body collapsed. Once the integration refreshes that message as `read: true`, its read action disappears.
 
 When at least one retained message is unread, **Mark all as read** is shown at the top center of the dialog. The card calls only Home Assistant actions:
 
@@ -144,10 +146,10 @@ Opening the dialog does **not** mark anything read by default. The visual editor
 
 ```yaml
 notification_mark_read_on_open: false
-notification_page_size: 3
+notification_count: 5
 ```
 
-`notification_page_size` accepts `1` through `5`, matching the integration's current retained `recent` notification list. If `notification_mark_read_on_open` is enabled, opening the dialog explicitly calls **Mark all notifications as read** for that mower/account context.
+`notification_count` accepts `1` through `10` and defaults to `5`. The current Navimower integration intentionally exposes at most five recent rows in the sensor attributes to stay below Home Assistant Recorder's state-attribute size limit, so values above five are currently future-facing. If `notification_mark_read_on_open` is enabled, opening the dialog explicitly calls **Mark all notifications as read** for that mower/account context.
 
 ## Map terminology
 
@@ -297,7 +299,7 @@ show_session_legend: true
 history_days: 3
 
 notification_mark_read_on_open: false
-notification_page_size: 3
+notification_count: 5
 
 enable_zoom: true
 initial_zoom: 1.25
@@ -341,9 +343,19 @@ The live update path watches only the entities used by the card:
 - Latest notification changes update the Notifications header state and an open notification dialog
 - unrelated Home Assistant entity updates cause no card redraw
 
-The static card template and embedded mower artwork are kept inside the single HACS runtime; the selected mower artwork is swapped in place without external asset requests. The mower SVG and Mow, Pause, and Dock buttons remain mounted and are updated in place rather than being recreated for every telemetry event. Render requests arriving in the same browser frame are coalesced.
+The static card template and embedded mower artwork are kept inside the single HACS runtime; the selected mower artwork is swapped in place without external asset requests. With `mower_icon: auto`, a recognizable model from entity attributes is used immediately; otherwise the mower stays hidden during the short device-registry lookup so a wrong H1/H2 fallback never flashes before the correct X3/X4/i-series artwork appears. The mower artwork and control buttons remain mounted and are updated in place rather than being recreated for every telemetry event. Render requests arriving in the same browser frame are coalesced.
 
 Cached map payloads use stale-while-revalidate behavior: the latest prepared map is restored immediately, and current dynamic data is refreshed from the integration in the background. Daily-trail revisions are validated before a cached payload is accepted, so returning to a dashboard does not leave a newer route hidden until a full page refresh. Cache entries are bounded in memory and map/configuration changes create a new cache key.
+
+## Examples
+
+Ready-to-copy YAML examples live in [`examples/`](examples/):
+
+- [`basic.yaml`](examples/basic.yaml) — minimum configuration; one mower entity is normally enough
+- [`advanced.yaml`](examples/advanced.yaml) — current display, history, notification, zoom, color and mower-artwork options
+- [`initial-zoom.yaml`](examples/initial-zoom.yaml) — start focused on the mower at a custom zoom level
+- [`manual-entities.yaml`](examples/manual-entities.yaml) — explicit entity wiring when automatic discovery is not suitable
+- [`mower-artwork.yaml`](examples/mower-artwork.yaml) — automatic model artwork plus the supported manual override values
 
 ## Manual entity overrides
 
@@ -359,6 +371,7 @@ heading_entity: sensor.tont_heading
 battery_entity: sensor.tont_battery
 zone_entity: sensor.tont_current_physical_zone
 schedule_entity: sensor.tont_schedule
+notification_entity: sensor.tont_latest_notification
 ```
 
 The selected mower entity is used as the status entity unless `status_entity` is explicitly set.
@@ -382,9 +395,9 @@ Existing YAML containing removed keys will still load, but those keys have no ef
 
 ### `Custom element doesn't exist: navimower-map-card`
 
-Confirm that HACS installed the dashboard card and created its current resource under `/hacsfiles/navimower-map-card/`. For 0.3.1-beta3 the filename ends in `navimower-map-card-0.3.1-b3.js`.
+Confirm that HACS installed the dashboard card and that the Lovelace resource points to the current stable runtime under `/hacsfiles/navimower-map-card/navimower-map-card.js`.
 
-Then refresh the frontend. On Android, clear the Home Assistant app or WebView cache if an older resource remains loaded.
+If you upgraded from an old beta that used a version-specific loader filename, remove that legacy resource entry before reloading. Then refresh the frontend. On Android, clear the Home Assistant app or WebView cache if an older resource remains loaded.
 
 ### Map entity cannot be found
 
@@ -400,7 +413,7 @@ Check that the schedule sensor is available and contains at least one enabled da
 
 ### Notification read action fails
 
-Use Navimower integration 0.4.2-beta2 or later and confirm that the selected mower's **Latest notification** sensor is available. Read state belongs to the private-cloud Navimow account used by that mower's config entry; reading a message under another shared Navimow account does not change this account's state.
+Use Navimower integration 0.4.2 or later and confirm that the selected mower's **Latest notification** sensor is available. Read state belongs to the private-cloud Navimow account used by that mower's config entry; reading a message under another shared Navimow account does not change this account's state.
 
 ## Development
 
@@ -427,7 +440,7 @@ Commit both changed source files and their generated `dist/` counterparts.
 ## Current limitations
 
 - Multi-mower configurations need broader real-world testing.
-- The integration currently retains up to five recent Device notifications for the card, so the visual-editor page-size control is limited to 1–5.
+- The current Navimower sensor exposes at most five recent notification rows in Home Assistant state attributes; `notification_count` accepts 1–10 but cannot display more rows than the sensor provides.
 - Doodle geometry remains available through the integration but is intentionally not rendered until its native world scale can be determined reliably.
 - Command labels and dialog text are currently English-only.
 

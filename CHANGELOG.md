@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3-beta1 - 2026-08-19
+
+### Fixed
+
+- Rebuild the manual `i_dark` mower artwork from the original 60 px source asset (`16076.svg`) instead of the earlier WebP conversion.
+- Preserve the source asset's transparent 2x PNG raster inside the existing single JavaScript runtime, keeping the 85x120 geometry and mower scaling/heading behavior unchanged.
+- Keep automatic model selection and every other mower artwork unchanged while `mower_icon: i_dark` uses the corrected source image.
+
 ## 0.3.2 - 2026-08-19
 
 ### Added

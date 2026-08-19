@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.3 - 2026-08-19
+
+### Fixed
+
+- Promote the field-tested `i_dark` mower artwork correction from 0.3.3-beta1 to stable.
+- Rebuilt the manual i-series dark artwork directly from the supplied original 60 px source asset and preserved its transparent embedded PNG instead of the earlier WebP conversion.
+
+### Packaging
+
+- Keep the stable release on the single `navimower-map-card.js` HACS runtime with source/distribution byte parity and no extra SVG/PNG runtime assets.
+
 ## 0.3.3-beta1 - 2026-08-19
 
 ### Fixed

@@ -1,0 +1,267 @@
+name: Remote 0.3.2 stable release build
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  build:
+    if: >-
+      github.event.issue.title == 'RUN NAVIMOWER MAP CARD 0.3.2 STABLE BUILD' &&
+      github.event.issue.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_BRANCH: release/0.3.2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Prepare and validate stable release
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          exec > >(tee /tmp/map-032-stable.log) 2>&1
+          set -euo pipefail
+          git fetch origin "${BUILD_BRANCH}"
+          git checkout -B "${BUILD_BRANCH}" "origin/${BUILD_BRANCH}"
+
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import json
+          from pathlib import Path
+
+          ROOT = Path.cwd()
+
+          def replace_once(path: Path, old: str, new: str, label: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one marker, found {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          # Stable runtime/package identity.
+          package_path = ROOT / "package.json"
+          package = json.loads(package_path.read_text(encoding="utf-8"))
+          if package.get("version") != "0.3.2-beta2":
+              raise SystemExit(f"Expected 0.3.2-beta2 base, got {package.get('version')!r}")
+          package["version"] = "0.3.2"
+          package_path.write_text(json.dumps(package, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+          source = ROOT / "src" / "navimower-map-card.js"
+          replace_once(
+              source,
+              'console.info("[Navimower Map Card] 0.3.2-beta2 flicker-safe mower artwork enabled");',
+              'console.info("[Navimower Map Card] 0.3.2 model-aware mower artwork enabled");',
+              "stable console identity",
+          )
+          replace_once(
+              source,
+              'var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.2-beta2";',
+              'var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.2";',
+              "stable runtime identity",
+          )
+
+          # README refresh: remove beta-era wording and document the current UI/options.
+          readme = ROOT / "README.md"
+          replace_once(
+              readme,
+              "- Mow, Pause, and Dock controls directly below the map",
+              "- Conditional Resume plus Mow, Pause, and Dock controls directly below the map",
+              "README controls highlight",
+          )
+          replace_once(
+              readme,
+              "- Configurable notification page size and optional mark-all-read behavior when the dialog is opened",
+              "- Configurable retained-notification count and optional mark-all-read behavior when the dialog is opened",
+              "README notifications highlight",
+          )
+          replace_once(
+              readme,
+              "- Model-aware mower artwork with automatic H/i/X-series selection, manual override, and configurable fixed size",
+              "- Model-aware mower artwork for H1/H2, i-series, i2 LiDAR, X3 and X4, with flicker-safe automatic detection and manual override",
+              "README artwork highlight",
+          )
+          replace_once(
+              readme,
+              """- Home Assistant 2026.6 or newer\n- [`Navimower`](https://github.com/vahesoo/NaviMower) integration\n- Navimower v0.2.9 or newer is recommended for dense battery telemetry, stable counters and channel state, supported cutting-height detection, and three-day history\n- Navimower **0.4.2-beta2 or later** is required for the card's notification read actions\n- HACS is recommended for installation and updates""",
+              """- Home Assistant 2026.6 or newer\n- [`Navimower`](https://github.com/vahesoo/NaviMower) integration\n- Navimower **0.4.2 or later** is recommended for the complete Notifications read-action and dedicated Resume experience\n- Older compatible Navimower versions can still render the map/history, but newer integration features are exposed only when their Home Assistant actions/entities exist\n- HACS is recommended for installation and updates""",
+              "README requirements",
+          )
+          replace_once(
+              readme,
+              """### Mow, Pause, and Dock\n\nThe card includes three direct mower controls below the map.\n\n- **Mow** resumes an active paused job immediately.\n- When no resumable job exists, **Mow** opens the integrated Mow now dialog.\n- **Pause** pauses the current mower task.\n- **Dock** sends the mower to the charging station.\n\n""",
+              """### Resume, Mow, Pause, and Dock\n\nThe card keeps the normal mower controls below the map and adds a dedicated **Resume** action when the installed Navimower integration exposes `navimower.resume`.\n\n- **Resume** appears conditionally for paused, docked, or charging states when the action is available. It calls only `navimower.resume` and does not send a new zone selection.\n- **Mow** is the explicit new/restart mowing action and opens the integrated zone-aware Mow now dialog when dedicated Resume support is available.\n- Older Navimower versions without `navimower.resume` retain the previous paused-Mow compatibility behavior.\n- A docked/charging Resume button means the action is available; whether the mower still retains an interrupted vendor task remains model/firmware dependent.\n- **Pause** pauses the current mower task.\n- **Dock** sends the mower to the charging station.\n\n""",
+              "README controls section",
+          )
+          replace_once(
+              readme,
+              "The beta3 dialog is compact by default.",
+              "The notification dialog is compact by default.",
+              "README beta wording",
+          )
+          replace_once(
+              readme,
+              """notification_mark_read_on_open: false\nnotification_page_size: 3\n```\n\n`notification_page_size` accepts `1` through `5`, matching the integration's current retained `recent` notification list.""",
+              """notification_mark_read_on_open: false\nnotification_count: 5\n```\n\n`notification_count` accepts `1` through `10` and defaults to `5`. The current Navimower integration intentionally exposes at most five recent rows in the sensor attributes to stay below Home Assistant Recorder's state-attribute size limit, so values above five are currently future-facing.""",
+              "README notification config",
+          )
+          replace_once(
+              readme,
+              """notification_mark_read_on_open: false\nnotification_page_size: 3\n\nenable_zoom: true""",
+              """notification_mark_read_on_open: false\nnotification_count: 5\n\nenable_zoom: true""",
+              "README appearance config",
+          )
+          replace_once(
+              readme,
+              "The static card template and embedded mower artwork are kept inside the single HACS runtime; the selected mower artwork is swapped in place without external asset requests.",
+              "The static card template and embedded mower artwork are kept inside the single HACS runtime; the selected mower artwork is swapped in place without external asset requests. With `mower_icon: auto`, a recognizable model from entity attributes is used immediately; otherwise the mower stays hidden during the short device-registry lookup so a wrong H1/H2 fallback never flashes before the correct X3/X4/i-series artwork appears.",
+              "README artwork startup",
+          )
+          replace_once(
+              readme,
+              """## Manual entity overrides\n\nOverrides take precedence over automatic discovery:""",
+              """## Examples\n\nReady-to-copy YAML examples live in [`examples/`](examples/):\n\n- [`basic.yaml`](examples/basic.yaml) — minimum configuration; one mower entity is normally enough\n- [`advanced.yaml`](examples/advanced.yaml) — current display, history, notification, zoom, color and mower-artwork options\n- [`initial-zoom.yaml`](examples/initial-zoom.yaml) — start focused on the mower at a custom zoom level\n- [`manual-entities.yaml`](examples/manual-entities.yaml) — explicit entity wiring when automatic discovery is not suitable\n- [`mower-artwork.yaml`](examples/mower-artwork.yaml) — automatic model artwork plus the supported manual override values\n\n## Manual entity overrides\n\nOverrides take precedence over automatic discovery:""",
+              "README examples section",
+          )
+          replace_once(
+              readme,
+              """Confirm that HACS installed the dashboard card and created its current resource under `/hacsfiles/navimower-map-card/`. For 0.3.1-beta3 the filename ends in `navimower-map-card-0.3.1-b3.js`.\n\nThen refresh the frontend. On Android, clear the Home Assistant app or WebView cache if an older resource remains loaded.""",
+              """Confirm that HACS installed the dashboard card and that the Lovelace resource points to the current stable runtime under `/hacsfiles/navimower-map-card/navimower-map-card.js`.\n\nIf you upgraded from an old beta that used a version-specific loader filename, remove that legacy resource entry before reloading. Then refresh the frontend. On Android, clear the Home Assistant app or WebView cache if an older resource remains loaded.""",
+              "README troubleshooting runtime",
+          )
+
+          # Examples: replace obsolete tunnel/session-count settings with the current configuration surface.
+          (ROOT / "examples" / "advanced.yaml").write_text("""type: custom:navimower-map-card\nentity: lawn_mower.tont\ntitle: Navimower Map\nshow_title: true\n\nauto_entities: true\nshow_status: true\nshow_zone: true\nshow_battery: true\nshow_position: false\nshow_zone_labels: true\navoid_zone_label_overlap: true\nshow_vf_off_areas: true\nshow_channels: true\nshow_gate_areas: true\nshow_map_legend: true\nshow_session_legend: true\nhistory_days: 3\n\nnotification_mark_read_on_open: false\nnotification_count: 5\n\nenable_zoom: true\ninitial_zoom: 1.25\ninitial_focus: map\nremember_view: true\nmax_zoom: 8\n\nmap_background_color: \"#e6e6e6\"\nmap_legend_opacity: 0.58\nzone_label_font_size: 20\nzone_label_opacity: 0.8\n\nzone_fill_color: \"#81c784\"\nzone_fill_opacity: 0.22\nzone_stroke_color: \"#43a047\"\ntrail_color: \"#43a047\"\ntrail_opacity: 0.55\noff_limit_color: \"#FF5A00\"\nvf_off_color: \"#2F80ED\"\nchannel_color: \"#686868\"\ngate_area_color: \"#8e24aa\"\ndock_color: \"#37474f\"\n\nmower_icon: auto\nmower_scale: 1\n""", encoding="utf-8")
+
+          (ROOT / "examples" / "manual-entities.yaml").write_text("""type: custom:navimower-map-card\nentity: lawn_mower.tont\nauto_entities: false\nmap_entity: sensor.tont_map_data\nx_entity: sensor.tont_position_x\ny_entity: sensor.tont_position_y\nheading_entity: sensor.tont_heading\nbattery_entity: sensor.tont_battery\nzone_entity: sensor.tont_current_physical_zone\nschedule_entity: sensor.tont_schedule\nnotification_entity: sensor.tont_latest_notification\n""", encoding="utf-8")
+
+          (ROOT / "examples" / "mower-artwork.yaml").write_text("""type: custom:navimower-map-card\nentity: lawn_mower.tont\n\n# Default: detect the mower model from Home Assistant.\nmower_icon: auto\nmower_scale: 1\n\n# Manual override values when needed:\n# h2       -> H1 / H2\n# i_light  -> i-series light artwork\n# i_dark   -> i-series dark artwork\n# i2_lidar -> i2 LiDAR\n# x3       -> X3 series\n# x4       -> X4 series\n""", encoding="utf-8")
+
+          # Stable changelog section summarises the tested beta line plus docs cleanup.
+          changelog_path = ROOT / "CHANGELOG.md"
+          changelog = changelog_path.read_text(encoding="utf-8")
+          marker = "# Changelog\n\n"
+          if not changelog.startswith(marker):
+              raise SystemExit("Unexpected changelog header")
+          stable_section = """## 0.3.2 - 2026-08-19\n\n### Added\n\n- Model-aware mower artwork with automatic H1/H2, i-series, i2 LiDAR, X3 and X4 selection.\n- Manual `mower_icon` override in YAML and the visual editor, including separate light/dark i-series artwork.\n- Configurable `history_days` from 1 to 31, defaulting to Today plus the two preceding calendar days.\n\n### Changed\n\n- History always offers the configured calendar-day range, including dates without sessions, and shows all sessions from the selected day.\n- `show_session_legend` controls only the session-time row; legacy `session_count` no longer limits History.\n- README and YAML examples now document the current Resume, Notifications, History, VisionFence and mower-artwork options instead of removed beta-era settings.\n\n### Fixed\n\n- Automatic mower artwork no longer flashes the H1/H2 fallback while Home Assistant is still resolving an X3, X4 or i-series model.\n- Manual mower-artwork overrides remain immediate while `auto` waits only when the model is genuinely unresolved.\n\n"""
+          if "## 0.3.2 - 2026-08-19" not in changelog:
+              changelog_path.write_text(marker + stable_section + changelog[len(marker):], encoding="utf-8")
+
+          # Stable release notes.
+          notes = ROOT / ".github" / "release-notes" / "0.3.2.md"
+          notes.write_text("""# Navimower Map Card 0.3.2\n\nNavimower Map Card 0.3.2 is the cumulative stable release of the 0.3.2 beta line. It promotes the tested beta2 runtime directly; no beta version needs to be installed first.\n\n## Mower artwork\n\nThe map can now match the mower shown in Home Assistant to the actual Navimow family instead of always using the original H-series drawing.\n\n- `mower_icon: auto` detects H1/H2, i-series, i2 LiDAR, X3 and X4 models.\n- The visual editor exposes the same automatic choice plus manual overrides, including light/dark i-series artwork.\n- All artwork is embedded in the existing single HACS JavaScript runtime; there are no extra image downloads at runtime.\n- Automatic detection is flicker-safe: if the model is not already available from entity attributes, the mower stays hidden during the short device-registry lookup instead of briefly flashing the H1/H2 fallback.\n- Manual icon selections still render immediately.\n\n## Better History navigation\n\n- `history_days` accepts 1 through 31 and defaults to 3 calendar days.\n- History keeps every configured day selectable even when no mowing session exists for that date.\n- Selecting a date shows all sessions from that day instead of applying the old maximum-session limit.\n- `show_session_legend` now controls only the row of session-time buttons.\n- Existing `session_count` YAML is tolerated for compatibility but no longer limits History.\n\n## Documentation refresh\n\nThe stable release also refreshes README and `examples/` so the public documentation matches the current card: dedicated Resume behavior, scrollable Notifications with `notification_count`, current VisionFence/Gate options, current History settings, single-runtime HACS installation and mower-artwork configuration. Obsolete tunnel/session-count examples have been removed.\n\n## Compatibility\n\n- Existing map geometry, daily trails, live route, Schedule editor, Notifications, Resume/Mow/Pause/Dock controls, zone details, VF-off visibility, zoom/navigation and visual settings are retained.\n- Navimower integration 0.4.2 or later is recommended for the complete notification read-action and dedicated Resume feature set.\n- The card continues to ship as one `navimower-map-card.js` HACS runtime file, with `src/` and `dist/` kept byte-for-byte identical by the build.\n\n0.3.2 is the stable promotion of the tested 0.3.2-beta2 runtime plus documentation/example cleanup; there is no separate runtime redesign in the stable step.\n""", encoding="utf-8")
+
+          # Stable regression checks and documentation guards.
+          tests = ROOT / "tests" / "single-runtime.mjs"
+          replace_once(
+              tests,
+              '''  ["0.3.2-beta2", "0.3.2"].includes(pkg.version),\n  `expected 0.3.2-beta2 or stable 0.3.2, got ${pkg.version}`,\n''',
+              '''  pkg.version === "0.3.2",\n  `expected stable 0.3.2, got ${pkg.version}`,\n''',
+              "stable package identity test",
+          )
+          replace_once(
+              tests,
+              'assert.match(source, /0\\.3\\.2-beta2/);',
+              'assert.match(source, /var NAVIMOWER_MAP_CARD_VERSION2 = "0\\.3\\.2";/);',
+              "stable runtime identity test",
+          )
+          replace_once(
+              tests,
+              'console.log("0.3.2-beta2 single-runtime regression checks passed");',
+              '''const readme = readFileSync("README.md", "utf8");\nassert.doesNotMatch(readme, /notification_page_size/);\nassert.doesNotMatch(readme, /navimower-map-card-0\\.3\\.1-b3\\.js/);\nassert.match(readme, /notification_count: 5/);\nassert.match(readme, /mower-artwork\\.yaml/);\nconst advanced = readFileSync("examples/advanced.yaml", "utf8");\nassert.doesNotMatch(advanced, /show_tunnels|tunnel_color|session_count|notification_page_size/);\nassert.match(advanced, /history_days: 3/);\nassert.match(advanced, /notification_count: 5/);\nassert.match(advanced, /mower_icon: auto/);\nassert.match(readFileSync("examples/mower-artwork.yaml", "utf8"), /i2_lidar|x3|x4/);\n\nconsole.log("0.3.2 stable single-runtime regression checks passed");''',
+              "stable documentation regression checks",
+          )
+          PY
+
+          npm test
+          git diff --check
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          import subprocess
+
+          expected = {
+              ".github/release-notes/0.3.2.md",
+              "CHANGELOG.md",
+              "README.md",
+              "dist/navimower-map-card.js",
+              "examples/advanced.yaml",
+              "examples/manual-entities.yaml",
+              "examples/mower-artwork.yaml",
+              "package.json",
+              "src/navimower-map-card.js",
+              "tests/single-runtime.mjs",
+          }
+          changed = set(subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines()) | set(
+              subprocess.check_output(["git", "ls-files", "--others", "--exclude-standard"], text=True).splitlines()
+          )
+          if changed != expected:
+              raise SystemExit(f"Unexpected stable diff scope: {sorted(changed)}")
+
+          package = json.loads(Path("package.json").read_text())
+          assert package["version"] == "0.3.2"
+          source = Path("src/navimower-map-card.js").read_text()
+          dist = Path("dist/navimower-map-card.js").read_text()
+          assert source == dist
+          assert 'var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.2";' in source
+          readme = Path("README.md").read_text()
+          assert "notification_page_size" not in readme
+          assert "notification_count: 5" in readme
+          assert "mower-artwork.yaml" in readme
+          advanced = Path("examples/advanced.yaml").read_text()
+          for stale in ("show_tunnels", "tunnel_color", "session_count", "notification_page_size"):
+              assert stale not in advanced
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/release-notes/0.3.2.md \
+                  CHANGELOG.md \
+                  README.md \
+                  dist/navimower-map-card.js \
+                  examples/advanced.yaml \
+                  examples/manual-entities.yaml \
+                  examples/mower-artwork.yaml \
+                  package.json \
+                  src/navimower-map-card.js \
+                  tests/single-runtime.mjs
+          git diff --cached --check
+          git commit -m "Prepare Navimower Map Card 0.3.2"
+          git push origin HEAD:"${BUILD_BRANCH}"
+
+      - name: Report success
+        if: steps.build.outcome == 'success'
+        shell: bash
+        run: |
+          sha=$(git rev-parse HEAD)
+          gh issue comment "${{ github.event.issue.number }}" --body "0.3.2 stable remote build succeeded. Full npm test, runtime-layout checks, syntax/smoke regressions, source/dist parity, README/example guards and exact diff-scope validation passed; branch \`${BUILD_BRANCH}\` was pushed at \`${sha}\`."
+          gh issue close "${{ github.event.issue.number }}" --reason completed
+
+      - name: Report failure
+        if: steps.build.outcome != 'success'
+        shell: bash
+        run: |
+          tail -n 220 /tmp/map-032-stable.log > /tmp/map-032-stable-tail.log || true
+          {
+            echo '0.3.2 stable remote build failed before publishing the completed release branch.'
+            echo
+            echo '```text'
+            cat /tmp/map-032-stable-tail.log
+            echo '```'
+          } > /tmp/map-032-stable-comment.md
+          gh issue comment "${{ github.event.issue.number }}" --body-file /tmp/map-032-stable-comment.md
+          exit 1

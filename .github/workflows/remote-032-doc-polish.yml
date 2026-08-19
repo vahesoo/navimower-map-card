@@ -1,0 +1,101 @@
+name: Remote 0.3.2 documentation polish
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  polish:
+    if: >-
+      github.event.issue.title == 'RUN NAVIMOWER MAP CARD 0.3.2 DOC POLISH' &&
+      github.event.issue.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_BRANCH: release/0.3.2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Polish README and validate
+        id: polish
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          exec > >(tee /tmp/map-032-doc-polish.log) 2>&1
+          set -euo pipefail
+          git fetch origin "${BUILD_BRANCH}"
+          git checkout -B "${BUILD_BRANCH}" "origin/${BUILD_BRANCH}"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("README.md")
+          text = path.read_text(encoding="utf-8")
+
+          replacements = [
+              (
+                  "The mower SVG and Mow, Pause, and Dock buttons remain mounted and are updated in place rather than being recreated for every telemetry event.",
+                  "The mower artwork and control buttons remain mounted and are updated in place rather than being recreated for every telemetry event.",
+              ),
+              (
+                  "Use Navimower integration 0.4.2-beta2 or later and confirm that the selected mower's **Latest notification** sensor is available.",
+                  "Use Navimower integration 0.4.2 or later and confirm that the selected mower's **Latest notification** sensor is available.",
+              ),
+              (
+                  "- The integration currently retains up to five recent Device notifications for the card, so the visual-editor page-size control is limited to 1–5.",
+                  "- The current Navimower sensor exposes at most five recent notification rows in Home Assistant state attributes; `notification_count` accepts 1–10 but cannot display more rows than the sensor provides.",
+              ),
+              (
+                  "schedule_entity: sensor.tont_schedule\n```",
+                  "schedule_entity: sensor.tont_schedule\nnotification_entity: sensor.tont_latest_notification\n```",
+              ),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one README marker, found {count}: {old[:80]}")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          npm test
+          git diff --check
+          test "$(git diff --name-only | tr '\n' ' ')" = "README.md "
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --cached --check
+          git commit -m "Polish 0.3.2 public documentation"
+          git push origin HEAD:"${BUILD_BRANCH}"
+
+      - name: Report success
+        if: steps.polish.outcome == 'success'
+        shell: bash
+        run: |
+          sha=$(git rev-parse HEAD)
+          gh issue comment "${{ github.event.issue.number }}" --body "0.3.2 documentation polish succeeded. README compatibility, notification, control and manual-entity wording was refreshed; full npm test and diff checks passed at \`${sha}\`."
+          gh issue close "${{ github.event.issue.number }}" --reason completed
+
+      - name: Report failure
+        if: steps.polish.outcome != 'success'
+        shell: bash
+        run: |
+          tail -n 180 /tmp/map-032-doc-polish.log > /tmp/map-032-doc-polish-tail.log || true
+          {
+            echo '0.3.2 documentation polish failed.'
+            echo
+            echo '```text'
+            cat /tmp/map-032-doc-polish-tail.log
+            echo '```'
+          } > /tmp/map-032-doc-polish-comment.md
+          gh issue comment "${{ github.event.issue.number }}" --body-file /tmp/map-032-doc-polish-comment.md
+          exit 1

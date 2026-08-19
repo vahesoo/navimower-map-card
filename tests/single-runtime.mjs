@@ -3,8 +3,8 @@ import { readFileSync, readdirSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 assert.ok(
-  ["0.3.1-beta6", "0.3.1"].includes(pkg.version),
-  `expected 0.3.1-beta6 or stable 0.3.1, got ${pkg.version}`,
+  ["0.3.2-beta1", "0.3.2"].includes(pkg.version),
+  `expected 0.3.2-beta1 or stable 0.3.2, got ${pkg.version}`,
 );
 assert.match(pkg.scripts.build, /scripts\/build\.mjs/);
 assert.match(pkg.scripts.check, /check-runtime-layout\.mjs/);
@@ -19,7 +19,7 @@ for (const root of ["src", "dist"]) {
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
 assert.equal(dist, source, "dist must remain an exact build copy of src");
-assert.match(source, /0\.3\.1-beta6/);
+assert.match(source, /0\.3\.2-beta1/);
 assert.doesNotMatch(source, /(?:from\s+|import\s*)["']\.\/navimower-map-card-/);
 
 for (const marker of [
@@ -31,6 +31,10 @@ for (const marker of [
   "mark_all_notifications_read",
   "nm-has-resume",
   "navimower.resume",
+  "history_days",
+  "mower_icon",
+  "i2_lidar",
+  "MOWER_ICON_SPECS_032",
 ]) {
   assert.ok(source.includes(marker), `flattened runtime must retain ${marker}`);
 }
@@ -64,4 +68,4 @@ for (const workflow of [
   assert.doesNotMatch(trigger, /release-notes/);
 }
 
-console.log("0.3.1 single-runtime regression checks passed");
+console.log("0.3.2-beta1 single-runtime regression checks passed");

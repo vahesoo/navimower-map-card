@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.2-beta1
+
+### Added
+
+- Model-aware mower artwork with automatic H1/H2, i-series, i2 LiDAR, X3, and X4 selection.
+- Manual `mower_icon` override in YAML and the visual editor, including light/dark i-series variants.
+- Configurable `history_days` (1-31), defaulting to 3 calendar days.
+
+### Changed
+
+- History day choices no longer depend on whether sessions exist for that date.
+- All sessions for the selected History day are shown; the legacy `session_count` value no longer limits History and is removed from the visual editor.
+- `show_session_legend` now only controls the session-time row.
+- New mower artwork is embedded in the existing single runtime asset; no extra HACS runtime files are added.
+
+
 ## 0.3.1-beta6 - 2026-08-11
 
 - Flattened the accumulated core + patch-layer chain into one cumulative `src/navimower-map-card.js` runtime while preserving the complete beta5 behavior.

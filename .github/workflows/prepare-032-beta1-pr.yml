@@ -45,9 +45,9 @@ jobs:
               if old not in code:
                   raise SystemExit(f'missing builder template marker: {old[:80]}')
               code = code.replace(old, new)
-          Path('/tmp/prepare-032-beta1.mjs').write_text(code)
+          Path('/tmp/prepare-032-beta1.cjs').write_text(code)
           PY
-          node /tmp/prepare-032-beta1.mjs
+          node /tmp/prepare-032-beta1.cjs
           node <<'NODE'
           const fs = require('fs');
           const sourcePath = 'src/navimower-map-card.js';

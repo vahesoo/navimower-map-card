@@ -63,6 +63,7 @@ jobs:
           const testPath = 'tests/single-runtime.mjs';
           let tests = fs.readFileSync(testPath, 'utf8');
           tests = tests.replace(/assert\.doesNotMatch\(source, \/session_count:[^\n]+\n/, '');
+          tests = tests.replace('  "nm-mower-x4",', '  "MOWER_ICON_SPECS_032",');
           fs.writeFileSync(testPath, tests);
           NODE
           rm -rf .github/tmp-032-icons

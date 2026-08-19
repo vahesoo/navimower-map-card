@@ -3,8 +3,8 @@ import { readFileSync, readdirSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 assert.ok(
-  ["0.3.2-beta1", "0.3.2"].includes(pkg.version),
-  `expected 0.3.2-beta1 or stable 0.3.2, got ${pkg.version}`,
+  ["0.3.2-beta2", "0.3.2"].includes(pkg.version),
+  `expected 0.3.2-beta2 or stable 0.3.2, got ${pkg.version}`,
 );
 assert.match(pkg.scripts.build, /scripts\/build\.mjs/);
 assert.match(pkg.scripts.check, /check-runtime-layout\.mjs/);
@@ -19,7 +19,7 @@ for (const root of ["src", "dist"]) {
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
 assert.equal(dist, source, "dist must remain an exact build copy of src");
-assert.match(source, /0\.3\.2-beta1/);
+assert.match(source, /0\.3\.2-beta2/);
 assert.doesNotMatch(source, /(?:from\s+|import\s*)["']\.\/navimower-map-card-/);
 
 for (const marker of [
@@ -68,4 +68,15 @@ for (const workflow of [
   assert.doesNotMatch(trigger, /release-notes/);
 }
 
-console.log("0.3.2-beta1 single-runtime regression checks passed");
+const autoStart = source.indexOf("function autoMowerIcon032(model)");
+const autoEnd = source.indexOf("function mowerTransform032", autoStart);
+const autoBlock = source.slice(autoStart, autoEnd);
+assert.match(autoBlock, /return null;/);
+assert.match(autoBlock, /_mowerModelResolved032 \? "h2" : null/);
+assert.match(autoBlock, /group\.style\.display = "none"/);
+assert.match(source, /this\._mowerModelResolved032 = false/);
+assert.match(source, /this\._mowerModelResolved032 = true/);
+assert.match(source, /const artwork = ensureMowerArtwork032\(this\)/);
+assert.match(source, /if \(!key\) return ""/);
+
+console.log("0.3.2-beta2 single-runtime regression checks passed");

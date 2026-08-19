@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2-beta2
+
+### Fixed
+
+- Remove the brief wrong mower-artwork flash on dashboard/page reload when **Mower icon** is set to `auto`.
+- Keep automatic mower artwork hidden while the Home Assistant device model is still being resolved instead of temporarily rendering the H1/H2 fallback.
+- Show the detected X3/X4/i-series/H-series artwork immediately when the model is already available from entity attributes.
+- Fall back to H1/H2 only after model resolution has completed and no supported model could be identified.
+- Manual `mower_icon` selections remain immediate and are not delayed by model detection.
+
+
 ## 0.3.2-beta1
 
 ### Added

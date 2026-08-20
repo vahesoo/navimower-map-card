@@ -7,7 +7,8 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: write
 
 jobs:
   javascript:
@@ -31,3 +32,155 @@ jobs:
         uses: hacs/action@main
         with:
           category: plugin
+
+  prepare-beta:
+    if: github.event_name == 'pull_request' && github.head_ref == 'release/0.3.4-beta1' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Prepare 0.3.4-beta1 branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin release/0.3.4-beta1
+          git checkout release/0.3.4-beta1
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          root = Path('.')
+          src_path = root / 'src/navimower-map-card.js'
+          dist_path = root / 'dist/navimower-map-card.js'
+          source = src_path.read_text(encoding='utf-8')
+
+          old_version = 'var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.3";'
+          new_version = 'var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.4-beta1";'
+          if source.count(old_version) != 1:
+              raise SystemExit('Expected exactly one 0.3.3 runtime version marker')
+          source = source.replace(old_version, new_version, 1)
+
+          old_width = 'const width = Math.min(Math.max(0.25 * this._layout.scale, 5), 28);'
+          width_count = source.count(old_width)
+          if width_count != 3:
+              raise SystemExit(f'Expected 3 trail width sites, found {width_count}')
+          source = source.replace(old_width, 'const width = trailWidth034(this);')
+
+          helper = r'''
+
+// 0.3.4-beta1: model-aware rendered mowing width.
+// The visible trail represents the cut swath plus 5 cm of display tolerance on
+// each side of the route centreline. Unknown models intentionally retain the
+// historical 25 cm display width until their cutting width is confirmed.
+function mowerCuttingWidthMeters034(model) {
+  const raw = String(model || "").trim().toUpperCase();
+  const compact = raw.replace(/[\s_-]+/g, "");
+  if (/^X4/.test(compact) || /\bX4\b/.test(raw)) return 0.43;
+  if (/^X3/.test(compact) || /\bX3\b/.test(raw)) return 0.237;
+  if (/^H/.test(compact) || /\bH[123]/.test(raw)) return 0.21;
+  if (/^I1/.test(compact) || /\bI1/.test(raw)) return 0.18;
+  return null;
+}
+function renderedTrailWidthMeters034(model) {
+  const cuttingWidth = mowerCuttingWidthMeters034(model);
+  return cuttingWidth === null ? 0.25 : cuttingWidth + 0.10;
+}
+function trailWidth034(card) {
+  const scale = Number(card?._layout?.scale);
+  if (!Number.isFinite(scale) || scale <= 0) return 5;
+  const model = typeof mowerModel032 === "function" ? mowerModel032(card) : "";
+  return Math.max(renderedTrailWidthMeters034(model) * scale, 5);
+}
+'''
+          if 'function mowerCuttingWidthMeters034(model)' in source:
+              raise SystemExit('0.3.4-beta1 helper already present')
+          source += helper
+          src_path.write_text(source, encoding='utf-8')
+          dist_path.write_text(source, encoding='utf-8')
+
+          package_path = root / 'package.json'
+          package = json.loads(package_path.read_text(encoding='utf-8'))
+          if package.get('version') != '0.3.3':
+              raise SystemExit(f"Unexpected package version {package.get('version')}")
+          package['version'] = '0.3.4-beta1'
+          package['scripts']['test'] = 'npm run build && npm run check && npm run smoke && node tests/single-runtime.mjs && node tests/model-trail-width.mjs'
+          package_path.write_text(json.dumps(package, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
+          changelog_path = root / 'CHANGELOG.md'
+          changelog = changelog_path.read_text(encoding='utf-8')
+          heading = '# Changelog\n\n'
+          if not changelog.startswith(heading):
+              raise SystemExit('Unexpected changelog header')
+          section = '''## 0.3.4-beta1 - 2026-08-20
+
+### Changed
+
+- Make mowing-trail width model-aware instead of using one 25 cm visual width for every mower.
+- Render the trail as the mower's confirmed cutting width plus 5 cm on each side of the route centreline to prevent small visual gaps between adjacent mowing passes.
+- Use 53 cm for X4 (43 cm cutting width), 33.7 cm for X3 (23.7 cm), 31 cm for H-series (21 cm), and 28 cm for i1-series (18 cm).
+- Keep the historical 25 cm width as a safe fallback for models whose cutting width is not yet mapped.
+- Apply the same width calculation to live, Today/history, and session-highlight route rendering.
+
+'''
+          changelog_path.write_text(heading + section + changelog[len(heading):], encoding='utf-8')
+
+          notes = root / '.github/release-notes/0.3.4-beta1.md'
+          notes.write_text('''# Navimower Map Card 0.3.4-beta1
+
+This beta makes the visible mowing trail follow the mower family's cutting width instead of drawing every model with the same 25 cm route.
+
+## Changed
+
+- The rendered mowing swath is now **confirmed cutting width + 10 cm total visual tolerance** (5 cm on each side of the route centreline).
+- **X4:** 43 cm cutting width -> 53 cm rendered trail.
+- **X3:** 23.7 cm cutting width -> 33.7 cm rendered trail.
+- **H-series:** 21 cm cutting width -> 31 cm rendered trail.
+- **i1-series:** 18 cm cutting width -> 28 cm rendered trail.
+- Unknown/unmapped models keep the previous 25 cm rendered width.
+- The same model-aware width is used for the live trail, retained/history trails, and the selected-session pulse highlight.
+
+The extra 5 cm per side is display tolerance only. It does not change mower data, route coordinates, coverage, or history semantics.
+''', encoding='utf-8')
+
+          readme_path = root / 'README.md'
+          readme = readme_path.read_text(encoding='utf-8')
+          needle = 'There are no separate active-trail or old-trail color and opacity controls.\n'
+          addition = '''There are no separate active-trail or old-trail color and opacity controls.
+
+Trail thickness is model-aware. For mower families with a confirmed cutting width, the card renders the mowing swath as the physical cutting width plus 5 cm of visual tolerance on each side of the route centreline. This prevents small gaps between adjacent passes caused by route sampling/rendering while leaving mower data and coverage untouched. Unknown models keep the legacy 25 cm display width.
+'''
+          if readme.count(needle) != 1:
+              raise SystemExit('Expected README trail paragraph not found exactly once')
+          readme_path.write_text(readme.replace(needle, addition, 1), encoding='utf-8')
+
+          test_path = root / 'tests/model-trail-width.mjs'
+          test_path.write_text('''import fs from "node:fs";
+import assert from "node:assert/strict";
+
+const source = fs.readFileSync(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
+assert.match(source, /function mowerCuttingWidthMeters034\(model\)/);
+assert.match(source, /return 0\.43;/);
+assert.match(source, /return 0\.237;/);
+assert.match(source, /return 0\.21;/);
+assert.match(source, /return 0\.18;/);
+assert.match(source, /cuttingWidth \+ 0\.10/);
+assert.equal((source.match(/const width = trailWidth034\(this\);/g) || []).length, 3);
+assert.equal((source.match(/Math\.min\(Math\.max\(0\.25 \* this\._layout\.scale, 5\), 28\)/g) || []).length, 0);
+console.log("model-aware trail width checks passed");
+''', encoding='utf-8')
+
+          branch_helper = root / '.github/workflows/build-0.3.4-beta1.yml'
+          if branch_helper.exists():
+              branch_helper.unlink()
+          PY
+          npm test
+          cmp -s src/navimower-map-card.js dist/navimower-map-card.js
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Release Navimower Map Card 0.3.4-beta1"
+          git push origin HEAD:release/0.3.4-beta1

@@ -22,11 +22,29 @@ jobs:
           node-version: "22"
       - name: Test card
         run: npm test
+      - name: Commit generated beta runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          case "$VERSION" in
+            *-beta*) ;;
+            *) exit 0 ;;
+          esac
+          if git diff --quiet -- src/navimower-map-card.js dist/navimower-map-card.js CHANGELOG.md README.md; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/navimower-map-card.js dist/navimower-map-card.js CHANGELOG.md README.md
+          git commit -m "Build Navimower Map Card $VERSION"
+          git push origin HEAD:main
       - name: Publish beta tag and release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          set -euo pipefail
           VERSION=$(node -p "require('./package.json').version")
           case "$VERSION" in
             *-beta*) ;;
@@ -34,17 +52,18 @@ jobs:
           esac
           TAG="v$VERSION"
           NOTES=".github/release-notes/$VERSION.md"
+          TARGET_SHA=$(git rev-parse HEAD)
           test -f "$NOTES"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            test "$(git rev-list -n 1 "$TAG")" = "$GITHUB_SHA"
+            test "$(git rev-list -n 1 "$TAG")" = "$TARGET_SHA"
           else
-            git tag -a "$TAG" -m "Navimower Map Card $VERSION"
+            git tag -a "$TAG" "$TARGET_SHA" -m "Navimower Map Card $VERSION"
             git push origin "$TAG"
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --prerelease --title "Navimower Map Card $VERSION" --notes-file "$NOTES"
           else
-            gh release create "$TAG" --prerelease --title "Navimower Map Card $VERSION" --notes-file "$NOTES"
+            gh release create "$TAG" --prerelease --target "$TARGET_SHA" --title "Navimower Map Card $VERSION" --notes-file "$NOTES"
           fi

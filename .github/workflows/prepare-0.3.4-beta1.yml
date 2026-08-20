@@ -1,17 +1,16 @@
 name: Prepare 0.3.4-beta1
 
 on:
-  push:
+  pull_request:
     branches: [main]
-    paths:
-      - .github/workflows/prepare-0.3.4-beta1.yml
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
   prepare:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && github.head_ref == 'release/0.3.4-beta1'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

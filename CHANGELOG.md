@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.4-beta1 - 2026-08-20
+
+### Changed
+
+- Make mowing-trail width model-aware instead of using one 25 cm visual width for every mower.
+- Render the trail as the mower's confirmed cutting width plus 5 cm on each side of the route centreline to prevent small visual gaps between adjacent mowing passes.
+- Use 53 cm for X4 (43 cm cutting width), 33.7 cm for X3 (23.7 cm), 31 cm for H-series (21 cm), and 28 cm for i1-series (18 cm).
+- Keep the historical 25 cm width as a safe fallback for models whose cutting width is not yet mapped.
+- Apply the same width calculation to live, Today/history, and session-highlight route rendering.
+
 ## 0.3.3 - 2026-08-19
 
 ### Fixed

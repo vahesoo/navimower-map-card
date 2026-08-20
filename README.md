@@ -195,6 +195,8 @@ trail_opacity: 0.55
 
 There are no separate active-trail or old-trail color and opacity controls.
 
+Trail thickness is model-aware. For mower families with a confirmed cutting width, the card renders the mowing swath as the physical cutting width plus 5 cm of visual tolerance on each side of the route centreline. This prevents small gaps between adjacent passes caused by route sampling/rendering while leaving mower data and coverage untouched. Unknown models keep the legacy 25 cm display width.
+
 Navimower v0.3.0 map API schema v5 also provides prepared per-zone `daily_trails`. The card keeps the latest same-day cycle for each zone, clears only the zone entered by a new cycle, and retains full sessions for History. While an active backend session returns to the charging station, the live route continues updating when the integration's return-route retention option is enabled.
 
 Older schema v4 payloads remain supported through cycle-aware sessions and separate route fragments:

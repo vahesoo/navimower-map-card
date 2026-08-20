@@ -1653,7 +1653,7 @@ var NavimowerMapCard = class extends HTMLElement {
     if (renderKey === this._historyRenderKey) return;
     this._historyRenderKey = renderKey;
     const drawable = daily === null ? sessions.filter((session) => (this._historyDayOffset !== null || !session.active) && session.drawable) : daily.filter((zone) => !zone.active && zone.drawable);
-    const width = Math.min(Math.max(0.25 * this._layout.scale, 5), 28);
+    const width = trailWidth034(this);
     this._historyEl.innerHTML = drawable.map(
       (item) => item.segments.filter((segment) => segment.length >= 2).map((segment) => {
         const id = daily === null ? item.id : item.cycleId;
@@ -1668,7 +1668,7 @@ var NavimowerMapCard = class extends HTMLElement {
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
     this._highlightEl.innerHTML = "";
     this._sessionsEl?.querySelectorAll(".nm-session-pulsing").forEach((item) => item.classList.remove("nm-session-pulsing"));
-    const width = Math.min(Math.max(0.25 * this._layout.scale, 5), 28);
+    const width = trailWidth034(this);
     const pulseWidth = Math.min(width * 2.35, 48);
     const color = escapeHtml(this._config.trail_color);
     const paths = session.segments.filter((segment) => segment.length >= 2).map(
@@ -1808,7 +1808,7 @@ var NavimowerMapCard = class extends HTMLElement {
       this._trailEl.innerHTML = "";
       return;
     }
-    const width = Math.min(Math.max(0.25 * this._layout.scale, 5), 28);
+    const width = trailWidth034(this);
     const rawSessions = Array.isArray(this._mapPayload?.sessions) ? this._mapPayload.sessions : [];
     const activeSession = [...rawSessions].reverse().find((session) => Boolean(session?.active || session?.ended_at === null && session?.started_at));
     const sessionId2 = activeSession?.id ?? activeSession?.session_id ?? this._trailSession ?? 0;
@@ -6170,7 +6170,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.3";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.4-beta1";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -6185,3 +6185,28 @@ console.info(
 export {
   NAVIMOWER_MAP_CARD_VERSION2 as NAVIMOWER_MAP_CARD_VERSION
 };
+
+
+// 0.3.4-beta1: model-aware rendered mowing width.
+// The visible trail represents the cut swath plus 5 cm of display tolerance on
+// each side of the route centreline. Unknown models intentionally retain the
+// historical 25 cm display width until their cutting width is confirmed.
+function mowerCuttingWidthMeters034(model) {
+  const raw = String(model || "").trim().toUpperCase();
+  const compact = raw.replace(/[\s_-]+/g, "");
+  if (/^X4/.test(compact) || /\bX4\b/.test(raw)) return 0.43;
+  if (/^X3/.test(compact) || /\bX3\b/.test(raw)) return 0.237;
+  if (/^H/.test(compact) || /\bH[123]/.test(raw)) return 0.21;
+  if (/^I1/.test(compact) || /\bI1/.test(raw)) return 0.18;
+  return null;
+}
+function renderedTrailWidthMeters034(model) {
+  const cuttingWidth = mowerCuttingWidthMeters034(model);
+  return cuttingWidth === null ? 0.25 : cuttingWidth + 0.10;
+}
+function trailWidth034(card) {
+  const scale = Number(card?._layout?.scale);
+  if (!Number.isFinite(scale) || scale <= 0) return 5;
+  const model = typeof mowerModel032 === "function" ? mowerModel032(card) : "";
+  return Math.max(renderedTrailWidthMeters034(model) * scale, 5);
+}

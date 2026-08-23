@@ -453,3 +453,7 @@ This project is not affiliated with or supported by Segway, Ninebot, Navimow, or
 ## License
 
 MIT License. Created by **Toomas Vähesoo**.
+
+### Custom Areas
+
+Custom Area overlays are auto-discovered from Navimower binary sensors attached to the selected mower device. Their polygons are shown with the Gate Area color language by default and can be enabled/disabled or styled in the Visual Editor with separate color, fill-opacity, and border-width controls.

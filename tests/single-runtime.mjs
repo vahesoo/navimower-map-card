@@ -3,8 +3,8 @@ import { readFileSync, readdirSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 assert.ok(
-  pkg.version === "0.3.4-beta1",
-  `expected 0.3.4-beta1, got ${pkg.version}`,
+  pkg.version === "0.3.4-beta2",
+  `expected 0.3.4-beta2, got ${pkg.version}`,
 );
 assert.match(pkg.scripts.build, /scripts\/build\.mjs/);
 assert.match(pkg.scripts.check, /check-runtime-layout\.mjs/);
@@ -19,7 +19,7 @@ for (const root of ["src", "dist"]) {
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
 assert.equal(dist, source, "dist must remain an exact build copy of src");
-assert.match(source, /var NAVIMOWER_MAP_CARD_VERSION2 = "0\.3\.4-beta1";/);
+assert.match(source, /var NAVIMOWER_MAP_CARD_VERSION2 = "0\.3\.4-beta2";/);
 assert.doesNotMatch(source, /(?:from\s+|import\s*)["']\.\/navimower-map-card-/);
 assert.match(source, /i_dark:\s*\{\s*width:\s*85,\s*height:\s*120,[^\n]*data:image\/png;base64,/);
 assert.doesNotMatch(source, /i_dark:[^\n]*data:image\/webp;base64/);
@@ -37,6 +37,8 @@ for (const marker of [
   "mower_icon",
   "i2_lidar",
   "MOWER_ICON_SPECS_032",
+  "show_custom_areas",
+  "custom_area_color",
 ]) {
   assert.ok(source.includes(marker), `flattened runtime must retain ${marker}`);
 }
@@ -93,4 +95,4 @@ assert.match(advanced, /notification_count: 5/);
 assert.match(advanced, /mower_icon: auto/);
 assert.match(readFileSync("examples/mower-artwork.yaml", "utf8"), /i2_lidar|x3|x4/);
 
-console.log("0.3.4-beta1 single-runtime regression checks passed");
+console.log("0.3.4-beta2 single-runtime regression checks passed");

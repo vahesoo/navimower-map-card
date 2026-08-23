@@ -6170,7 +6170,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.4-beta2";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.4-beta3";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -6318,11 +6318,8 @@ function patchCustomAreas0342() {
       if (!mowerEntry?.device_id) return;
       const entities = registry
         .filter((entry) => entry.device_id === mowerEntry.device_id && !entry.disabled_by && String(entry.entity_id || "").startsWith("binary_sensor."))
-        .map((entry) => entry.entity_id)
-        .filter((entityId) => {
-          const attrs = this._hass.states?.[entityId]?.attributes;
-          return Array.isArray(attrs?.polygon) && attrs.polygon.length >= 3 && attrs?.source === "navimow_off_limit_import";
-        });
+        .filter((entry) => String(entry.unique_id || "").includes("_custom_area_"))
+        .map((entry) => entry.entity_id);
       const signature = entities.join("|");
       if (signature !== (this._customAreaSignature0342 || "")) {
         this._customAreaEntities0342 = entities;
@@ -6347,6 +6344,17 @@ function patchCustomAreas0342() {
     renderCustomAreas(this);
     return result;
   };
-  console.info("[Navimower Map Card] 0.3.4-beta2 Custom Area overlays enabled");
+  const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
+  if (hassDescriptor?.set && hassDescriptor?.get) {
+    Object.defineProperty(proto, "hass", {
+      configurable: true,
+      get: hassDescriptor.get,
+      set(value) {
+        hassDescriptor.set.call(this, value);
+        if (this._customAreaEntities0342?.length && this._config?.show_custom_areas) renderCustomAreas(this);
+      }
+    });
+  }
+  console.info("[Navimower Map Card] 0.3.4-beta3 robust Custom Area discovery enabled");
 }
 if (globalThis.customElements) patchCustomAreas0342();

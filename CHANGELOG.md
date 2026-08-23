@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.4-beta3 - 2026-08-23
+
+### Fixed
+
+- Discover Custom Area entities from their device-scoped Navimower unique IDs instead of requiring polygon attributes to already exist during the one-time Entity Registry lookup.
+- Re-render Custom Area overlays as Home Assistant state updates arrive, avoiding an empty map when the card initializes before Custom Area state attributes are ready.
+
 ## 0.3.4-beta2 - 2026-08-23
 
 ### Added

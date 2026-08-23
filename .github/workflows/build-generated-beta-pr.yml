@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   build-generated-beta:
-    if: github.head_ref == 'release/0.3.4-beta3-build'
+    if: startsWith(github.head_ref, 'release/0.3.4-beta')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +25,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
           if git diff --quiet -- src/navimower-map-card.js dist/navimower-map-card.js CHANGELOG.md README.md; then
             echo 'Generated files already committed'
             exit 0
@@ -32,5 +33,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/navimower-map-card.js dist/navimower-map-card.js CHANGELOG.md README.md
-          git commit -m 'Build Navimower Map Card 0.3.4-beta3'
+          git commit -m "Build Navimower Map Card $VERSION"
           git push origin HEAD:${{ github.head_ref }}

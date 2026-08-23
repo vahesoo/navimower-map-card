@@ -9,7 +9,7 @@ const required = [
   "custom_area_fill_opacity",
   "custom_area_stroke_width",
   "nm-custom-areas",
-  "navimow_off_limit_import",
+  'includes("_custom_area_")',
   'startsWith("binary_sensor.")',
   'stroke-dasharray="10 6"'
 ];

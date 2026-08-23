@@ -13,16 +13,25 @@ const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "ut
 if (packageJson.version === "0.3.4-beta3") {
   let runtime = await readFile(source, "utf8");
   const oldVersion = 'var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.4-beta2";';
-  if ((runtime.split(oldVersion).length - 1) !== 1) throw new Error("Expected one 0.3.4-beta2 runtime version marker");
-  runtime = runtime.replace(oldVersion, 'var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.4-beta3";');
+  const newVersion = 'var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.4-beta3";';
   const oldFilter = `.map((entry) => entry.entity_id)\n        .filter((entityId) => {\n          const attrs = this._hass.states?.[entityId]?.attributes;\n          return Array.isArray(attrs?.polygon) && attrs.polygon.length >= 3 && attrs?.source === "navimow_off_limit_import";\n        });`;
   const newFilter = `.filter((entry) => String(entry.unique_id || "").includes("_custom_area_"))\n        .map((entry) => entry.entity_id);`;
-  if ((runtime.split(oldFilter).length - 1) !== 1) throw new Error("Expected beta2 state-dependent Custom Area discovery filter");
-  runtime = runtime.replace(oldFilter, newFilter);
   const oldApply = `  const originalApplyStatic = proto._applyStaticLayers;\n  proto._applyStaticLayers = function customAreaApplyStatic0342(entry) {\n    const result = originalApplyStatic.call(this, entry);\n    renderCustomAreas(this);\n    return result;\n  };\n  console.info("[Navimower Map Card] 0.3.4-beta2 Custom Area overlays enabled");`;
   const newApply = `  const originalApplyStatic = proto._applyStaticLayers;\n  proto._applyStaticLayers = function customAreaApplyStatic0342(entry) {\n    const result = originalApplyStatic.call(this, entry);\n    renderCustomAreas(this);\n    return result;\n  };\n  const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");\n  if (hassDescriptor?.set && hassDescriptor?.get) {\n    Object.defineProperty(proto, "hass", {\n      configurable: true,\n      get: hassDescriptor.get,\n      set(value) {\n        hassDescriptor.set.call(this, value);\n        if (this._customAreaEntities0342?.length && this._config?.show_custom_areas) renderCustomAreas(this);\n      }\n    });\n  }\n  console.info("[Navimower Map Card] 0.3.4-beta3 robust Custom Area discovery enabled");`;
-  if ((runtime.split(oldApply).length - 1) !== 1) throw new Error("Expected beta2 Custom Area apply hook");
-  runtime = runtime.replace(oldApply, newApply);
+
+  const oldCount = runtime.split(oldVersion).length - 1;
+  const newCount = runtime.split(newVersion).length - 1;
+  if (oldCount === 1 && newCount === 0) {
+    if ((runtime.split(oldFilter).length - 1) !== 1) throw new Error("Expected beta2 state-dependent Custom Area discovery filter");
+    if ((runtime.split(oldApply).length - 1) !== 1) throw new Error("Expected beta2 Custom Area apply hook");
+    runtime = runtime.replace(oldVersion, newVersion).replace(oldFilter, newFilter).replace(oldApply, newApply);
+  } else if (oldCount === 0 && newCount === 1) {
+    if ((runtime.split(newFilter).length - 1) !== 1) throw new Error("Expected beta3 Custom Area unique-id discovery filter");
+    if ((runtime.split('console.info("[Navimower Map Card] 0.3.4-beta3 robust Custom Area discovery enabled");').length - 1) !== 1) throw new Error("Expected beta3 Custom Area apply hook");
+  } else {
+    throw new Error(`Unexpected runtime version markers: beta2=${oldCount}, beta3=${newCount}`);
+  }
+
   await writeFile(source, runtime, "utf8");
   const changelogPath = resolve(root, "CHANGELOG.md");
   let changelog = await readFile(changelogPath, "utf8");

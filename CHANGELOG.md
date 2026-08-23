@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.4-beta4 - 2026-08-23
+
+### Changed
+
+- Prefer persistent `custom_areas` geometry delivered directly by Navimower 0.4.3-beta34+ Map API.
+- Keep the beta3 device-scoped binary-sensor discovery as a compatibility fallback for older integration builds.
+
 ## 0.3.4-beta3 - 2026-08-23
 
 ### Fixed

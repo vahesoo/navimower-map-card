@@ -6170,7 +6170,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.4-beta3";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.4-beta4";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -6271,6 +6271,18 @@ function patchCustomAreas0342() {
   };
 
   function customAreas(card) {
+    const apiAreas = Array.isArray(card?._mapPayload?.custom_areas) ? card._mapPayload.custom_areas : [];
+    const normalizedApiAreas = apiAreas.map((area, index) => {
+      const polygon = area?.polygon;
+      if (!Array.isArray(polygon) || polygon.length < 3) return null;
+      const points = polygon
+        .filter((point) => Array.isArray(point) && point.length >= 2)
+        .map((point) => [Number(point[0]), Number(point[1])])
+        .filter((point) => point.every(Number.isFinite));
+      if (points.length < 3) return null;
+      return { entityId: null, name: area?.name || area?.slug || `Custom area ${index + 1}`, polygon: points };
+    }).filter(Boolean);
+    if (normalizedApiAreas.length || apiAreas.length) return normalizedApiAreas;
     if (!card?._hass || !Array.isArray(card._customAreaEntities0342)) return [];
     return card._customAreaEntities0342.map((entityId) => {
       const state = card._hass.states?.[entityId];
@@ -6355,6 +6367,6 @@ function patchCustomAreas0342() {
       }
     });
   }
-  console.info("[Navimower Map Card] 0.3.4-beta3 robust Custom Area discovery enabled");
+  console.info("[Navimower Map Card] 0.3.4-beta4 Map API Custom Areas enabled");
 }
 if (globalThis.customElements) patchCustomAreas0342();

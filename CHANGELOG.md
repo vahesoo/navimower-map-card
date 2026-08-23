@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.4-beta2 - 2026-08-23
+
+### Added
+
+- Render Navimower Custom Areas belonging to the selected mower device.
+- Auto-discover Custom Area binary sensors from the mower device registry and use their polygon/name attributes.
+- Add Visual Editor controls for showing/hiding Custom Areas, color, fill opacity, and border width.
+- Match the Gate Area visual language by default: purple fill and dashed border.
+
 ## 0.3.4-beta1 - 2026-08-20
 
 ### Changed

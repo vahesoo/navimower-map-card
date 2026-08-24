@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.4-beta5 - 2026-08-24
+
+### Added
+
+- Add a gear-button Settings dialog with up to 12 user-selected Home Assistant entities configured from the visual card editor.
+- Add a Navimower-managed scheduler overview using the integration's schedule-status sensor, with completed, active and upcoming zone states.
+- Route the Schedule button to the managed scheduler while it is enabled; otherwise keep the native mower schedule as the configuration entry point, including when both schedulers are off.
+
 ## 0.3.4-beta4 - 2026-08-23
 
 ### Changed

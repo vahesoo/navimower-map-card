@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-assert.ok(pkg.version === "0.3.4-beta4", `expected 0.3.4-beta4, got ${pkg.version}`);
+assert.ok(pkg.version === "0.3.4-beta5", `expected 0.3.4-beta5, got ${pkg.version}`);
 assert.match(pkg.scripts.build, /scripts\/build\.mjs/);
 assert.match(pkg.scripts.check, /check-runtime-layout\.mjs/);
 assert.match(pkg.scripts.test, /single-runtime\.mjs/);
@@ -14,7 +14,11 @@ for (const root of ["src", "dist"]) {
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
 assert.equal(dist, source, "dist must remain an exact build copy of src");
-assert.match(source, /var NAVIMOWER_MAP_CARD_VERSION2 = "0\.3\.4-beta4";/);
+assert.match(source, /var NAVIMOWER_MAP_CARD_VERSION2 = "0\.3\.4-beta5";/);
+assert.match(source, /0\.3\.4-beta5: scheduler overview and configurable settings dialog/);
+assert.match(source, /settings_entity_/);
+assert.match(source, /length: 12/);
+assert.match(source, /navimower_schedule_status/);
 assert.doesNotMatch(source, /(?:from\s+|import\s*)["']\.\/navimower-map-card-/);
 assert.match(source, /i_dark:\s*\{\s*width:\s*85,\s*height:\s*120,[^\n]*data:image\/png;base64,/);
 assert.doesNotMatch(source, /i_dark:[^\n]*data:image\/webp;base64/);
@@ -32,4 +36,4 @@ const autoStart = source.indexOf("function autoMowerIcon032(model)"); const auto
 assert.match(autoBlock, /return null;/); assert.match(autoBlock, /_mowerModelResolved032 \? "h2" : null/); assert.match(autoBlock, /group\.style\.display = "none"/); assert.match(source, /this\._mowerModelResolved032 = false/); assert.match(source, /this\._mowerModelResolved032 = true/); assert.match(source, /const artwork = ensureMowerArtwork032\(this\)/); assert.match(source, /if \(!key\) return ""/);
 const readme = readFileSync("README.md", "utf8"); assert.doesNotMatch(readme, /notification_page_size/); assert.doesNotMatch(readme, /navimower-map-card-0\.3\.1-b3\.js/); assert.match(readme, /notification_count: 5/); assert.match(readme, /mower-artwork\.yaml/);
 const advanced = readFileSync("examples/advanced.yaml", "utf8"); assert.doesNotMatch(advanced, /show_tunnels|tunnel_color|session_count|notification_page_size/); assert.match(advanced, /history_days: 3/); assert.match(advanced, /notification_count: 5/); assert.match(advanced, /mower_icon: auto/); assert.match(readFileSync("examples/mower-artwork.yaml", "utf8"), /i2_lidar|x3|x4/);
-console.log("0.3.4-beta4 single-runtime regression checks passed");
+console.log("0.3.4-beta5 single-runtime regression checks passed");

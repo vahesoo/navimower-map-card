@@ -2,26 +2,27 @@ name: Validate
 
 on:
   push:
+    branches: [main]
   pull_request:
-  schedule:
-    - cron: "0 0 * * *"
+    branches: [main]
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   javascript:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
-          node-version: "24"
-      - name: Validate JavaScript and build output
+          node-version: "22"
+      - name: Run read-only regression suite
         run: npm test
-      - name: Ensure build output is committed
+      - name: Ensure tests did not modify tracked files
         run: git diff --exit-code
 
   validate-hacs:

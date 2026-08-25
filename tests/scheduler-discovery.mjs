@@ -38,56 +38,18 @@ const statusState = {
 };
 
 const correctRegistry = [
-  {
-    entity_id: "lawn_mower.legacy_tont",
-    unique_id: "legacy_mower",
-    config_entry_id: "legacy-entry",
-    device_id: "legacy-device",
-  },
-  {
-    entity_id: "sensor.tont_map_data",
-    unique_id: "SN123_map_data",
-    config_entry_id: "nav-entry",
-    device_id: "nav-device",
-  },
-  {
-    entity_id: statusEntity,
-    unique_id: "SN123_navimower_schedule_status",
-    config_entry_id: "nav-entry",
-    device_id: "nav-device",
-  },
-  {
-    entity_id: "switch.tont_navimower_schedule",
-    unique_id: "SN123_navimower_schedule",
-    config_entry_id: "nav-entry",
-    device_id: "nav-device",
-  },
-  {
-    entity_id: "time.tont_navimower_schedule_start",
-    unique_id: "SN123_navimower_schedule_start",
-    config_entry_id: "nav-entry",
-    device_id: "nav-device",
-  },
-  {
-    entity_id: "time.tont_navimower_schedule_end",
-    unique_id: "SN123_navimower_schedule_end",
-    config_entry_id: "nav-entry",
-    device_id: "nav-device",
-  },
-  {
-    entity_id: "sensor.other_navimower_schedule_status",
-    unique_id: "OTHER_navimower_schedule_status",
-    config_entry_id: "other-entry",
-    device_id: "other-device",
-  },
+  { entity_id: "lawn_mower.legacy_tont", unique_id: "legacy_mower", config_entry_id: "legacy-entry", device_id: "legacy-device" },
+  { entity_id: "sensor.tont_map_data", unique_id: "SN123_map_data", config_entry_id: "nav-entry", device_id: "nav-device" },
+  { entity_id: statusEntity, unique_id: "SN123_navimower_schedule_status", config_entry_id: "nav-entry", device_id: "nav-device" },
+  { entity_id: "switch.tont_navimower_schedule", unique_id: "SN123_navimower_schedule", config_entry_id: "nav-entry", device_id: "nav-device" },
+  { entity_id: "time.tont_navimower_schedule_start", unique_id: "SN123_navimower_schedule_start", config_entry_id: "nav-entry", device_id: "nav-device" },
+  { entity_id: "time.tont_navimower_schedule_end", unique_id: "SN123_navimower_schedule_end", config_entry_id: "nav-entry", device_id: "nav-device" },
+  { entity_id: "sensor.other_navimower_schedule_status", unique_id: "OTHER_navimower_schedule_status", config_entry_id: "other-entry", device_id: "other-device" },
 ];
 
 const card = new Card();
 card._config = { entity: "lawn_mower.legacy_tont", schedule_view_mode: "auto" };
-card._resolved = {
-  mower_entity: "lawn_mower.legacy_tont",
-  map_entity: "sensor.tont_map_data",
-};
+card._resolved = { mower_entity: "lawn_mower.legacy_tont", map_entity: "sensor.tont_map_data" };
 card._apiPath = () => "/api/navimower/map/nav-entry";
 card._mowerEntity = () => "lawn_mower.legacy_tont";
 let wsCalls = 0;
@@ -106,50 +68,27 @@ assert.equal(discovered.configEntryId, "nav-entry");
 assert.equal(discovered.source, "map_api_config_entry");
 assert.equal(wsCalls, 1);
 
-// A positive result is cached briefly, but only while its HA state still exists.
 const cached = await card._discoverNavimowerSchedulerEntities();
 assert.equal(cached.status, statusEntity);
 assert.equal(wsCalls, 1);
 
-// The status sensor is authoritative for managed-scheduler enablement. beta2
-// owns the persistent dialog flag while the old beta6 render flag stays off so
-// HA state updates cannot rebuild the dialog DOM.
 await card._openScheduleDialog();
 assert.equal(card._beta2ScheduleOpen, true);
 assert.equal(card._beta6ManagedOpen, false);
 assert.equal(card._beta6SchedulerEntities.status, statusEntity);
-assert.equal(card._mowerDeviceId(), "nav-device");
+assert.equal(card._beta10ScheduleDeviceId, "nav-device");
 
-// A failed early discovery must never become a permanent negative cache. This
-// reproduces the field failure where the scheduler entity appeared after card
-// setup/reload and beta6 kept returning an empty object forever.
 const retryCard = new Card();
 retryCard._config = { entity: "lawn_mower.retry", schedule_view_mode: "navimower" };
-retryCard._resolved = {
-  mower_entity: "lawn_mower.retry",
-  map_entity: "sensor.retry_map_data",
-};
+retryCard._resolved = { mower_entity: "lawn_mower.retry", map_entity: "sensor.retry_map_data" };
 retryCard._apiPath = () => "/api/navimower/map/retry-entry";
 retryCard._mowerEntity = () => "lawn_mower.retry";
 let retryRegistry = [
-  {
-    entity_id: "lawn_mower.retry",
-    unique_id: "RETRY_mower",
-    config_entry_id: "retry-entry",
-    device_id: "retry-device",
-  },
-  {
-    entity_id: "sensor.retry_map_data",
-    unique_id: "RETRY_map_data",
-    config_entry_id: "retry-entry",
-    device_id: "retry-device",
-  },
+  { entity_id: "lawn_mower.retry", unique_id: "RETRY_mower", config_entry_id: "retry-entry", device_id: "retry-device" },
+  { entity_id: "sensor.retry_map_data", unique_id: "RETRY_map_data", config_entry_id: "retry-entry", device_id: "retry-device" },
 ];
 let retryCalls = 0;
-retryCard._hass = {
-  states: {},
-  callWS: async () => { retryCalls += 1; return retryRegistry; },
-};
+retryCard._hass = { states: {}, callWS: async () => { retryCalls += 1; return retryRegistry; } };
 
 const firstAttempt = await retryCard._discoverNavimowerSchedulerEntities();
 assert.equal(firstAttempt.status, null);
@@ -174,23 +113,13 @@ const thirdAttempt = await retryCard._discoverNavimowerSchedulerEntities();
 assert.equal(thirdAttempt.status, "sensor.retry_navimower_schedule_status");
 assert.equal(retryCalls, 2);
 
-// If config_entry_id is unavailable, the resolved map device remains a safe
-// fallback and must win over an unrelated mower device.
 const mapDeviceCard = new Card();
 mapDeviceCard._config = { entity: "lawn_mower.old" };
-mapDeviceCard._resolved = {
-  mower_entity: "lawn_mower.old",
-  map_entity: "sensor.new_map_data",
-};
+mapDeviceCard._resolved = { mower_entity: "lawn_mower.old", map_entity: "sensor.new_map_data" };
 mapDeviceCard._apiPath = () => null;
 mapDeviceCard._mowerEntity = () => "lawn_mower.old";
 mapDeviceCard._hass = {
-  states: {
-    "sensor.new_navimower_schedule_status": {
-      state: "waiting",
-      attributes: { enabled: true },
-    },
-  },
+  states: { "sensor.new_navimower_schedule_status": { state: "waiting", attributes: { enabled: true } } },
   callWS: async () => [
     { entity_id: "lawn_mower.old", unique_id: "OLD_mower", device_id: "old-device" },
     { entity_id: "sensor.new_map_data", unique_id: "NEW_map_data", device_id: "new-device" },

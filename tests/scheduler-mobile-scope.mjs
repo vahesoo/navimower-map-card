@@ -94,14 +94,14 @@ assert.equal(scoped.deviceId, "robot-one-device");
 assert.equal(scoped.source, "map_payload_frontend");
 
 // Drag targeting is based only on row geometry, not document.elementFromPoint
-// or Shadow DOM retargeting. Moving row index 0 down past the second midpoint
+// or Shadow DOM retargeting. Moving row index 0 below the next row midpoint
 // yields insertion index 1; below all remaining rows yields the end.
 const rects = [
   { top: 0, height: 46 },
   { top: 52, height: 46 },
   { top: 104, height: 46 },
 ];
-assert.equal(configuredCard._beta3DragTargetIndex(70, rects, 0), 1);
+assert.equal(configuredCard._beta3DragTargetIndex(90, rects, 0), 1);
 assert.equal(configuredCard._beta3DragTargetIndex(200, rects, 0), 2);
 assert.equal(configuredCard._beta3DragTargetIndex(10, rects, 2), 0);
 

@@ -6170,7 +6170,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.4-beta8";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.4-beta9";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -6671,4 +6671,29 @@ if (globalThis.customElements) patchCustomAreas0342();
   };
 
   console.info("[Navimower Map Card] 0.3.4-beta8 native Home Assistant Settings rows enabled");
+})();
+
+
+// 0.3.4-beta9: current-cycle live history label.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower034Beta9Patched) return;
+  Card.__navimower034Beta9Patched = true;
+
+  const proto = Card.prototype;
+  const previousRenderHistoryBar = proto._renderHistoryBar;
+  proto._renderHistoryBar = function (...args) {
+    const result = previousRenderHistoryBar?.apply(this, args);
+    if (this._mapPayload?.daily_trails?.scope === "current_cycle") {
+      this._historyBarEl
+        ?.querySelectorAll?.('[data-history-offset="today"]')
+        ?.forEach?.((button) => {
+          button.textContent = "Current cycle";
+          button.title = "Current mowing cycle since the latest confirmed reset";
+        });
+    }
+    return result;
+  };
+
+  console.info("[Navimower Map Card] 0.3.4-beta9 current-cycle live history label enabled");
 })();

@@ -1,0 +1,90 @@
+name: Publish card release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          test -f ".github/release-notes/$VERSION.md"
+      - name: Prepare deterministic release runtime
+        run: npm run prepare-release
+      - name: Ensure prepare only touches generated runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          UNEXPECTED=$(git diff --name-only | grep -Ev '^(src/navimower-map-card\.js|dist/navimower-map-card\.js)$' || true)
+          test -z "$UNEXPECTED" || { echo "$UNEXPECTED"; exit 1; }
+      - name: Snapshot prepared tree
+        run: git status --porcelain=v1 > /tmp/status-before-tests
+      - name: Run read-only regression suite
+        run: npm test
+      - name: Ensure tests are read-only
+        run: |
+          git status --porcelain=v1 > /tmp/status-after-tests
+          diff -u /tmp/status-before-tests /tmp/status-after-tests
+      - name: Commit generated runtime if needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/navimower-map-card.js dist/navimower-map-card.js; then
+            echo "Generated runtime already committed"
+            exit 0
+          fi
+          VERSION=$(node -p "require('./package.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/navimower-map-card.js dist/navimower-map-card.js
+          git commit -m "Build Navimower Map Card $VERSION"
+          git push origin HEAD:main
+      - name: Publish tag and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          NOTES=".github/release-notes/$VERSION.md"
+          TARGET_SHA=$(git rev-parse HEAD)
+          git fetch --tags origin
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            test "$(git rev-list -n 1 "$TAG")" = "$TARGET_SHA"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" "$TARGET_SHA" -m "Navimower Map Card $VERSION"
+            git push origin "$TAG"
+          fi
+          if [[ "$VERSION" == *-* ]]; then
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release edit "$TAG" --prerelease --title "Navimower Map Card $VERSION" --notes-file "$NOTES"
+            else
+              gh release create "$TAG" --prerelease --target "$TARGET_SHA" --title "Navimower Map Card $VERSION" --notes-file "$NOTES"
+            fi
+          else
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release edit "$TAG" --latest --title "Navimower Map Card $VERSION" --notes-file "$NOTES"
+            else
+              gh release create "$TAG" --latest --target "$TARGET_SHA" --title "Navimower Map Card $VERSION" --notes-file "$NOTES"
+            fi
+          fi

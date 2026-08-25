@@ -1,0 +1,40 @@
+name: Prepare release PR
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: startsWith(github.head_ref, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Prepare deterministic release files
+        run: npm run prepare-release
+      - name: Validate prepared candidate
+        run: npm test
+      - name: Commit generated runtime when needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/navimower-map-card.js dist/navimower-map-card.js; then
+            echo "Release runtime already prepared"
+            exit 0
+          fi
+          VERSION=$(node -p "require('./package.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/navimower-map-card.js dist/navimower-map-card.js
+          git commit -m "Prepare Navimower Map Card $VERSION runtime"
+          git push origin HEAD:${{ github.head_ref }}

@@ -90,7 +90,6 @@ card._resolved = {
 };
 card._apiPath = () => "/api/navimower/map/nav-entry";
 card._mowerEntity = () => "lawn_mower.legacy_tont";
-card._renderDialog = () => { card._renderedManagedSchedule = true; };
 let wsCalls = 0;
 card._hass = {
   states: { [statusEntity]: statusState },
@@ -112,12 +111,12 @@ const cached = await card._discoverNavimowerSchedulerEntities();
 assert.equal(cached.status, statusEntity);
 assert.equal(wsCalls, 1);
 
-// The status sensor is authoritative for managed-scheduler enablement. The
-// managed switch state is deliberately absent here; Auto must still open the
-// Navimower custom-order view from status.attributes.enabled.
+// The status sensor is authoritative for managed-scheduler enablement. beta2
+// owns the persistent dialog flag while the old beta6 render flag stays off so
+// HA state updates cannot rebuild the dialog DOM.
 await card._openScheduleDialog();
-assert.equal(card._beta6ManagedOpen, true);
-assert.equal(card._renderedManagedSchedule, true);
+assert.equal(card._beta2ScheduleOpen, true);
+assert.equal(card._beta6ManagedOpen, false);
 assert.equal(card._beta6SchedulerEntities.status, statusEntity);
 assert.equal(card._mowerDeviceId(), "nav-device");
 

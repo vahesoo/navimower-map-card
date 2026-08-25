@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.4-beta6 - 2026-08-25
+
+### Added
+
+- Add Visual Editor Schedule view selection: Automatic, Navimower or Native. Navimower can be opened while disabled so Custom order can be prepared safely.
+- Add Custom queue editing with reorder, repeat and remove controls backed by `navimower.set_schedule_queue`.
+- Render switch, select, number and time entities as direct controls in the Settings dialog; read-only/other entities retain More Info.
+
 ## 0.3.4-beta5 - 2026-08-24
 
 ### Added

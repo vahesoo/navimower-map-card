@@ -20,10 +20,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Prepare deterministic candidate
+        run: npm run prepare-release
+      - name: Ensure prepare only touches generated runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          UNEXPECTED=$(git diff --name-only | grep -Ev '^(src/navimower-map-card\.js|dist/navimower-map-card\.js)$' || true)
+          test -z "$UNEXPECTED" || { echo "$UNEXPECTED"; exit 1; }
+      - name: Snapshot prepared tree
+        run: git status --porcelain=v1 > /tmp/status-before-tests
       - name: Run read-only regression suite
         run: npm test
-      - name: Ensure tests did not modify tracked files
-        run: git diff --exit-code
+      - name: Ensure tests are read-only
+        run: |
+          git status --porcelain=v1 > /tmp/status-after-tests
+          diff -u /tmp/status-before-tests /tmp/status-after-tests
 
   validate-hacs:
     runs-on: ubuntu-latest

@@ -10,7 +10,7 @@
     "test": "npm run build && npm run check && npm run smoke && node tests/single-runtime.mjs && node tests/model-trail-width.mjs && node tests/custom-areas.mjs && node tests/custom-area-discovery.mjs && node tests/beta6-scheduler-settings.mjs",
     "smoke": "node tests/smoke.mjs"
   },
-  "keywords": ["home-assistant", "hacs", "lovelace", "navimower", "navimow", "robot-mower"],
+  "keywords": ["home-assistant", "hacs", "lovelace", "navimower", "navimow", "robot-mower", "scheduler"],
   "author": "Toomas Vähesoo",
   "license": "MIT"
 }

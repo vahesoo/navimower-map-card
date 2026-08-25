@@ -1,11 +1,11 @@
 {
   "name": "navimower-map-card",
-  "version": "0.3.4-beta7",
+  "version": "0.3.4-beta8",
   "description": "Home Assistant dashboard map card for the Navimower integration.",
   "private": true,
   "type": "module",
   "scripts": {
-    "prepare-release": "node scripts/sync-version.mjs && node scripts/build.mjs",
+    "prepare-release": "node scripts/sync-version.mjs && node scripts/upgrade-settings-ui.mjs && node scripts/build.mjs",
     "build": "node scripts/build.mjs",
     "check": "node scripts/check-runtime-layout.mjs && node --check src/navimower-map-card.js && node --check dist/navimower-map-card.js",
     "test": "npm run check && npm run smoke && node tests/release-contract.mjs && node tests/single-runtime.mjs && node tests/model-trail-width.mjs && node tests/custom-areas.mjs && node tests/custom-area-discovery.mjs && node tests/scheduler-settings.mjs",

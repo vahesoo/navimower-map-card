@@ -28,7 +28,7 @@ for (const marker of ["LATEST_MAP_PAYLOAD_CACHE","daily_trails_revision","show_v
 const hacs = JSON.parse(readFileSync("hacs.json", "utf8"));
 assert.equal(hacs.filename, "navimower-map-card.js");
 const build = readFileSync("scripts/build.mjs", "utf8");
-assert.match(build, /sourceJs\.length !== 1/); assert.match(build, /await rm\(distDir/); assert.match(build, /await copyFile\(source, target\)/);
+assert.match(build, /sourceJs\.length\s*!==?\s*1/); assert.match(build, /await\s+rm\(distDir/); assert.match(build, /await\s+copyFile\(source,\s*target\)/);
 const guard = readFileSync("scripts/check-runtime-layout.mjs", "utf8");
 assert.match(guard, /src must contain exactly one runtime JavaScript file/); assert.match(guard, /dist must contain exactly one runtime JavaScript file/); assert.match(guard, /byte|exact build copy/i);
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");

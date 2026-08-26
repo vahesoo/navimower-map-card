@@ -6170,7 +6170,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.5-beta4";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.5-beta5";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -8473,4 +8473,75 @@ if (globalThis.customElements) patchCustomAreas0342();
   proto._performanceRenderPhases035 = () => PHASES.map((phase) => [...phase]);
 
   console.info("[Navimower Map Card] 0.3.5-beta4 phased performance pipeline enabled");
+})();
+
+
+// 0.3.5-beta5: resilient mower artwork visibility.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower035Beta5MowerVisibility) return;
+  Card.__navimower035Beta5MowerVisibility = true;
+  const proto = Card.prototype;
+  const previousRenderMower = proto._renderMower;
+
+  const mowerEntityState = (card) => {
+    const entityId = card?._resolved?.mower_entity ||
+      card?._resolved?.status_entity ||
+      card?._config?.entity ||
+      card?._config?.mower_entity ||
+      null;
+    return entityId ? card?._hass?.states?.[entityId] || null : null;
+  };
+
+  const liveModel = (card) => {
+    const state = mowerEntityState(card);
+    return String(
+      state?.attributes?.model ||
+      state?.attributes?.device_model ||
+      card?._mapPayload?.frontend?.model ||
+      ""
+    ).trim();
+  };
+
+  const syncMowerArtworkModel = (card) => {
+    const configured = String(card?._config?.mower_icon || "auto").trim().toLowerCase();
+    if (configured !== "auto") return;
+
+    const model = liveModel(card);
+    if (model) {
+      if (card._mowerModel032 !== model || card._mowerModelResolved032 !== true) {
+        card._mowerModel032 = model;
+        card._mowerModelResolved032 = true;
+        card._mowerArtworkKey032 = null;
+        card._mowerRenderKey = null;
+      }
+      return;
+    }
+
+    // beta4 no longer traverses the expensive device-registry compatibility
+    // chain on every closed-card update. Until a model is available, mark the
+    // lookup as resolved so the existing artwork selector uses its safe H2
+    // fallback instead of returning null and hiding the mower group.
+    if (card._mowerModelResolved032 !== true) {
+      card._mowerModelResolved032 = true;
+      card._mowerArtworkKey032 = null;
+      card._mowerRenderKey = null;
+    }
+  };
+
+  proto._renderMower = function beta5RenderMower(...args) {
+    syncMowerArtworkModel(this);
+    return previousRenderMower?.apply(this, args);
+  };
+
+  // Keep this helper testable without reopening the old browser registry scan.
+  proto._syncMowerArtworkModel035 = function () {
+    syncMowerArtworkModel(this);
+    return {
+      model: this._mowerModel032 || "",
+      resolved: this._mowerModelResolved032 === true,
+    };
+  };
+
+  console.info("[Navimower Map Card] 0.3.5-beta5 resilient mower artwork visibility enabled");
 })();

@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const sourcePath = new URL("../src/navimower-map-card.js", import.meta.url);
+const sourcePath = process.env.NAVIMOWER_MAP_CARD_SOURCE || new URL("../src/navimower-map-card.js", import.meta.url);
 let source = await readFile(sourcePath, "utf8");
 const marker = "// 0.3.5-beta5: resilient mower artwork visibility.";
 if (source.includes(marker)) {

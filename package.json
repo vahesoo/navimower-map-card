@@ -1,14 +1,14 @@
 {
   "name": "navimower-map-card",
-  "version": "0.3.5-beta9",
+  "version": "0.3.5-beta10",
   "description": "Home Assistant dashboard map card for the Navimower integration.",
   "private": true,
   "type": "module",
   "scripts": {
-    "prepare-release": "node scripts/sync-version.mjs && node scripts/upgrade-settings-ui.mjs && node scripts/upgrade-current-cycle-ui.mjs && node scripts/upgrade-scheduler-discovery.mjs && node scripts/upgrade-scheduler-editor.mjs && node scripts/upgrade-scheduler-performance.mjs && node scripts/upgrade-scheduler-mobile-scope.mjs && node scripts/upgrade-performance-pipeline.mjs && node scripts/upgrade-mower-visibility.mjs && node scripts/upgrade-editor-layout.mjs && node scripts/upgrade-editor-color-labels.mjs && node scripts/upgrade-editor-color-labels-native.mjs && node scripts/upgrade-backend-current-cycle-render.mjs && node scripts/build.mjs",
+    "prepare-release": "node scripts/sync-version.mjs && node scripts/upgrade-settings-ui.mjs && node scripts/upgrade-current-cycle-ui.mjs && node scripts/upgrade-scheduler-discovery.mjs && node scripts/upgrade-scheduler-editor.mjs && node scripts/upgrade-scheduler-performance.mjs && node scripts/upgrade-scheduler-mobile-scope.mjs && node scripts/upgrade-performance-pipeline.mjs && node scripts/upgrade-mower-visibility.mjs && node scripts/upgrade-editor-layout.mjs && node scripts/upgrade-editor-color-labels.mjs && node scripts/upgrade-editor-color-labels-native.mjs && node scripts/upgrade-backend-current-cycle-render.mjs && node scripts/upgrade-editor-organization.mjs && node scripts/build.mjs",
     "build": "node scripts/build.mjs",
     "check": "node scripts/check-runtime-layout.mjs && node --check src/navimower-map-card.js && node --check dist/navimower-map-card.js",
-    "test": "npm run check && npm run smoke && node tests/release-contract.mjs && node tests/single-runtime.mjs && node tests/model-trail-width.mjs && node tests/custom-areas.mjs && node tests/custom-area-discovery.mjs && node tests/scheduler-settings.mjs && node tests/scheduler-discovery.mjs && node tests/scheduler-editor.mjs && node tests/scheduler-performance.mjs && node tests/scheduler-mobile-scope.mjs && node tests/current-cycle-ui.mjs && node tests/backend-current-cycle-render.mjs && node tests/performance-pipeline.mjs && node tests/mower-visibility.mjs && node tests/editor-layout.mjs && node tests/editor-color-labels.mjs && node tests/editor-color-labels-native.mjs",
+    "test": "npm run check && npm run smoke && node tests/release-contract.mjs && node tests/single-runtime.mjs && node tests/model-trail-width.mjs && node tests/custom-areas.mjs && node tests/custom-area-discovery.mjs && node tests/scheduler-settings.mjs && node tests/scheduler-discovery.mjs && node tests/scheduler-editor.mjs && node tests/scheduler-performance.mjs && node tests/scheduler-mobile-scope.mjs && node tests/current-cycle-ui.mjs && node tests/backend-current-cycle-render.mjs && node tests/performance-pipeline.mjs && node tests/mower-visibility.mjs && node tests/editor-layout.mjs && node tests/editor-color-labels.mjs && node tests/editor-color-labels-native.mjs && node tests/editor-organization.mjs",
     "smoke": "node tests/smoke.mjs"
   },
   "keywords": ["home-assistant", "hacs", "lovelace", "navimower", "navimow", "robot-mower", "scheduler"],

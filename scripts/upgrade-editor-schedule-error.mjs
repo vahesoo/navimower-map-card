@@ -60,14 +60,7 @@ ${marker}
         if (!COLOR_FIELDS.has(field?.name)) return;
         const text = field?.selector?.text;
         if (!text || text.type !== "color") return;
-
-        // Home Assistant ha-form supports a field-level default. Supplying the
-        // same defaults used by the runtime prevents an absent config value
-        // from being rendered as the browser's misleading black color input.
         field.default = COLOR_DEFAULTS[field.name];
-
-        // Remove the beta10 prefix workaround. Every color returns to one
-        // uniform native layout: one normal label region and one color input.
         const { prefix: _prefix, ...rest } = text;
         field.selector = { ...field.selector, text: rest };
       });
@@ -116,7 +109,7 @@ ${marker}
     if (nativeOn) parts.push("Native On");
     if (managedOn) parts.push("Navimower On");
     if (!parts.length) parts.push("Off");
-    button.title = `Mowing schedule · ${parts.join(" · ")}`;
+    button.title = "Mowing schedule · " + parts.join(" · ");
   }
 
   const previousRenderShell = proto._renderShell;
@@ -126,8 +119,6 @@ ${marker}
     return result;
   };
 
-  // Include the managed scheduler in the lightweight live snapshot so its
-  // state change invalidates the shell just like a native schedule change.
   const previousLiveSnapshot = proto._liveSnapshot;
   if (typeof previousLiveSnapshot === "function") {
     proto._liveSnapshot = function beta11LiveSnapshot(...args) {
@@ -163,17 +154,17 @@ ${marker}
     if (!card || card.__beta11ErrorPulseStyle) return;
     card.__beta11ErrorPulseStyle = true;
     const style = document.createElement("style");
-    style.textContent = `
-      .nm-h2-mower.nm-mower-error-pulse {
-        transform-box: fill-box;
-        transform-origin: center;
-        animation: nm-mower-error-pulse 1.15s ease-in-out infinite;
-      }
-      @keyframes nm-mower-error-pulse {
-        0%, 100% { filter: drop-shadow(0 1px 2px rgba(0,0,0,.38)) drop-shadow(0 0 0 rgba(244,67,54,0)); }
-        50% { filter: drop-shadow(0 1px 2px rgba(0,0,0,.38)) drop-shadow(0 0 13px rgba(244,67,54,.95)) drop-shadow(0 0 5px rgba(244,67,54,1)); }
-      }
-    `;
+    style.textContent = [
+      ".nm-h2-mower.nm-mower-error-pulse {",
+      "  transform-box: fill-box;",
+      "  transform-origin: center;",
+      "  animation: nm-mower-error-pulse 1.15s ease-in-out infinite;",
+      "}",
+      "@keyframes nm-mower-error-pulse {",
+      "  0%, 100% { filter: drop-shadow(0 1px 2px rgba(0,0,0,.38)) drop-shadow(0 0 0 rgba(244,67,54,0)); }",
+      "  50% { filter: drop-shadow(0 1px 2px rgba(0,0,0,.38)) drop-shadow(0 0 13px rgba(244,67,54,.95)) drop-shadow(0 0 5px rgba(244,67,54,1)); }",
+      "}",
+    ].join("\n");
     card.appendChild(style);
   }
 

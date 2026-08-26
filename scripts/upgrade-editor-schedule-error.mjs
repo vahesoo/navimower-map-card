@@ -164,7 +164,7 @@ ${marker}
       "  0%, 100% { filter: drop-shadow(0 1px 2px rgba(0,0,0,.38)) drop-shadow(0 0 0 rgba(244,67,54,0)); }",
       "  50% { filter: drop-shadow(0 1px 2px rgba(0,0,0,.38)) drop-shadow(0 0 13px rgba(244,67,54,.95)) drop-shadow(0 0 5px rgba(244,67,54,1)); }",
       "}",
-    ].join("\n");
+    ].join("\\n");
     card.appendChild(style);
   }
 

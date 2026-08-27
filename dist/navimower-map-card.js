@@ -6170,7 +6170,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.5-beta13";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.5-beta14";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -9671,4 +9671,77 @@ if (globalThis.customElements) patchCustomAreas0342();
   }
 
   console.info("[Navimower Map Card] 0.3.5-beta13 legend visibility and managed schedule toggle enabled");
+})();
+
+
+// 0.3.5-beta14: consistent card-dialog backdrop closing and schedule header alignment.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower035Beta14DialogPolish) return;
+  Card.__navimower035Beta14DialogPolish = true;
+  const proto = Card.prototype;
+
+  function attachBackdropClose(root, closeSelector, markerName) {
+    if (!root || root[markerName]) return;
+    root[markerName] = true;
+    root.addEventListener("click", (event) => {
+      if (event.target !== root) return;
+      root.querySelector(closeSelector)?.click();
+    });
+  }
+
+  function polishSettings(card) {
+    const root = card?._modalHostEl?.querySelector?.("[data-beta8-settings-root]");
+    attachBackdropClose(root, "[data-beta8-settings-close]", "__navimowerBeta14SettingsBackdrop");
+  }
+
+  function polishSchedule(card) {
+    const root = card?._modalHostEl?.querySelector?.("[data-beta11-root], [data-beta2-root]");
+    if (!root) return;
+
+    const head = root.querySelector(".nm-schedule-dialog-head");
+    const copy = head?.firstElementChild;
+    const close = head?.querySelector(".nm-schedule-close");
+    if (head) head.style.alignItems = "flex-start";
+    if (copy && copy !== close) {
+      copy.style.flex = "1 1 auto";
+      copy.style.minWidth = "0";
+    }
+    if (close) {
+      close.style.marginLeft = "auto";
+      close.style.flex = "0 0 auto";
+    }
+
+    attachBackdropClose(root, "[data-beta11-close], [data-beta2-close]", "__navimowerBeta14ScheduleBackdrop");
+  }
+
+  function polishDialogs(card) {
+    polishSettings(card);
+    polishSchedule(card);
+  }
+
+  const previousRenderDialog = proto._renderDialog;
+  if (typeof previousRenderDialog === "function") {
+    proto._renderDialog = function beta14RenderDialog(...args) {
+      const result = previousRenderDialog.apply(this, args);
+      polishDialogs(this);
+      globalThis.queueMicrotask?.(() => polishDialogs(this));
+      return result;
+    };
+  }
+
+  const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
+  if (previousHass?.set) {
+    Object.defineProperty(proto, "hass", {
+      configurable: true,
+      get: previousHass.get,
+      set(value) {
+        previousHass.set.call(this, value);
+        polishDialogs(this);
+        globalThis.queueMicrotask?.(() => polishDialogs(this));
+      },
+    });
+  }
+
+  console.info("[Navimower Map Card] 0.3.5-beta14 dialog backdrop closing and schedule header alignment enabled");
 })();

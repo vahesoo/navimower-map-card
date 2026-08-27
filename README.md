@@ -27,9 +27,10 @@ A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo
 ## Requirements
 
 - Home Assistant 2026.6 or newer
-- [`Navimower`](https://github.com/vahesoo/NaviMower) integration
-- A recent Navimower release is strongly recommended. The current-cycle SVG view and managed scheduler require integration support for those features.
+- [`Navimower`](https://github.com/vahesoo/NaviMower) integration **0.4.3 or newer**
 - HACS is recommended for installation and updates.
+
+Navimower 0.4.3 provides the backend current-cycle rendering, Custom Area Map API data and managed scheduler metadata used by this card release.
 
 ## Installation with HACS
 

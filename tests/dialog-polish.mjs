@@ -5,7 +5,7 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const upgrade = readFileSync("scripts/upgrade-dialog-polish.mjs", "utf8");
 
-assert.equal(pkg.version, "0.3.5-beta14");
+assert.match(pkg.version, /^0\.3\.5(?:-beta\d+)?$/);
 assert.match(source, /0\.3\.5-beta14: consistent card-dialog backdrop closing and schedule header alignment/);
 
 // Settings and managed Schedule close only when the backdrop itself is clicked.
@@ -31,4 +31,4 @@ assert.match(upgrade, /Expected beta13 marker was not found/);
 assert.match(pkg.scripts["prepare-release"], /upgrade-dialog-polish\.mjs/);
 assert.match(pkg.scripts.test, /dialog-polish\.mjs/);
 
-console.log("beta14 dialog polish and grid sizing regression checks passed");
+console.log("0.3.5 dialog polish and grid sizing regression checks passed");

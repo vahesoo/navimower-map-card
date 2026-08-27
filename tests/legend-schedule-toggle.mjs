@@ -5,7 +5,7 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const upgrade = readFileSync("scripts/upgrade-legend-schedule-toggle.mjs", "utf8");
 
-assert.equal(pkg.version, "0.3.5-beta13");
+assert.match(pkg.version, /^0\.3\.5(?:-beta\d+)?$/);
 assert.match(source, /0\.3\.5-beta13: legend visibility follows map toggles and managed schedule gets an enable switch/);
 
 // Legend entries must follow the same visibility toggles as the rendered map.

@@ -6170,7 +6170,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.5-beta12";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.5-beta13";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -9532,4 +9532,143 @@ if (globalThis.customElements) patchCustomAreas0342();
   }
 
   console.info("[Navimower Map Card] 0.3.5-beta12 installation defaults and uniform stroke widths enabled");
+})();
+
+
+// 0.3.5-beta13: legend visibility follows map toggles and managed schedule gets an enable switch.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower035Beta13LegendSchedule) return;
+  Card.__navimower035Beta13LegendSchedule = true;
+  const proto = Card.prototype;
+
+  function hasCustomAreas(card) {
+    const apiAreas = Array.isArray(card?._mapPayload?.custom_areas) ? card._mapPayload.custom_areas : [];
+    const entityAreas = Array.isArray(card?._customAreaEntities0342) ? card._customAreaEntities0342 : [];
+    return apiAreas.length > 0 || entityAreas.length > 0;
+  }
+
+  // The core legend receives existence flags, but visibility is a card setting.
+  // Keep the legend in lock-step with what the map is actually allowed to draw.
+  proto._legend = function beta13Legend(hasGateAreas, hasChannels) {
+    const rows = [
+      [this._config.trail_color, "Mowed"],
+      [this._config.off_limit_color, "Off-limit"],
+    ];
+    if (this._config.show_vf_off_areas !== false) rows.push([this._config.vf_off_color, "VF-off"]);
+    if (hasChannels && this._config.show_channels !== false) rows.push([this._config.channel_color, "Channel"]);
+    if (hasGateAreas && this._config.show_gate_areas !== false) rows.push([this._config.gate_area_color, "Gate area"]);
+    if (this._config.show_custom_areas !== false && hasCustomAreas(this)) rows.push([this._config.custom_area_color, "Custom area"]);
+
+    const fontSize = 19;
+    const rowHeight = 30;
+    const height = rows.length * rowHeight + 18;
+    const opacity = clamp(finiteNumber(this._config.map_legend_opacity, 0.58), 0, 1);
+    let result = '<g><rect x="14" y="14" width="158" height="' + height + '" rx="10" fill="var(--card-background-color, #fff)" fill-opacity="' + opacity.toFixed(2) + '" stroke="#9e9e9e" stroke-opacity=".25"/>';
+    rows.forEach(([color, label], index) => {
+      const y = 33 + index * rowHeight;
+      result += '<rect x="28" y="' + (y - 10) + '" width="18" height="18" rx="3" fill="' + escapeHtml(color) + '"/>';
+      result += '<text x="56" y="' + (y + 5) + '" font-family="sans-serif" font-size="' + fontSize + '" font-weight="600" fill="var(--primary-text-color, #263238)">' + escapeHtml(label) + '</text>';
+    });
+    return result + '</g>';
+  };
+
+  const previousStaticCacheKey = proto._staticCacheKey;
+  if (typeof previousStaticCacheKey === "function") {
+    proto._staticCacheKey = function beta13StaticCacheKey(...args) {
+      const base = previousStaticCacheKey.apply(this, args);
+      const customCount = (Array.isArray(this?._mapPayload?.custom_areas) ? this._mapPayload.custom_areas.length : 0)
+        + (Array.isArray(this?._customAreaEntities0342) ? this._customAreaEntities0342.length : 0);
+      return [base, this?._config?.show_custom_areas !== false, this?._config?.custom_area_color || "", customCount].join("|");
+    };
+  }
+
+  function managedSwitchId(card) {
+    return card?._beta2SchedulerIds?.managedSwitch
+      || card?._beta10SchedulerEntities?.managedSwitch
+      || card?._beta6SchedulerEntities?.managedSwitch
+      || card?._beta5SchedulerEntities?.managedSwitch
+      || null;
+  }
+
+  function injectScheduleToggle(card) {
+    if (!card?._beta6ManagedOpen && !card?._beta2ScheduleOpen) return;
+    const root = card._modalHostEl?.querySelector?.("[data-beta11-root], [data-beta2-root]");
+    if (!root || root.querySelector("[data-beta13-schedule-enable]")) return;
+
+    const scroller = root.querySelector("[data-beta11-scroll], [data-beta2-scroll]");
+    if (!scroller) return;
+    const entityId = managedSwitchId(card);
+    const entity = entityId ? card._hass?.states?.[entityId] : null;
+    const enabled = String(entity?.state || "").toLowerCase() === "on";
+    const available = Boolean(entityId && entity && entity.state !== "unavailable" && entity.state !== "unknown");
+
+    const section = document.createElement("section");
+    section.className = root.matches("[data-beta11-root]") ? "nm-beta11-section nm-beta13-enable-section" : "nm-beta2-section nm-beta13-enable-section";
+    section.setAttribute("data-beta13-schedule-enable", "");
+    section.innerHTML =
+      '<style>' +
+        '.nm-beta13-enable-section{padding-top:10px!important;padding-bottom:8px!important;border-bottom:1px solid var(--divider-color);}' +
+        '.nm-beta13-enable-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px;}' +
+        '.nm-beta13-enable-copy{min-width:0;}' +
+        '.nm-beta13-enable-title{font-weight:650;}' +
+        '.nm-beta13-enable-state{margin-top:2px;color:var(--secondary-text-color);font-size:.9em;}' +
+      '</style>' +
+      '<div class="nm-beta13-enable-row">' +
+        '<div class="nm-beta13-enable-copy"><div class="nm-beta13-enable-title">Schedule</div><div class="nm-beta13-enable-state" data-beta13-enable-state>' + (available ? (enabled ? 'On' : 'Off') : 'Unavailable') + '</div></div>' +
+        '<ha-switch data-beta13-enable-switch' + (available ? '' : ' disabled') + '></ha-switch>' +
+      '</div>';
+
+    scroller.prepend(section);
+    const toggle = section.querySelector("[data-beta13-enable-switch]");
+    if (toggle) toggle.checked = enabled;
+    toggle?.addEventListener("change", async () => {
+      if (!entityId || !available) return;
+      const requested = Boolean(toggle.checked);
+      const stateLabel = section.querySelector("[data-beta13-enable-state]");
+      toggle.disabled = true;
+      if (stateLabel) stateLabel.textContent = requested ? "Turning on…" : "Turning off…";
+      try {
+        await card._hass.callService("switch", requested ? "turn_on" : "turn_off", { entity_id: entityId });
+        if (stateLabel) stateLabel.textContent = requested ? "On" : "Off";
+      } catch (error) {
+        console.warn("[Navimower Map Card] schedule toggle failed", error);
+        toggle.checked = !requested;
+        if (stateLabel) stateLabel.textContent = !requested ? "On" : "Off";
+      } finally {
+        toggle.disabled = false;
+      }
+    });
+  }
+
+  const previousRenderDialog = proto._renderDialog;
+  if (typeof previousRenderDialog === "function") {
+    proto._renderDialog = function beta13RenderDialog(...args) {
+      const result = previousRenderDialog.apply(this, args);
+      injectScheduleToggle(this);
+      return result;
+    };
+  }
+
+  const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
+  if (previousHass?.set) {
+    Object.defineProperty(proto, "hass", {
+      configurable: true,
+      get: previousHass.get,
+      set(value) {
+        previousHass.set.call(this, value);
+        const root = this._modalHostEl?.querySelector?.("[data-beta13-schedule-enable]");
+        if (!root) return;
+        const entityId = managedSwitchId(this);
+        const entity = entityId ? this._hass?.states?.[entityId] : null;
+        const enabled = String(entity?.state || "").toLowerCase() === "on";
+        const toggle = root.querySelector?.("[data-beta13-enable-switch]");
+        const label = root.querySelector?.("[data-beta13-enable-state]");
+        if (toggle && !toggle.disabled) toggle.checked = enabled;
+        if (label && toggle && !toggle.disabled) label.textContent = entity ? (enabled ? "On" : "Off") : "Unavailable";
+      },
+    });
+  }
+
+  console.info("[Navimower Map Card] 0.3.5-beta13 legend visibility and managed schedule toggle enabled");
 })();

@@ -1,6 +1,6 @@
 # Navimower Map Card
 
-![Navimower Map Card](docs/images/navimower-map-card.jpg)
+![Navimower Map Card](docs/images/navimower-map-card.png)
 
 A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo/NaviMower) custom integration. It combines the live mower map, current mowing cycle, history, notifications, mower controls, scheduling and selected device settings in one responsive card.
 

@@ -1,49 +1,35 @@
 # Navimower Map Card
 
-![Navimower Map Card](docs/images/navimower-map-card.svg)
+![Navimower Map Card](docs/images/navimower-map-card.jpg)
 
-A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo/NaviMower) custom integration.
-
-It combines the mower map, live MQTT position, mowing history, direct mower controls, ordered zone mowing, weekly schedule editing, and account-scoped Navimow notifications in one HACS-managed Lovelace card.
+A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo/NaviMower) custom integration. It combines the live mower map, current mowing cycle, history, notifications, mower controls, scheduling and selected device settings in one responsive card.
 
 > [!IMPORTANT]
-> This card is built for the **Navimower** integration and uses the custom element `custom:navimower-map-card`.
-> It is not the older `Navimow Map Card` made for the previous integration.
+> This card is designed for the **Navimower** integration and uses `custom:navimower-map-card`.
 
-## Highlights
+## Features
 
-- Decoded Navimow map geometry with zones, Off-limit areas, VF-off areas, Channels, Gate areas, and charging station
-- Live MQTT mower position and heading
-- Configurable day-based map history, defaulting to Today and the two preceding dates
-- Configurable History selector with matching routes and session times for each day
-- Gap-aware trail segments for pauses, integration reloads, and Home Assistant restarts
-- Clickable session times that briefly pulse the selected session route at the original three-pulse tempo
-- Interactive zone labels with progress, mowing times, and cutting height when the mower supports automatic height control
-- Automatic zone-label decluttering so nearby zone markers no longer cover each other
-- Optional VisionFence / VF-off geometry visibility for cleaner perimeter-style maps
-- Cached static map geometry and selective live-layer updates for faster dashboard reopening
-- Automatic filtering of completed history records that contain no drawable route
-- Conditional Resume plus Mow, Pause, and Dock controls directly below the map
-- Integrated **Mow now** dialog with ordered zone selection and progress reset/continue choice
-- Integrated weekly **Schedule** editor with one mobile-friendly global Save action
-- Compact **Notifications** panel with per-message **Mark as read**, **Mark all as read**, and expandable message bodies
-- Configurable retained-notification count and optional mark-all-read behavior when the dialog is opened
-- Two-row header with a separate configurable title row and a wrapping History / Notifications / Schedule action row
-- Model-aware mower artwork for H1/H2, i-series, i2 LiDAR, X3 and X4, with flicker-safe automatic detection and manual override
-- Home Assistant native color pickers in the visual card editor
-- Automatic related-entity discovery from one `lawn_mower` entity
-- Visual card editor and optional YAML configuration
-- Mouse-wheel zoom, pinch zoom, pan, configurable initial focus, and optional browser-side view memory
-- Home Assistant Sections-view sizing
-- No external JavaScript dependencies
+- **Current cycle map** — the default view renders the integration-prepared `current_cycle_render`, so each zone shows only the mowing area from its latest confirmed mowing cycle.
+- **History** — previous completed sessions stay available by day and can be highlighted without being mixed into the default current-cycle view.
+- **Live mower position** — MQTT-backed position and heading with model-aware mower artwork for H1/H2, i-series, i2 LiDAR, X3 and X4 families.
+- **Mower controls** — conditional Resume plus Mow, Pause and Dock controls.
+- **Mow now** — select zones in order and choose whether to restart the selected mowing area or continue remaining progress.
+- **Notifications** — compact retained Navimow notifications with unread state, per-message read action and Mark all as read.
+- **Schedule** — supports both the native Navimow schedule and the integration-owned Navimower schedule.
+- **Settings** — optional quick access to selected Home Assistant entities from the mower device.
+- **Map geometry** — zones, Off-limit areas, VF-off areas, Channels, Gate areas, charging station and integration-defined Custom Areas.
+- **Visual editor** — grouped Displayed information, Appearance and Colors settings with native Home Assistant controls.
+- **Configurable header** — History, Notifications, Schedule and Settings buttons can be shown or hidden independently.
+- **Error feedback** — the mower icon gets a red pulsing glow while the `lawn_mower` entity reports an error.
+- **Zoom and pan** — mouse wheel, pinch zoom, pan, initial focus and optional browser-side view memory.
+- **Performance-oriented rendering** — expensive current-cycle geometry is prepared by the Navimower integration; the card primarily renders the prepared SVG and updates only the live layers that changed.
 
 ## Requirements
 
 - Home Assistant 2026.6 or newer
 - [`Navimower`](https://github.com/vahesoo/NaviMower) integration
-- Navimower **0.4.2 or later** is recommended for the complete Notifications read-action and dedicated Resume experience
-- Older compatible Navimower versions can still render the map/history, but newer integration features are exposed only when their Home Assistant actions/entities exist
-- HACS is recommended for installation and updates
+- A recent Navimower release is strongly recommended. The current-cycle SVG view and managed scheduler require integration support for those features.
+- HACS is recommended for installation and updates.
 
 ## Installation with HACS
 
@@ -53,407 +39,242 @@ It combines the mower map, live MQTT position, mowing history, direct mower cont
 4. Open **Navimower Map Card** and choose **Download**.
 5. Refresh the Home Assistant frontend.
 
-HACS installs and registers the card resource automatically. You do not need to add a Lovelace resource manually.
-
-Current prereleases and stable releases use one HACS runtime asset:
+HACS installs the single runtime resource automatically:
 
 ```text
 dist/navimower-map-card.js
 ```
 
-The runtime filename intentionally stays stable. Beta history is retained by Git commits, tags and GitHub releases rather than by keeping version-specific JavaScript loaders on `main`.
+## Quick start
 
-## Basic configuration
-
-Normally only the mower entity is required:
+Only the mower entity is normally required:
 
 ```yaml
 type: custom:navimower-map-card
-entity: lawn_mower.tont
+entity: lawn_mower.my_mower
 ```
 
-The card automatically looks for related Navimower entities on the same Home Assistant device, including:
+With `auto_entities: true` the card discovers the related Navimower map, position, heading, battery, zone, notification and scheduler entities from the same Home Assistant device.
 
-- map data
-- position X and Y
-- heading
-- battery
-- current physical zone
-- mowing schedule
-- Latest notification
+## Current cycle and History
 
-Every core detected entity can be overridden in the visual editor or YAML. The notification sensor is normally discovered automatically from the selected mower/device.
+The default map is **Current cycle**, not a union of every mowing session from the current day.
 
-## What the card controls
+For every zone, the Navimower integration decides where the latest confirmed mowing cycle begins. A pause, charging stop, Home Assistant restart or `reset=false` continuation stays in the same cycle. A confirmed new cycle/reset clears only that zone's older mowing area from the default view. Older completed sessions are not deleted; they remain available under **History**.
 
-### Resume, Mow, Pause, and Dock
+The integration provides the prepared SVG through:
 
-The card keeps the normal mower controls below the map and adds a dedicated **Resume** action when the installed Navimower integration exposes `navimower.resume`.
-
-- **Resume** appears conditionally for paused, docked, or charging states when the action is available. It calls only `navimower.resume` and does not send a new zone selection.
-- **Mow** is the explicit new/restart mowing action and opens the integrated zone-aware Mow now dialog when dedicated Resume support is available.
-- Older Navimower versions without `navimower.resume` retain the previous paused-Mow compatibility behavior.
-- A docked/charging Resume button means the action is available; whether the mower still retains an interrupted vendor task remains model/firmware dependent.
-- **Pause** pauses the current mower task.
-- **Dock** sends the mower to the charging station.
-
-### Mow now
-
-The Mow now dialog supports:
-
-- selecting one or more zones
-- choosing the mowing order by tapping zones in sequence
-- leaving all zones unselected to let the mower choose its own order
-- clearing previous mowing progress or continuing the remaining area
-
-The selected zone IDs are sent to `navimower.mow` in the same order in which the zone buttons were pressed.
-
-### Schedule
-
-The **Schedule** button in the card header opens the weekly schedule editor.
-
-- Orange (`#FF5A00`): at least one enabled mowing period exists
-- Grey: the schedule is off, empty, or unavailable
-
-The editor supports:
-
-- enabling and disabling weekdays
-- multiple mowing periods per day
-- 15-minute start and end time steps
-- all zones or selected zones for each period
-- editing several weekdays before saving
-- one persistent **Save changed days** action and one global discard action
-
-Schedule changes are saved through `navimower.set_schedule`. No separate scheduler card or JavaScript resource is required.
-
-### Notifications
-
-The **Notifications** label and bell in the header use the retained `Latest notification` sensor state:
-
-- Orange (`#FF5A00`) with `mdi:bell-badge-outline`: at least one retained notification is unread
-- Grey with `mdi:bell-outline`: all retained notifications are read, or no unread state is present
-
-The notification dialog is compact by default. Each item initially shows only its timestamp and title. An unread item has an orange **Mark as read** action at the end of the timestamp row. Clicking the title expands or collapses the notification body; when that title is unread, the same click also calls the one-message read action. Clicking **Mark as read** itself leaves the body collapsed. Once the integration refreshes that message as `read: true`, its read action disappears.
-
-When at least one retained message is unread, **Mark all as read** is shown at the top center of the dialog. The card calls only Home Assistant actions:
-
-- `navimower.mark_notification_read` with the vendor `message_id`
-- `navimower.mark_all_notifications_read`
-
-The browser never calls the Navimow private cloud directly and never changes `read` optimistically. Navimower performs the vendor request, immediately refreshes the Device notification feed, and the card follows the resulting sensor state. Read state is scoped to the private-cloud Navimow account used by that mower's config entry.
-
-Opening the dialog does **not** mark anything read by default. The visual editor and YAML expose:
-
-```yaml
-notification_mark_read_on_open: false
-notification_count: 5
+```text
+current_cycle_render.mowed_area.path_d
 ```
 
-`notification_count` accepts `1` through `10` and defaults to `5`. The current Navimower integration intentionally exposes at most five recent rows in the sensor attributes to stay below Home Assistant Recorder's state-attribute size limit, so values above five are currently future-facing. If `notification_mark_read_on_open` is enabled, opening the dialog explicitly calls **Mark all notifications as read** for that mower/account context.
+The card renders that backend-prepared area directly. It does not reconstruct mowing cycles in the browser.
 
-## Map terminology
+Clicking a History session highlights the selected completed session. `history_days` controls how many calendar days are available in the History selector.
 
-The card uses the same concepts as the Navimow app:
+## Mower controls
 
-- **Off-limit** — mapped areas the mower must not enter
-- **VF-off** — areas where VisionFence obstacle detection is disabled
-- **Channel** — Navimow routes connecting mowing zones
-- **Gate area** — local Home Assistant rectangles used by gate/interlock logic
+### Resume
 
-The relevant map payload fields are:
+When the installed Navimower integration reports a resumable retained task, **Resume** calls `navimower.resume`. It does not create a new mowing cycle.
 
-```json
-{
-  "map": {
-    "off_limit_areas": [],
-    "vf_off_areas": [],
-    "channels": []
-  },
-  "gate_areas": []
-}
+### Mow
+
+**Mow** opens the integrated Mow now dialog. You can:
+
+- select one or more zones;
+- tap zones in the desired order;
+- leave all zones unselected to let the mower choose its route;
+- restart the selected mowing area or continue remaining progress.
+
+### Pause and Dock
+
+**Pause** pauses the mower task and **Dock** sends the mower to the charging station.
+
+## Schedule
+
+The Schedule button supports two schedule sources:
+
+- **Native schedule** — the weekly schedule stored by Navimow.
+- **Navimower schedule** — the integration-owned time-window/queue scheduler.
+
+The Schedule button is orange whenever **either** schedule is enabled.
+
+### Set up the Navimower schedule first
+
+The Navimower scheduler belongs to the integration, not to the card. Configure it first from the mower's Home Assistant **Device** page:
+
+1. Open **Settings → Devices & services → Navimower**.
+2. Open the mower device.
+3. Configure the Navimower schedule entities/options for the desired time window, order and zones.
+4. Enable the Navimower schedule when the configuration is ready.
+
+After that, the card's **Schedule** button can open the managed scheduler interface, where the current time window and custom zone order can be viewed and adjusted. The card sends changes back through Navimower Home Assistant actions/entities; it does not run a second browser-side scheduler.
+
+If the Navimower schedule is disabled, the Schedule button can still open the native Navimow schedule according to the selected Schedule view mode.
+
+The integration defines the scheduler runtime behavior. In current releases, disabling the Navimower schedule pauses scheduler ownership without erasing its runtime state; enabling it resumes the scheduler. A deliberate scheduler reset is a separate integration action.
+
+## Notifications
+
+The Notifications button uses the Navimower retained notification feed. It can show unread state, expand message bodies and call the integration's read actions:
+
+```text
+navimower.mark_notification_read
+navimower.mark_all_notifications_read
 ```
 
-## Today and configurable history
+The card never calls the Navimow cloud directly. Notification state and account scoping remain integration responsibilities.
 
-The default map is **Today**. It shows the retained mowing routes and session times from the current calendar day, including the live active trail. The **History** button in the card header offers a configurable number of calendar days. `history_days` accepts `1` through `31` and defaults to `3`, so the default choices are **Today** plus the two preceding dates in compact `DD.MM` format. Days remain selectable even when no mowing session was recorded on that date. Selecting a date filters both map routes and session buttons to that calendar day, and all sessions from the selected day are shown.
+## Settings button
 
-```yaml
-history_days: 3
-show_session_legend: true
-```
+The optional Settings button opens the Home Assistant entities selected in the card editor. Use it for the mower settings you want available directly from the dashboard without duplicating their logic in the card.
 
-`show_session_legend` controls only the session-time row. The legacy `session_count` YAML key is accepted for compatibility but no longer limits History.
+## Map areas
 
-Clicking a session time draws that session temporarily above the selected map and pulses it three times. The original 600 ms pulse speed is retained, while `forwards` fill mode removes the brief extra color flash after the third pulse.
+The map uses Navimow/Navimower terminology:
 
-Use these settings for the mowed area:
+- **Zone** — mowing area
+- **Off-limit** — mapped area the mower must not enter
+- **VF-off** — area where VisionFence obstacle detection is disabled
+- **Channel** — route connecting mowing zones
+- **Gate area** — Navimower gate/interlock geometry
+- **Custom area** — integration-defined Home Assistant area overlay
 
-```yaml
-trail_color: "#43a047"
-trail_opacity: 0.55
-```
+Custom Areas can be shown or hidden independently. Their fill opacity, border width and color are configured under the same Appearance/Colors groups as the other map geometry.
 
-There are no separate active-trail or old-trail color and opacity controls.
+## Visual defaults
 
-Trail thickness is model-aware. For mower families with a confirmed cutting width, the card renders the mowing swath as the physical cutting width plus 5 cm of visual tolerance on each side of the route centreline. This prevents small gaps between adjacent passes caused by route sampling/rendering while leaving mower data and coverage untouched. Unknown models keep the legacy 25 cm display width.
+New cards start with a clean, thin-line map style. These are the main visual defaults:
 
-Navimower v0.3.0 map API schema v5 also provides prepared per-zone `daily_trails`. The card keeps the latest same-day cycle for each zone, clears only the zone entered by a new cycle, and retains full sessions for History. While an active backend session returns to the charging station, the live route continues updating when the integration's return-route retention option is enabled.
+| Setting | Default |
+| --- | ---: |
+| Map background | `#ffffff` |
+| Map legend opacity | `0.10` |
+| Zone fill | `#81c784` / `0.20` |
+| Zone border | `#43a047` / `1.5` |
+| Mowed area | `#43a047` / `0.50` |
+| Off-limit | `#FF5A00` / `1.5` |
+| VF-off | `#2F80ED` / `1.5` |
+| Channel | `#808080` / `1.5` |
+| Gate area | `#8e24aa` / `1.5` |
+| Dock | `#37474f` / `1.5` |
+| Custom area | `#8e24aa`, fill `0.10`, border `1.5` |
+| Zone label opacity | `0.75` |
+| Mower scale | `1.2` |
+| Dock scale | `1.1` |
+| Zone marker scale | `1.1` |
 
-Older schema v4 payloads remain supported through cycle-aware sessions and separate route fragments:
+All map border-width controls, including **Custom area border width**, use sliders in the visual editor.
 
-```json
-{
-  "schema_version": 4,
-  "trail_segments": [
-    [[1.2, 3.4], [1.3, 3.5]],
-    [[4.1, 5.2], [4.2, 5.3]]
-  ],
-  "sessions": [
-    {
-      "id": "session-1",
-      "started_at": "2026-07-30T16:15:00+03:00",
-      "ended_at": null,
-      "active": true,
-      "segments": [
-        [[1.2, 3.4], [1.3, 3.5]],
-        [[4.1, 5.2], [4.2, 5.3]]
-      ]
-    }
-  ]
-}
-```
+## Example YAML
 
-The card renders every segment separately so missing position data during a pause, reload, or restart does not create a false straight line. Intentional cycle boundaries remain separate even when the next cycle starts within five minutes. Completed backend session stubs with no drawable route are filtered out, while a newly active session remains visible until its route has enough points to be selected. The older flat `trail` and `points` fields remain supported as a fallback.
-
-Session and zone-detail times follow the current Home Assistant user's 12-hour or 24-hour time preference.
-
-## Interactive zone details
-
-Click or tap a zone label to view available information:
-
-- current or last reported coverage percentage
-- last mowing time
-- last completed time
-- cutting height
-
-Exact timestamps depend on the `zone_details` data supplied by the Navimower integration. Missing values are shown as **Not available** rather than reconstructed in the browser.
-
-When nearby zone labels would overlap, the card moves the minimum number of labels to free positions and draws a subtle leader line back to the original zone anchor. This behavior is enabled by default and can be disabled with `avoid_zone_label_overlap: false`.
-
-VisionFence / VF-off polygons are shown by default. Users who keep VisionFence enabled only around a perimeter and use a large VF-off area in the middle can hide that geometry and its legend row without changing mower data or behavior:
-
-```yaml
-show_vf_off_areas: false
-```
-
-See [docs/SESSION_API.md](docs/SESSION_API.md) for the supported map API fields.
-
-## Zoom and navigation
-
-- Mouse wheel: zoom at the pointer position
-- Two-finger pinch: zoom on mobile
-- One-finger drag: pan while zoomed in
-- Double-click or double-tap: reset to the configured initial view
-- At 1x zoom, vertical touch gestures remain available for dashboard scrolling
-
-Example:
+The visual editor is recommended, but the same settings can be configured in YAML:
 
 ```yaml
 type: custom:navimower-map-card
-entity: lawn_mower.tont
-initial_zoom: 1.4
-initial_focus: mower
-remember_view: false
-```
-
-`initial_focus` accepts:
-
-- `map`
-- `mower`
-- `dock`
-
-When `remember_view` is enabled, the view is stored only in that browser's local storage.
-
-## Appearance
-
-The visual editor exposes the current display, notification and appearance settings. The General section pairs **Mower entity** with its Auto-detect toggle and **Title** with a **Show title** toggle. The card title is rendered on its own header row; turn `show_title` off to hide that row.
-
-A representative YAML configuration is:
-
-```yaml
-type: custom:navimower-map-card
-entity: lawn_mower.tont
-title: Navimower Map
-show_title: true
-
+entity: lawn_mower.my_mower
 auto_entities: true
+
 show_status: true
 show_zone: true
 show_battery: true
 show_position: false
 show_zone_labels: true
-avoid_zone_label_overlap: true
-show_vf_off_areas: true
 show_channels: true
+show_vf_off_areas: true
 show_gate_areas: true
+show_custom_areas: true
 show_map_legend: true
 show_session_legend: true
-history_days: 3
-
-notification_mark_read_on_open: false
-notification_count: 5
 
 enable_zoom: true
-initial_zoom: 1.25
+initial_zoom: 1
 initial_focus: map
-remember_view: true
+remember_view: false
 max_zoom: 8
 
-map_background_color: "#e6e6e6"
-map_legend_opacity: 0.58
+map_background_color: "#ffffff"
+map_legend_opacity: 0.10
 zone_label_font_size: 20
-zone_label_opacity: 0.8
+zone_label_opacity: 0.75
 
 zone_fill_color: "#81c784"
-zone_fill_opacity: 0.22
+zone_fill_opacity: 0.20
 zone_stroke_color: "#43a047"
 trail_color: "#43a047"
-trail_opacity: 0.55
+trail_opacity: 0.50
 off_limit_color: "#FF5A00"
 vf_off_color: "#2F80ED"
-channel_color: "#686868"
+channel_color: "#808080"
 gate_area_color: "#8e24aa"
 dock_color: "#37474f"
-mower_icon: auto
-mower_scale: 1
+custom_area_color: "#8e24aa"
+custom_area_fill_opacity: 0.10
+
+zone_stroke_width: 1.5
+off_limit_stroke_width: 1.5
+vf_off_stroke_width: 1.5
+channel_stroke_width: 1.5
+gate_area_stroke_width: 1.5
+dock_stroke_width: 1.5
+custom_area_stroke_width: 1.5
+
+mower_scale: 1.2
+dock_scale: 1.1
+zone_marker_scale: 1.1
 ```
 
-Leaving `map_background_color` empty uses the current Home Assistant theme's secondary background color.
+## Visual editor
 
-The Advanced editor keeps **Live trail point cap** (`trail_length`). This still limits the number of browser-side points retained for the active/fallback live trail; it does not limit the integration's completed mowed-area history. Existing YAML values continue to work unchanged.
+The editor groups related settings so the same type of setting stays in one place:
+
+- **Displayed information** — map elements, Custom Areas and header-button visibility.
+- **Appearance** — opacity, scale, marker and border-width controls.
+- **Colors** — map and area colors.
+- **Notifications** — retained-notification display options.
+- **Schedule button** — choose Automatic, Navimower or Native schedule view behavior.
+- **Settings** — choose the mower device entities exposed by the Settings button.
 
 ## Frontend performance
 
-The card separates static map content from live telemetry. Zone geometry, Off-limit and VF-off polygons, Channels, Gate areas, the charging station, legend, and resolved zone-label positions are cached in browser memory by map revision and visual configuration. Returning to the same dashboard can therefore restore the prepared base map immediately instead of normalizing and laying out all geometry again.
+The card deliberately keeps expensive work out of the browser where possible:
 
-The live update path watches only the entities used by the card:
+- static map geometry is cached by map revision and visual configuration;
+- current-cycle mowing area is prepared by the Navimower integration;
+- completed History sessions use backend-prepared SVG archives;
+- live position/heading updates only the mower/live layers;
+- footer, controls, Schedule and Notifications update independently;
+- render requests in the same browser frame are coalesced.
 
-- position or heading changes update the mower transform and active trail
-- status, zone, or battery changes update only the footer
-- mower availability changes update only the existing controls
-- schedule changes update only the schedule state and open editor
-- Latest notification changes update the Notifications header state and an open notification dialog
-- unrelated Home Assistant entity updates cause no card redraw
+This architecture keeps large histories and long mowing sessions from turning the dashboard card into the source of map-processing load.
 
-The static card template and embedded mower artwork are kept inside the single HACS runtime; the selected mower artwork is swapped in place without external asset requests. With `mower_icon: auto`, a recognizable model from entity attributes is used immediately; otherwise the mower stays hidden during the short device-registry lookup so a wrong H1/H2 fallback never flashes before the correct X3/X4/i-series artwork appears. The mower artwork and control buttons remain mounted and are updated in place rather than being recreated for every telemetry event. Render requests arriving in the same browser frame are coalesced.
+## Updating and cache troubleshooting
 
-Cached map payloads use stale-while-revalidate behavior: the latest prepared map is restored immediately, and current dynamic data is refreshed from the integration in the background. Daily-trail revisions are validated before a cached payload is accepted, so returning to a dashboard does not leave a newer route hidden until a full page refresh. Cache entries are bounded in memory and map/configuration changes create a new cache key.
+After a HACS update, Home Assistant may still have the previous JavaScript resource in browser cache. If a new editor option or visual change does not appear:
 
-## Examples
+1. refresh the Home Assistant frontend;
+2. on mobile, fully close and reopen the Home Assistant app if necessary;
+3. on desktop, perform a hard refresh if the old card runtime is still cached.
 
-Ready-to-copy YAML examples live in [`examples/`](examples/):
-
-- [`basic.yaml`](examples/basic.yaml) — minimum configuration; one mower entity is normally enough
-- [`advanced.yaml`](examples/advanced.yaml) — current display, history, notification, zoom, color and mower-artwork options
-- [`initial-zoom.yaml`](examples/initial-zoom.yaml) — start focused on the mower at a custom zoom level
-- [`manual-entities.yaml`](examples/manual-entities.yaml) — explicit entity wiring when automatic discovery is not suitable
-- [`mower-artwork.yaml`](examples/mower-artwork.yaml) — automatic model artwork plus the supported manual override values
-
-## Manual entity overrides
-
-Overrides take precedence over automatic discovery:
-
-```yaml
-type: custom:navimower-map-card
-entity: lawn_mower.tont
-map_entity: sensor.tont_map_data
-x_entity: sensor.tont_position_x
-y_entity: sensor.tont_position_y
-heading_entity: sensor.tont_heading
-battery_entity: sensor.tont_battery
-zone_entity: sensor.tont_current_physical_zone
-schedule_entity: sensor.tont_schedule
-notification_entity: sensor.tont_latest_notification
-```
-
-The selected mower entity is used as the status entity unless `status_entity` is explicitly set.
-
-## Removed legacy options
-
-The card has evolved from separate trail styles and experimental doodle rendering to the current unified map view. These options are no longer used:
-
-```yaml
-history_trail_min_opacity:
-history_trail_max_opacity:
-show_doodles:
-doodle_opacity:
-```
-
-The old standalone Mow now and Scheduler cards are also unnecessary. Both interfaces are included in the current card resource.
-
-Existing YAML containing removed keys will still load, but those keys have no effect and can be deleted.
-
-## Troubleshooting
-
-### `Custom element doesn't exist: navimower-map-card`
-
-Confirm that HACS installed the dashboard card and that the Lovelace resource points to the current stable runtime under `/hacsfiles/navimower-map-card/navimower-map-card.js`.
-
-If you upgraded from an old beta that used a version-specific loader filename, remove that legacy resource entry before reloading. Then refresh the frontend. On Android, clear the Home Assistant app or WebView cache if an older resource remains loaded.
-
-### Map entity cannot be found
-
-Select the mower entity in the visual editor and keep automatic discovery enabled. Use manual entity overrides only when related entities are attached to another Home Assistant device or have unusual entity IDs.
-
-### Map API error
-
-Verify that the Navimower integration is loaded and that its map-data sensor is available. The card uses the authenticated `api_path` from the map-data sensor or `map_api_path` from the mower entity.
-
-### Schedule button remains grey
-
-Check that the schedule sensor is available and contains at least one enabled day with a mowing period. Set `schedule_entity` manually when automatic discovery does not find it.
-
-### Notification read action fails
-
-Use Navimower integration 0.4.2 or later and confirm that the selected mower's **Latest notification** sensor is available. Read state belongs to the private-cloud Navimow account used by that mower's config entry; reading a message under another shared Navimow account does not change this account's state.
+The current card version is also printed in the browser console as `NAVIMOWER-MAP-CARD`.
 
 ## Development
 
-The project has no runtime dependencies.
-
-```bash
-npm test
-```
-
-Edit source files under:
+Source runtime:
 
 ```text
-src/
+src/navimower-map-card.js
 ```
 
-Rebuild the HACS distribution files:
+HACS runtime:
 
-```bash
-npm run build
+```text
+dist/navimower-map-card.js
 ```
 
-Commit both changed source files and their generated `dist/` counterparts.
+Before release, the repository's deterministic build and regression suite verify both generated runtime files, editor contracts, scheduler behavior, current-cycle rendering and HACS compatibility.
 
-## Current limitations
+## Issues and contributions
 
-- Multi-mower configurations need broader real-world testing.
-- The current Navimower sensor exposes at most five recent notification rows in Home Assistant state attributes; `notification_count` accepts 1–10 but cannot display more rows than the sensor provides.
-- Doodle geometry remains available through the integration but is intentionally not rendered until its native world scale can be determined reliably.
-- Command labels and dialog text are currently English-only.
-
-## Disclaimer
-
-This project is not affiliated with or supported by Segway, Ninebot, Navimow, or Willand. A robot mower is a moving machine with a cutting blade. Test remote commands and automations safely.
-
-## License
-
-MIT License. Created by **Toomas Vähesoo**.
-
-### Custom Areas
-
-Custom Area overlays are auto-discovered from Navimower binary sensors attached to the selected mower device. Their polygons are shown with the Gate Area color language by default and can be enabled/disabled or styled in the Visual Editor with separate color, fill-opacity, and border-width controls.
+Bug reports and feature requests are welcome in this repository's GitHub Issues. When reporting a map/rendering issue, include the Navimower integration version, Map Card version, mower model and a screenshot where possible.

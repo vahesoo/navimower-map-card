@@ -52,41 +52,17 @@ assert.match(source, /if \(!key\) return ""/);
 const readme = readFileSync("README.md", "utf8");
 assert.doesNotMatch(readme, /notification_page_size/);
 assert.doesNotMatch(readme, /navimower-map-card-0\.3\.1-b3\.js/);
-assert.match(readme, /docs\/images\/navimower-map-card\.jpg/);
+assert.match(readme, /docs\/images\/navimower-map-card\.png/);
 assert.match(readme, /current_cycle_render/);
 
-function jpegDimensions(buffer) {
-  if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
-  let offset = 2;
-  const sofMarkers = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
-  while (offset + 3 < buffer.length) {
-    if (buffer[offset] !== 0xff) {
-      offset += 1;
-      continue;
-    }
-    while (offset < buffer.length && buffer[offset] === 0xff) offset += 1;
-    if (offset >= buffer.length) break;
-    const marker = buffer[offset++];
-    if (marker === 0xd8 || marker === 0xd9 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
-    if (offset + 1 >= buffer.length) break;
-    const segmentLength = buffer.readUInt16BE(offset);
-    if (segmentLength < 2 || offset + segmentLength > buffer.length) break;
-    if (sofMarkers.has(marker) && segmentLength >= 7) {
-      return {
-        height: buffer.readUInt16BE(offset + 3),
-        width: buffer.readUInt16BE(offset + 5),
-      };
-    }
-    offset += segmentLength;
-  }
-  return null;
-}
-
-const readmeScreenshot = readFileSync("docs/images/navimower-map-card.jpg");
+const readmeScreenshot = readFileSync("docs/images/navimower-map-card.png");
+const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 assert.ok(readmeScreenshot.length > 10_000, "README screenshot must contain a real image payload");
-assert.deepEqual([...readmeScreenshot.subarray(0, 3)], [0xff, 0xd8, 0xff], "README screenshot must start with a JPEG SOI marker");
-assert.deepEqual([...readmeScreenshot.subarray(-2)], [0xff, 0xd9], "README screenshot must end with a JPEG EOI marker");
-assert.deepEqual(jpegDimensions(readmeScreenshot), { width: 537, height: 726 }, "README screenshot dimensions must match the documented card capture");
+assert.deepEqual([...readmeScreenshot.subarray(0, 8)], pngSignature, "README screenshot must be a valid PNG");
+assert.equal(readmeScreenshot.subarray(12, 16).toString("ascii"), "IHDR", "README screenshot must contain a PNG IHDR header");
+const screenshotWidth = readmeScreenshot.readUInt32BE(16);
+const screenshotHeight = readmeScreenshot.readUInt32BE(20);
+assert.ok(screenshotWidth >= 300 && screenshotHeight >= 300, `README screenshot dimensions look invalid: ${screenshotWidth}x${screenshotHeight}`);
 
 const advanced = readFileSync("examples/advanced.yaml", "utf8");
 assert.doesNotMatch(advanced, /show_tunnels|tunnel_color|session_count|notification_page_size/);

@@ -46,7 +46,7 @@ if (!source.includes('custom_area_stroke_width: "Custom area border width"')) th
 if (!source.includes('syncStrokeWidths')) throw new Error("Static SVG stroke-width synchronization missing");
 
 for (const needle of [
-  "docs/images/navimower-map-card.jpg",
+  "docs/images/navimower-map-card.png",
   "Current cycle",
   "current_cycle_render.mowed_area.path_d",
   "Navimower schedule",

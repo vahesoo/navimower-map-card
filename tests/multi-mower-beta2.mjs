@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-assert.equal(pkg.version, "0.3.6-beta2");
+assert.ok(
+  ["0.3.6-beta2", "0.3.6-beta3"].includes(pkg.version),
+  "beta2 regression must remain valid for later 0.3.6 betas",
+);
 
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");

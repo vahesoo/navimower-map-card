@@ -10,6 +10,8 @@ const legacyAvailability = "const siteAvailable036 = (card) => Boolean(card?._mu
 const beta4Availability = "const siteAvailable036 = (card) => Boolean(card?._multi036Site?.multi_mower && card?._multi036Site?.member_order === \"west_to_east\" && (card._multi036Site?.members || []).length >= 2);";
 const legacyLightweightQuery = 'return text + separator + "include_sessions=0&include_daily_trails=0";';
 const compatibleLightweightQuery = 'return text + separator + "include_sessions=0&include_" + "daily" + "_trails=0";';
+const legacyDomGuard = "function ensureMultiUi036(card) {\n    if (!card?._domReady) return;";
+const headlessSafeDomGuard = "function ensureMultiUi036(card) {\n    if (!card?._domReady || typeof document === \"undefined\") return;";
 
 let source = await readFile(sourcePath, "utf8");
 if (source.includes(marker)) {
@@ -21,15 +23,15 @@ let patch = (await readFile(patchPath, "utf8")).trim();
 if (!patch.startsWith(marker)) {
   throw new Error("Multi-mower runtime patch marker is missing");
 }
-if (!patch.includes(legacyAvailability)) {
-  throw new Error("Multi-mower availability contract was not found in patch source");
-}
-if (!patch.includes(legacyLightweightQuery)) {
-  throw new Error("Multi-mower lightweight query contract was not found in patch source");
+for (const contract of [legacyAvailability, legacyLightweightQuery, legacyDomGuard]) {
+  if (!patch.includes(contract)) {
+    throw new Error(`Multi-mower patch contract was not found: ${contract.slice(0, 64)}`);
+  }
 }
 patch = patch
   .replace(legacyAvailability, beta4Availability)
-  .replace(legacyLightweightQuery, compatibleLightweightQuery);
+  .replace(legacyLightweightQuery, compatibleLightweightQuery)
+  .replace(legacyDomGuard, headlessSafeDomGuard);
 
 source = `${source.trimEnd()}\n\n${patch}\n`;
 await writeFile(sourcePath, source, "utf8");

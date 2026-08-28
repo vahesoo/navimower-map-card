@@ -5,7 +5,6 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const upgrade = readFileSync("scripts/upgrade-legend-schedule-toggle.mjs", "utf8");
 
-assert.match(pkg.version, /^0\.3\.5(?:-beta\d+)?$/);
 assert.match(source, /0\.3\.5-beta13: legend visibility follows map toggles and managed schedule gets an enable switch/);
 
 // Legend entries must follow the same visibility toggles as the rendered map.
@@ -25,7 +24,7 @@ assert.match(source, /callService\("switch", requested \? "turn_on" : "turn_off"
 assert.match(source, /Turning on…/);
 assert.match(source, /Turning off…/);
 
-// Keep the patch deterministic and versioned through prepare-release.
+// Keep the patch deterministic through prepare-release without pinning later releases to 0.3.5.
 assert.match(upgrade, /Expected beta12 marker was not found/);
 assert.match(pkg.scripts["prepare-release"], /upgrade-legend-schedule-toggle\.mjs/);
 assert.match(pkg.scripts.test, /legend-schedule-toggle\.mjs/);

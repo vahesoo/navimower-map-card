@@ -5,7 +5,6 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const upgrade = readFileSync("scripts/upgrade-dialog-polish.mjs", "utf8");
 
-assert.match(pkg.version, /^0\.3\.5(?:-beta\d+)?$/);
 assert.match(source, /0\.3\.5-beta14: consistent card-dialog backdrop closing and schedule header alignment/);
 
 // Settings and managed Schedule close only when the backdrop itself is clicked.

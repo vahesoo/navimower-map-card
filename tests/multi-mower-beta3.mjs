@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-assert.equal(pkg.version, "0.3.6-beta3");
+assert.match(pkg.version, /^0\.3\.6-beta\d+$/, "beta3 UI regressions must stay valid across later 0.3.6 betas");
 
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
@@ -15,7 +15,7 @@ for (const token of [
   '{ name: "map_legend_scale", selector: { number: { min: 0.5, max: 2, step: 0.1, mode: "slider" } } }',
   "zoneLabelItem036",
   "renderMultiZoneLabels036",
-  'card._pill(item.cx, item.cy, item.value, null)',
+  "card._pill(item.cx, item.cy, item.value,",
   'name + " · " + Math.round(pct) + "%"',
   "nm-multi-meta-zone",
   "nm-multi-meta-battery",

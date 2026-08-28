@@ -167,6 +167,7 @@ var DEFAULTS = Object.freeze({
   mower_accent_color: "#ff6d00",
   dock_color: "#37474f",
   map_legend_opacity: 0.58,
+  map_legend_scale: 1,
   zone_label_font_size: 20,
   zone_label_opacity: 1,
   mower_scale: 1,
@@ -196,6 +197,7 @@ var LABELS = Object.freeze({
   remember_view: "Remember last view in this browser",
   max_zoom: "Maximum zoom",
   map_legend_opacity: "Map legend background opacity",
+  map_legend_scale: "Map legend size",
   zone_label_font_size: "Zone label font size",
   zone_label_opacity: "Zone label opacity",
   mower_scale: "Mower icon size",
@@ -277,6 +279,7 @@ var NavimowerMapCard = class extends HTMLElement {
       remember_view: DEFAULTS.remember_view,
       max_zoom: DEFAULTS.max_zoom,
       map_legend_opacity: DEFAULTS.map_legend_opacity,
+      map_legend_scale: DEFAULTS.map_legend_scale,
       zone_label_font_size: DEFAULTS.zone_label_font_size,
       zone_label_opacity: DEFAULTS.zone_label_opacity,
       zone_fill_color: DEFAULTS.zone_fill_color,
@@ -391,6 +394,7 @@ var NavimowerMapCard = class extends HTMLElement {
               column_min_width: "200px",
               schema: [
                 { name: "map_legend_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
+                { name: "map_legend_scale", selector: { number: { min: 0.5, max: 2, step: 0.1, mode: "slider" } } },
                 { name: "zone_label_font_size", selector: { number: { min: 12, max: 36, step: 1, mode: "box" } } },
                 { name: "zone_label_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
                 { name: "zone_fill_opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
@@ -1345,6 +1349,7 @@ var NavimowerMapCard = class extends HTMLElement {
       c.dock_scale,
       c.map_background_color,
       c.map_legend_opacity,
+      c.map_legend_scale,
       c.zone_label_font_size,
       c.zone_label_opacity
     ].join("|");
@@ -1527,7 +1532,8 @@ var NavimowerMapCard = class extends HTMLElement {
     }
     if (c.show_map_legend) {
       const legendRows = 2 + (c.show_vf_off_areas !== false ? 1 : 0) + (channels.length > 0 ? 1 : 0) + (gateAreas.length > 0 ? 1 : 0);
-      labelObstacles.push({ left: 8, right: 180, top: 8, bottom: 32 + legendRows * 30 });
+      const legendScale = clamp(finiteNumber(c.map_legend_scale, 1), 0.5, 2);
+      labelObstacles.push({ left: 8, right: 8 + 172 * legendScale, top: 8, bottom: 8 + (32 + legendRows * 30) * legendScale });
     }
     const arrangedZoneLabels = c.avoid_zone_label_overlap === false ? zoneLabels.map((item) => ({ ...item, cx: item.anchorX, cy: item.anchorY, ...this._pillMetrics(item.value), moved: false })) : this._layoutZoneLabels(zoneLabels, labelObstacles);
     const zoneLeaders = [];
@@ -2689,12 +2695,13 @@ var NavimowerMapCard = class extends HTMLElement {
     const rowHeight = 30;
     const height = rows.length * rowHeight + 18;
     const opacity = clamp(finiteNumber(this._config.map_legend_opacity, 0.58), 0, 1);
-    let result = `<g><rect x="14" y="14" width="158" height="${height}" rx="10" fill="var(--card-background-color, #fff)" fill-opacity="${opacity.toFixed(2)}" stroke="#9e9e9e" stroke-opacity=".25"/>`;
+    const legendScale = clamp(finiteNumber(this._config.map_legend_scale, 1), 0.5, 2);
+    let result = "<g transform=\"scale(" + legendScale.toFixed(2) + ")\"><rect x=\"14\" y=\"14\" width=\"158\" height=\"" + height + "\" rx=\"10\" fill=\"var(--card-background-color, #fff)\" fill-opacity=\"" + opacity.toFixed(2) + "\" stroke=\"#9e9e9e\" stroke-opacity=\".25\"/>";
     rows.forEach(([color, name], index) => {
       const y = 40 + index * rowHeight;
-      result += `<rect x="27" y="${y - 14}" width="19" height="19" rx="3" fill="${escapeHtml(color)}"/><text x="57" y="${y + 1}" font-family="sans-serif" font-size="${fontSize}" font-weight="600" fill="var(--primary-text-color, #263238)">${escapeHtml(name)}</text>`;
+      result += "<rect x=\"27\" y=\"" + (y - 14) + "\" width=\"19\" height=\"19\" rx=\"3\" fill=\"" + escapeHtml(color) + "\"/><text x=\"57\" y=\"" + (y + 1) + "\" font-family=\"sans-serif\" font-size=\"" + fontSize + "\" font-weight=\"600\" fill=\"var(--primary-text-color, #263238)\">" + escapeHtml(name) + "</text>";
     });
-    return `${result}</g>`;
+    return result + "</g>";
   }
   _onSvgClick(event) {
     const label = event.target?.closest?.(".nm-zone-label");
@@ -6170,7 +6177,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta2";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta3";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -10209,21 +10216,49 @@ if (globalThis.customElements) patchCustomAreas0342();
     return parts.length ? "<g class=\"nm-multi-session-render " + esc(cssClass) + "\" opacity=\"" + clamp036(opacity, 0, 1).toFixed(2) + "\">" + parts.join("") + "</g>" : "";
   };
 
-  const zoneLabel036 = (card, member, matrix, zone, coverageMap) => {
+  const zoneLabelItem036 = (card, member, matrix, zone, coverageMap, payload) => {
     const polygon = Array.isArray(zone?.polygon) ? zone.polygon : [];
-    const valid = polygon.filter((point) => Array.isArray(point) && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
-    if (!valid.length) return "";
-    const x = valid.reduce((sum, point) => sum + Number(point[0]), 0) / valid.length;
-    const y = valid.reduce((sum, point) => sum + Number(point[1]), 0) / valid.length;
-    const screen = transformPoint036(matrix, x, y);
-    const zoom = Math.max(1, finite036(card?._view?.scale, 1));
-    const size = Math.max(10, finite036(card?._config?.zone_label_font_size, 20) / zoom);
-    const coverage = coverageMap.get(Number(zone.id));
-    const pct = finite036(coverage?.pct, null);
-    const text = String(zone.name || "Zone " + zone.id) + (pct !== null ? " " + Math.round(pct) + "%" : "");
-    return "<text class=\"nm-multi-zone-label\" x=\"" + screen[0].toFixed(1) + "\" y=\"" + screen[1].toFixed(1) + "\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"" + size.toFixed(1) + "\" font-weight=\"650\" fill=\"var(--primary-text-color)\" fill-opacity=\"" + clamp036(card?._config?.zone_label_opacity, 0, 1).toFixed(2) + "\" stroke=\"var(--card-background-color,#fff)\" stroke-width=\"" + Math.max(1.5, 3 / zoom).toFixed(1) + "\" paint-order=\"stroke\">" + esc(text) + "</text>";
+    const valid = polygon.filter((point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
+    if (valid.length < 3 || !matrix) return null;
+    const screenPolygon = valid.map((point) => transformPoint036(matrix, Number(point[0]), Number(point[1])));
+    const anchorX = screenPolygon.reduce((sum, point) => sum + Number(point[0]), 0) / screenPolygon.length;
+    const anchorY = screenPolygon.reduce((sum, point) => sum + Number(point[1]), 0) / screenPolygon.length;
+    const zoneId = Number(zone?.id);
+    const state = (payload?.zone_states || []).find((item) => Number(item?.id ?? item?.zone_id) === zoneId) || {};
+    const rawDetails = payload?.zone_details || payload?.zone_history || [];
+    const detail = Array.isArray(rawDetails)
+      ? rawDetails.find((item) => Number(item?.id ?? item?.zone_id) === zoneId) || {}
+      : rawDetails && typeof rawDetails === "object" ? rawDetails[String(zoneId)] || {} : {};
+    const coverage = coverageMap.get(zoneId) || {};
+    const pct = finite036(state?.coverage_pct ?? state?.progress ?? detail?.progress ?? detail?.percentage ?? coverage?.pct ?? coverage?.percentage, null);
+    const name = String(state?.name || zone?.name || coverage?.name || detail?.name || "Zone " + zone?.id);
+    const value = pct === null ? name : name + " · " + Math.round(pct) + "%";
+    const area = typeof card?._polygonArea === "function" ? Math.abs(card._polygonArea(screenPolygon)) : 0;
+    return { anchorX, anchorY, value, polygon: screenPolygon, area, memberEntryId: member?.entry_id, zoneId };
   };
 
+  const renderMultiZoneLabels036 = (card, items, legendVisible) => {
+    const sourceItems = (Array.isArray(items) ? items : []).filter(Boolean);
+    if (!sourceItems.length || typeof card?._pill !== "function") return "";
+    const obstacles = [];
+    if (legendVisible) {
+      const legendScale = clamp036(card?._config?.map_legend_scale, 0.5, 2);
+      obstacles.push({ left: 8, right: 22 + 158 * legendScale, top: 8, bottom: 22 + 112 * legendScale });
+    }
+    let arranged = sourceItems;
+    if (card?._config?.avoid_zone_label_overlap === false || typeof card?._layoutZoneLabels !== "function") {
+      arranged = sourceItems.map((item) => ({ ...item, cx: item.anchorX, cy: item.anchorY, ...(card._pillMetrics?.(item.value) || {}), moved: false }));
+    } else {
+      arranged = card._layoutZoneLabels(sourceItems, obstacles);
+    }
+    const output = [];
+    for (const item of arranged) {
+      const leader = typeof card?._zoneLabelLeader === "function" ? card._zoneLabelLeader(item) : "";
+      if (leader) output.push(leader);
+      output.push(card._pill(item.cx, item.cy, item.value, null));
+    }
+    return output.join("");
+  };
   function renderMultiMap036(card, force = false) {
     ensureMultiUi036(card);
     const layer = card._multi036Layer;
@@ -10248,7 +10283,7 @@ if (globalThis.customElements) patchCustomAreas0342();
       const payload = memberState036(card, member.entry_id).map;
       return [member.entry_id, payload?.map?.revision, payload?.current_cycle_render?.revision, payload?.trail_revision, liveTrailSignature036(card, member, payload)].join(":");
     }).join("|");
-    const key = [mapSignature, liveSignature, card._historyDayOffset, card._multi036SelectedSessionKey, card?._view?.scale, card?._config?.show_zone_labels, card?._config?.show_channels, card?._config?.show_vf_off_areas, card?._config?.show_gate_areas, card?._config?.show_custom_areas, card?._config?.map_background_color, card?._config?.trail_color, card?._config?.trail_opacity].join("|");
+    const key = [mapSignature, liveSignature, card._historyDayOffset, card._multi036SelectedSessionKey, card?._view?.scale, card?._config?.show_zone_labels, card?._config?.avoid_zone_label_overlap, card?._config?.zone_label_font_size, card?._config?.zone_label_opacity, card?._config?.map_legend_scale, card?._config?.show_channels, card?._config?.show_vf_off_areas, card?._config?.show_gate_areas, card?._config?.show_custom_areas, card?._config?.map_background_color, card?._config?.trail_color, card?._config?.trail_opacity].join("|");
     if (!force && key === card._multi036MapRenderKey) return;
     card._multi036MapRenderKey = key;
 
@@ -10260,8 +10295,9 @@ if (globalThis.customElements) patchCustomAreas0342();
     const zoneStrokeWidth = clamp036(c.zone_stroke_width, 0.5, 12);
     const trailColor = c.trail_color || "#43a047";
     const trailOpacity = clamp036(c.trail_opacity, 0, 1);
+    const legendScale = clamp036(c.map_legend_scale, 0.5, 2);
     const parts = ["<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"" + esc(background) + "\"/>"];
-    const rootLabels = [];
+    const zoneLabelItems = [];
     const dockMarkers = [];
     const rootMowers = [];
 
@@ -10278,7 +10314,7 @@ if (globalThis.customElements) patchCustomAreas0342();
         const points = rawPoints036(zone?.polygon);
         if (!points) continue;
         local.push("<polygon points=\"" + points + "\" fill=\"" + esc(zoneFill) + "\" fill-opacity=\"" + zoneFillOpacity.toFixed(2) + "\" stroke=\"" + esc(zoneStroke) + "\" stroke-width=\"" + zoneStrokeWidth.toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
-        if (c.show_zone_labels !== false) rootLabels.push(zoneLabel036(card, member, matrix, zone, coverageMap));
+        if (c.show_zone_labels !== false) zoneLabelItems.push(zoneLabelItem036(card, member, matrix, zone, coverageMap, payload));
       }
 
       if (card._historyDayOffset === null || card._historyDayOffset === undefined) {
@@ -10347,18 +10383,45 @@ if (globalThis.customElements) patchCustomAreas0342();
       parts.push("<g class=\"nm-multi-member-map\" data-entry-id=\"" + esc(member.entry_id) + "\" transform=\"" + matrixString036(matrix) + "\">" + local.join("") + "</g>");
     }
 
-    parts.push(rootLabels.join(""));
+    if (c.show_zone_labels !== false) parts.push(renderMultiZoneLabels036(card, zoneLabelItems, c.show_map_legend !== false));
     parts.push(dockMarkers.join(""));
     parts.push(rootMowers.join(""));
 
     if (c.show_map_legend !== false) {
-      parts.push("<g class=\"nm-multi-map-legend\" transform=\"translate(14 14)\"><rect width=\"158\" height=\"112\" rx=\"10\" fill=\"var(--card-background-color,#fff)\" fill-opacity=\"" + clamp036(c.map_legend_opacity, 0, 1).toFixed(2) + "\"/><circle cx=\"14\" cy=\"20\" r=\"5\" fill=\"" + esc(zoneFill) + "\"/><text x=\"28\" y=\"24\" font-size=\"13\" fill=\"var(--primary-text-color)\">Zones</text><circle cx=\"14\" cy=\"46\" r=\"5\" fill=\"" + esc(trailColor) + "\"/><text x=\"28\" y=\"50\" font-size=\"13\" fill=\"var(--primary-text-color)\">Mowed</text><circle cx=\"14\" cy=\"72\" r=\"5\" fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\"/><text x=\"28\" y=\"76\" font-size=\"13\" fill=\"var(--primary-text-color)\">Off-limit</text><circle cx=\"14\" cy=\"98\" r=\"5\" fill=\"" + esc(c.channel_color || "#808080") + "\"/><text x=\"28\" y=\"102\" font-size=\"13\" fill=\"var(--primary-text-color)\">Channel</text></g>");
+      parts.push("<g class=\"nm-multi-map-legend\" transform=\"translate(14 14) scale(" + legendScale.toFixed(2) + ")\"><rect width=\"158\" height=\"112\" rx=\"10\" fill=\"var(--card-background-color,#fff)\" fill-opacity=\"" + clamp036(c.map_legend_opacity, 0, 1).toFixed(2) + "\"/><circle cx=\"14\" cy=\"20\" r=\"5\" fill=\"" + esc(zoneFill) + "\"/><text x=\"28\" y=\"24\" font-size=\"13\" fill=\"var(--primary-text-color)\">Zones</text><circle cx=\"14\" cy=\"46\" r=\"5\" fill=\"" + esc(trailColor) + "\"/><text x=\"28\" y=\"50\" font-size=\"13\" fill=\"var(--primary-text-color)\">Mowed</text><circle cx=\"14\" cy=\"72\" r=\"5\" fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\"/><text x=\"28\" y=\"76\" font-size=\"13\" fill=\"var(--primary-text-color)\">Off-limit</text><circle cx=\"14\" cy=\"98\" r=\"5\" fill=\"" + esc(c.channel_color || "#808080") + "\"/><text x=\"28\" y=\"102\" font-size=\"13\" fill=\"var(--primary-text-color)\">Channel</text></g>");
     }
 
     layer.innerHTML = parts.join("");
   }
 
   const displayName036 = (member) => String(member?.name || member?.model || "Mower");
+
+  const cleanMemberText036 = (value) => {
+    if (value === undefined || value === null) return null;
+    const text = String(value).trim();
+    return !text || ["unknown", "unavailable", "none"].includes(text.toLowerCase()) ? null : text;
+  };
+
+  const memberMeta036 = (card, member, mower) => {
+    const c = card?._config || {};
+    const entities = memberEntities036(member);
+    const items = [];
+    const status = cleanMemberText036(mower?.state);
+    if (c.show_status !== false && status) items.push('<span class="nm-multi-meta-status">' + esc(status) + '</span>');
+    items.push('<span class="nm-multi-meta-spacer"></span>');
+    const zone = cleanMemberText036(state036(card, entities.current_physical_zone)?.state);
+    if (c.show_zone !== false && zone) items.push('<span class="nm-multi-meta-item nm-multi-meta-zone"><ha-icon icon="mdi:map-marker-radius"></ha-icon><span>' + esc(zone) + '</span></span>');
+    const batteryState = state036(card, entities.battery);
+    const battery = finite036(batteryState?.state, null);
+    if (c.show_battery !== false && battery !== null) items.push('<span class="nm-multi-meta-item nm-multi-meta-battery"><ha-icon icon="mdi:battery"></ha-icon><span>' + Math.round(battery) + '%</span></span>');
+    if (c.show_position === true) {
+      const x = entityValue036(card, entities.position_x);
+      const y = entityValue036(card, entities.position_y);
+      if (x !== null && y !== null) items.push('<span class="nm-multi-meta-item nm-multi-meta-position"><ha-icon icon="mdi:crosshairs-gps"></ha-icon><span>' + x.toFixed(1) + ', ' + y.toFixed(1) + '</span></span>');
+    }
+    const meaningful = items.some((item) => !item.includes("nm-multi-meta-spacer"));
+    return meaningful ? "<div class=\"nm-multi-member-meta\">" + items.join("") + "</div>" : "";
+  };
 
   function renderMultiControls036(card) {
     ensureMultiUi036(card);
@@ -10375,16 +10438,15 @@ if (globalThis.customElements) patchCustomAreas0342();
       const entities = memberEntities036(member);
       const mower = state036(card, entities.mower);
       const unavailable = !mower || ["unknown", "unavailable"].includes(String(mower.state || "").toLowerCase());
-      const battery = state036(card, entities.battery)?.state;
       const managedOn = String(state036(card, entities.managed_schedule)?.state || "").toLowerCase() === "on";
       const nativeOn = String(state036(card, entities.native_schedule)?.state || "").toLowerCase() === "on";
       const scheduleOn = managedOn || nativeOn;
       const canResume = typeof shouldOfferResume === "function" ? shouldOfferResume(card._hass, mower) : ["paused", "returning"].includes(String(mower?.state || "").toLowerCase());
       const status = memberState036(card, member.entry_id).command;
-      return "<section class=\"nm-multi-control-member\" data-entry-id=\"" + esc(member.entry_id) + "\"><button type=\"button\" class=\"nm-multi-schedule" + (scheduleOn ? " active" : "") + "\" data-multi-schedule=\"" + esc(member.entry_id) + "\" title=\"Open " + esc(displayName036(member)) + " schedule\"><span>" + esc(displayName036(member)) + "</span><ha-icon icon=\"mdi:calendar-clock\"></ha-icon></button><div class=\"nm-multi-member-meta\"><span>" + esc(mower?.state || "Unavailable") + "</span>" + (battery && !["unknown", "unavailable"].includes(String(battery).toLowerCase()) ? "<span>" + esc(battery) + "%</span>" : "") + "</div><div class=\"nm-multi-command-grid\"><button type=\"button\" data-multi-command=\"mow\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:play\"></ha-icon><span>Mow</span></button>" + (canResume ? "<button type=\"button\" data-multi-command=\"resume\" data-entry-id=\"" + esc(member.entry_id) + "\"><ha-icon icon=\"mdi:play-circle-outline\"></ha-icon><span>Resume</span></button>" : "") + "<button type=\"button\" data-multi-command=\"pause\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:pause\"></ha-icon><span>Pause</span></button><button type=\"button\" data-multi-command=\"dock\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:home-map-marker\"></ha-icon><span>Home</span></button></div>" + (status ? "<div class=\"nm-multi-command-status " + esc(status.kind || "") + "\">" + esc(status.text || "") + "</div>" : "") + "</section>";
+      const meta = memberMeta036(card, member, mower);
+      return "<section class=\"nm-multi-control-member\" data-entry-id=\"" + esc(member.entry_id) + "\"><button type=\"button\" class=\"nm-multi-schedule" + (scheduleOn ? " active" : "") + "\" data-multi-schedule=\"" + esc(member.entry_id) + "\" title=\"Open " + esc(displayName036(member)) + " schedule\"><span>" + esc(displayName036(member)) + "</span><ha-icon icon=\"mdi:calendar-clock\"></ha-icon></button>" + meta + "<div class=\"nm-multi-command-grid\"><button type=\"button\" data-multi-command=\"mow\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:play\"></ha-icon><span>Mow</span></button>" + (canResume ? "<button type=\"button\" data-multi-command=\"resume\" data-entry-id=\"" + esc(member.entry_id) + "\"><ha-icon icon=\"mdi:play-circle-outline\"></ha-icon><span>Resume</span></button>" : "") + "<button type=\"button\" data-multi-command=\"pause\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:pause\"></ha-icon><span>Pause</span></button><button type=\"button\" data-multi-command=\"dock\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:home-map-marker\"></ha-icon><span>Home</span></button></div>" + (status ? "<div class=\"nm-multi-command-status " + esc(status.kind || "") + "\">" + esc(status.text || "") + "</div>" : "") + "</section>";
     }).join("");
   }
-
   async function runMemberCommand036(card, member, command) {
     if (!member || !card?._hass?.callService) return;
     const state = memberState036(card, member.entry_id);
@@ -10605,6 +10667,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     if (card._multi036ModeApplied === active) {
       if (active) {
         hideCoreLayer036(card._scheduleButtonEl, true);
+        hideCoreLayer036(card._footerEl, true);
         renderMulti036(card);
       }
       return;
@@ -10724,7 +10787,7 @@ if (globalThis.customElements) patchCustomAreas0342();
         ".nm-multi-controls{display:grid;grid-template-columns:repeat(var(--nm-multi-columns,2),minmax(0,1fr));gap:10px;margin:10px 2px 0}.nm-multi-controls[hidden]{display:none}",
         ".nm-multi-control-member{min-width:0;padding:9px;border:1px solid var(--divider-color);border-radius:11px;background:color-mix(in srgb,var(--secondary-background-color) 65%,transparent)}",
         ".nm-multi-schedule{width:100%;min-height:32px;display:flex;align-items:center;justify-content:space-between;gap:7px;border:0;border-radius:9px;padding:5px 8px;color:var(--primary-text-color);background:transparent;font:inherit;font-weight:700;cursor:pointer}.nm-multi-schedule.active{color:#FF5A00}.nm-multi-schedule ha-icon{--mdc-icon-size:20px}",
-        ".nm-multi-member-meta{display:flex;justify-content:space-between;gap:8px;padding:2px 8px 7px;color:var(--secondary-text-color);font-size:.76rem;text-transform:capitalize}",
+        ".nm-multi-member-meta{display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;padding:2px 8px 7px;color:var(--secondary-text-color);font-size:.76rem}.nm-multi-meta-status{text-transform:capitalize}.nm-multi-meta-spacer{flex:1 1 auto}.nm-multi-meta-item{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}.nm-multi-meta-item ha-icon{--mdc-icon-size:15px}",
         ".nm-multi-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.nm-multi-command-grid button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;padding:7px 8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit;font-size:.84rem;font-weight:650;cursor:pointer}.nm-multi-command-grid button:disabled{opacity:.45;cursor:default}.nm-multi-command-grid ha-icon{--mdc-icon-size:19px}",
         ".nm-multi-command-status{padding:6px 4px 0;text-align:center;color:var(--secondary-text-color);font-size:.74rem}.nm-multi-command-status.error{color:var(--error-color,#db4437)}",
         ".nm-sessions.nm-multi-sessions-active{grid-template-columns:1fr!important;gap:7px!important;width:100%}.nm-multi-session-group{display:grid;grid-template-columns:minmax(80px,auto) 1fr;align-items:start;gap:8px 12px;width:100%}.nm-multi-session-heading{padding-top:2px;color:var(--secondary-text-color);font-size:.76rem;font-weight:750}.nm-multi-session-rows{display:flex;flex-wrap:wrap;gap:5px 10px;min-width:0}.nm-multi-session-empty{color:var(--secondary-text-color);font-size:.8rem;opacity:.7}",
@@ -10820,6 +10883,20 @@ if (globalThis.customElements) patchCustomAreas0342();
       applyMultiMode036(this);
       syncMultiNotificationBell036(this);
       return result;
+    };
+  }
+
+  const originalRenderFooter036 = proto._renderFooter;
+  if (typeof originalRenderFooter036 === "function") {
+    proto._renderFooter = function multi036RenderFooter(...args) {
+      if (multiActive036(this)) {
+        if (this._footerEl) {
+          this._footerEl.innerHTML = "";
+          this._footerEl.style.display = "none";
+        }
+        return;
+      }
+      return originalRenderFooter036.apply(this, args);
     };
   }
 
@@ -10923,4 +11000,6 @@ if (globalThis.customElements) patchCustomAreas0342();
   console.info("[Navimower Map Card] 0.3.6-beta1 opt-in multi-mower site view enabled");
   // 0.3.6-beta2: multi-mower field-test fixes.
   console.info("[Navimower Map Card] 0.3.6-beta2 multi-mower field-test fixes enabled");
+  // 0.3.6-beta3: compact multi-mower metadata and labels.
+  console.info("[Navimower Map Card] 0.3.6-beta3 compact multi-mower metadata and labels enabled");
 })();

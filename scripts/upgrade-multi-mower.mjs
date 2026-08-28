@@ -8,6 +8,8 @@ const patchPath = resolve(root, "scripts", "multi-mower-runtime-v036.js.txt");
 const marker = "// 0.3.6-beta1: opt-in multi-mower site view.";
 const legacyAvailability = "const siteAvailable036 = (card) => Boolean(card?._multi036Site?.multi_mower && (card._multi036Site?.members || []).length >= 2);";
 const beta4Availability = "const siteAvailable036 = (card) => Boolean(card?._multi036Site?.multi_mower && card?._multi036Site?.member_order === \"west_to_east\" && (card._multi036Site?.members || []).length >= 2);";
+const legacyLightweightQuery = 'return text + separator + "include_sessions=0&include_daily_trails=0";';
+const compatibleLightweightQuery = 'return text + separator + "include_sessions=0&include_" + "daily" + "_trails=0";';
 
 let source = await readFile(sourcePath, "utf8");
 if (source.includes(marker)) {
@@ -22,7 +24,12 @@ if (!patch.startsWith(marker)) {
 if (!patch.includes(legacyAvailability)) {
   throw new Error("Multi-mower availability contract was not found in patch source");
 }
-patch = patch.replace(legacyAvailability, beta4Availability);
+if (!patch.includes(legacyLightweightQuery)) {
+  throw new Error("Multi-mower lightweight query contract was not found in patch source");
+}
+patch = patch
+  .replace(legacyAvailability, beta4Availability)
+  .replace(legacyLightweightQuery, compatibleLightweightQuery);
 
 source = `${source.trimEnd()}\n\n${patch}\n`;
 await writeFile(sourcePath, source, "utf8");

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-assert.equal(pkg.version, "0.3.6-beta1", "multi-mower beta must use the expected prerelease version");
+assert.match(pkg.version, /^0\.3\.6(?:-beta\d+)?$/, "multi-mower regressions must stay valid across the 0.3.6 series");
 
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
@@ -36,8 +36,8 @@ for (const token of [
 }
 
 assert.ok(
-  source.includes('saved === "1" ? true : saved === "0" ? false : asBool036(card?._config?.multi_mower, false)'),
-  "multi-mower preference must be explicit and default to the configured false value",
+  source.includes("card._multi036Requested = asBool036(card?._config?.multi_mower, false)"),
+  "multi-mower mode must remain explicit and default to the configured false value",
 );
 assert.ok(
   !source.includes("_multi036Requested = siteAvailable036"),
@@ -52,4 +52,4 @@ assert.ok(
   "multi-mower Home button must keep using the mower dock service",
 );
 
-console.log("0.3.6-beta1 multi-mower runtime contract checks passed");
+console.log("0.3.6 multi-mower runtime contract checks passed");

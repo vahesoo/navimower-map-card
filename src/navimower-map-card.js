@@ -6170,7 +6170,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.5";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta1";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -9744,4 +9744,1129 @@ if (globalThis.customElements) patchCustomAreas0342();
   }
 
   console.info("[Navimower Map Card] 0.3.5-beta14 dialog backdrop closing and schedule header alignment enabled");
+})();
+
+// 0.3.6-beta1: opt-in multi-mower site view.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower036Beta1MultiMower) return;
+  Card.__navimower036Beta1MultiMower = true;
+
+  const proto = Card.prototype;
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const SITE_REFRESH_MS = 60_000;
+  const MAP_REFRESH_ACTIVE_MS = 5_000;
+  const MAP_REFRESH_IDLE_MS = 30_000;
+  const SESSION_REFRESH_MS = 30_000;
+  const SESSION_RENDER_LIMIT_PER_MOWER = 8;
+
+  const esc = (value) => String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+  const finite036 = (value, fallback = null) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  };
+
+  const clamp036 = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, finite036(value, minimum)));
+
+  const asBool036 = (value, fallback = false) => {
+    if (value === undefined || value === null || value === "") return fallback;
+    if (typeof value === "boolean") return value;
+    const text = String(value).trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(text)) return true;
+    if (["false", "0", "no", "off"].includes(text)) return false;
+    return fallback;
+  };
+
+  const state036 = (card, entityId) => entityId ? card?._hass?.states?.[entityId] || null : null;
+  const entityValue036 = (card, entityId) => {
+    const value = state036(card, entityId)?.state;
+    if (value === undefined || value === null || ["unknown", "unavailable"].includes(String(value).toLowerCase())) return null;
+    return finite036(value, null);
+  };
+
+  const date036 = (value) => {
+    if (value instanceof Date && Number.isFinite(value.getTime())) return value;
+    if (value === undefined || value === null || value === "") return null;
+    if (typeof value === "number" || /^\d+(?:\.\d+)?$/.test(String(value).trim())) {
+      let stamp = Number(value);
+      if (!Number.isFinite(stamp) || stamp <= 0) return null;
+      if (stamp < 10_000_000_000) stamp *= 1000;
+      const parsed = new Date(stamp);
+      return Number.isFinite(parsed.getTime()) ? parsed : null;
+    }
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  };
+
+  const sessionId036 = (session) => String(session?.id ?? session?.session_id ?? "");
+
+  const sessionsForDay036 = (sessions, offset) => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - Math.max(0, Number(offset) || 0));
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    return (Array.isArray(sessions) ? sessions : []).filter((session) => {
+      const from = date036(session?.started_at ?? session?.start ?? session?.start_time ?? session?.started_at_ms);
+      const to = date036(session?.ended_at ?? session?.end ?? session?.end_time ?? session?.ended_at_ms) || (session?.active ? new Date() : from);
+      return from && to && from < end && to >= start;
+    }).slice(-SESSION_RENDER_LIMIT_PER_MOWER);
+  };
+
+  const apiPath036 = (path) => String(path || "").replace(/^\/api\//, "").replace(/^\/+/, "");
+
+  const addLightweightQuery036 = (path) => {
+    const text = String(path || "");
+    if (!text) return text;
+    const separator = text.includes("?") ? "&" : "?";
+    return text + separator + "include_sessions=0&include_" + "daily" + "_trails=0";
+  };
+
+  const anchorEntry036 = (card) => {
+    const direct = card?._mapPayload?.frontend?.entry_id;
+    if (direct) return String(direct);
+    let path = null;
+    try { path = card?._apiPath?.(); } catch (_error) { path = null; }
+    const match = String(path || "").match(/\/api\/navimower\/map\/([^/?#]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  };
+
+  const sitePath036 = (card) => {
+    const fromPayload = card?._mapPayload?.frontend?.site_api_path || card?._mapPayload?.site_api_path;
+    if (fromPayload) return String(fromPayload);
+    const entryId = anchorEntry036(card);
+    return entryId ? "/api/navimower/site/" + encodeURIComponent(entryId) : null;
+  };
+
+  const preferenceKey036 = (card) => {
+    const identity = anchorEntry036(card) || card?._resolved?.mower_entity || card?._config?.entity;
+    return identity ? "navimower-map-card:multi-mower:" + identity : null;
+  };
+
+  const ensurePreference036 = (card) => {
+    const key = preferenceKey036(card);
+    if (card._multi036PreferenceKey === key && card._multi036PreferenceLoaded) return;
+    card._multi036PreferenceKey = key;
+    card._multi036PreferenceLoaded = true;
+    let saved = null;
+    try { saved = key ? globalThis.localStorage?.getItem?.(key) : null; } catch (_error) { saved = null; }
+    card._multi036Requested = saved === "1" ? true : saved === "0" ? false : asBool036(card?._config?.multi_mower, false);
+  };
+
+  const savePreference036 = (card) => {
+    const key = preferenceKey036(card);
+    if (!key) return;
+    try { globalThis.localStorage?.setItem?.(key, card._multi036Requested ? "1" : "0"); } catch (_error) { /* browser storage is optional */ }
+  };
+
+  const siteAvailable036 = (card) => Boolean(card?._multi036Site?.multi_mower && card?._multi036Site?.member_order === "west_to_east" && (card._multi036Site?.members || []).length >= 2);
+  const multiActive036 = (card) => {
+    ensurePreference036(card);
+    return Boolean(card?._multi036Requested && siteAvailable036(card));
+  };
+
+  const memberFrontend036 = (member) => member?.frontend || {};
+  const memberEntities036 = (member) => memberFrontend036(member)?.entities || {};
+  const memberDevice036 = (member) => memberFrontend036(member)?.device_id || null;
+  const memberMapPath036 = (member) => memberFrontend036(member)?.map_api_path || member?.map_api_path || null;
+  const memberSessionsPath036 = (member) => memberFrontend036(member)?.sessions_api_path || null;
+  const memberRenderTemplate036 = (member) => memberFrontend036(member)?.session_render_api_path_template || null;
+
+  const memberById036 = (card, entryId) => (card?._multi036Site?.members || []).find((member) => String(member?.entry_id) === String(entryId)) || null;
+
+  const memberState036 = (card, entryId) => {
+    if (!(card._multi036Members instanceof Map)) card._multi036Members = new Map();
+    const key = String(entryId);
+    if (!card._multi036Members.has(key)) card._multi036Members.set(key, { map: null, sessions: [], mapAt: 0, sessionsAt: 0, error: null, command: null });
+    return card._multi036Members.get(key);
+  };
+
+  const resetSchedulerCaches036 = (card) => {
+    for (const key of [
+      "_beta5SchedulerEntities", "_beta6SchedulerEntities", "_beta10SchedulerEntities",
+      "_beta10ScheduleDeviceId", "_beta10SchedulerDiscoveryAt", "_beta10SchedulerDiscoveryKey",
+      "_beta2SchedulerEntities", "_beta2ScheduleStatus", "_beta2ScheduleDraft"
+    ]) card[key] = null;
+  };
+
+  const setDialogMember036 = (card, member) => {
+    card._multi036DialogMember = member || null;
+    resetSchedulerCaches036(card);
+  };
+
+  const originalMowerEntity036 = proto._mowerEntity;
+  if (typeof originalMowerEntity036 === "function") {
+    proto._mowerEntity = function multi036MowerEntity(...args) {
+      const member = this._multi036DialogMember || this._multi036ActionMember;
+      const entityId = memberEntities036(member)?.mower;
+      return entityId || originalMowerEntity036.apply(this, args);
+    };
+  }
+
+  const originalMowerDevice036 = proto._mowerDeviceId;
+  if (typeof originalMowerDevice036 === "function") {
+    proto._mowerDeviceId = function multi036MowerDevice(...args) {
+      const member = this._multi036DialogMember || this._multi036ActionMember;
+      return memberDevice036(member) || originalMowerDevice036.apply(this, args);
+    };
+  }
+
+  const originalApiPath036 = proto._apiPath;
+  if (typeof originalApiPath036 === "function") {
+    proto._apiPath = function multi036ApiPath(...args) {
+      const member = this._multi036DialogMember || this._multi036ActionMember;
+      return memberMapPath036(member) || originalApiPath036.apply(this, args);
+    };
+  }
+
+  const originalAvailableZones036 = proto._availableMowZones;
+  if (typeof originalAvailableZones036 === "function") {
+    proto._availableMowZones = function multi036AvailableZones(...args) {
+      const member = this._multi036DialogMember;
+      if (!member) return originalAvailableZones036.apply(this, args);
+      const payload = memberState036(this, member.entry_id).map;
+      const zones = Array.isArray(payload?.map?.zones) ? payload.map.zones : [];
+      return zones
+        .filter((zone) => zone && zone.id !== undefined && zone.id !== null)
+        .map((zone) => ({ id: Number(zone.id), name: zone.name || "Zone " + zone.id }))
+        .filter((zone) => Number.isFinite(zone.id));
+    };
+  }
+
+  const normalizeSite036 = (payload) => {
+    const site = payload && typeof payload === "object" ? { ...payload } : {};
+    const members = (Array.isArray(site.members) ? site.members : []).filter((member) => member && member.entry_id);
+    members.sort((left, right) => {
+      const a = finite036(left.display_order, finite036(left.site_center?.east, 0));
+      const b = finite036(right.display_order, finite036(right.site_center?.east, 0));
+      return a - b || String(left.entry_id).localeCompare(String(right.entry_id));
+    });
+    site.members = members;
+    return site;
+  };
+
+  const callApi036 = async (card, path) => {
+    if (!path || !card?._hass?.callApi) return null;
+    return await card._hass.callApi("GET", apiPath036(path));
+  };
+
+  async function loadSite036(card, force = false) {
+    if (!card?._hass?.callApi || card._multi036SiteLoading) return;
+    const path = sitePath036(card);
+    if (!path) return;
+    const now = Date.now();
+    if (!force && card._multi036Site && now - finite036(card._multi036SiteAt, 0) < SITE_REFRESH_MS) return;
+    card._multi036SiteLoading = true;
+    try {
+      const payload = await callApi036(card, path);
+      card._multi036Site = normalizeSite036(payload);
+      card._multi036SiteAt = now;
+      card._multi036SiteError = null;
+      for (const member of card._multi036Site.members || []) memberState036(card, member.entry_id);
+      syncMultiButton036(card);
+      applyMultiMode036(card);
+      if (multiActive036(card)) await refreshMembers036(card, true);
+    } catch (error) {
+      card._multi036SiteError = error;
+      if (!card._multi036Site) card._multi036Site = null;
+      syncMultiButton036(card);
+      applyMultiMode036(card);
+      console.debug("[Navimower Map Card] Multi-mower Site API unavailable", error);
+    } finally {
+      card._multi036SiteLoading = false;
+    }
+  }
+
+  const memberIsActive036 = (card, member) => {
+    const mower = state036(card, memberEntities036(member)?.mower);
+    const value = String(mower?.state || "").toLowerCase();
+    return ["mowing", "paused", "returning", "starting", "edgecut", "edge_cutting"].includes(value);
+  };
+
+  async function refreshMemberMap036(card, member, force) {
+    const state = memberState036(card, member.entry_id);
+    const anchorEntry = anchorEntry036(card);
+    if (String(member.entry_id) === String(anchorEntry) && card._mapPayload) {
+      state.map = card._mapPayload;
+      state.mapAt = Date.now();
+      return;
+    }
+    const interval = memberIsActive036(card, member) ? MAP_REFRESH_ACTIVE_MS : MAP_REFRESH_IDLE_MS;
+    if (!force && state.map && Date.now() - state.mapAt < interval) return;
+    const path = memberMapPath036(member);
+    if (!path) return;
+    try {
+      const payload = await callApi036(card, addLightweightQuery036(path));
+      if (payload) state.map = payload;
+      state.mapAt = Date.now();
+      state.error = null;
+    } catch (error) {
+      state.error = error;
+    }
+  }
+
+  async function refreshMemberSessions036(card, member, force) {
+    const state = memberState036(card, member.entry_id);
+    if (!force && state.sessionsAt && Date.now() - state.sessionsAt < SESSION_REFRESH_MS) return;
+    const path = memberSessionsPath036(member);
+    if (!path) return;
+    try {
+      const payload = await callApi036(card, path);
+      state.sessions = (Array.isArray(payload?.sessions) ? payload.sessions : [])
+        .filter((session) => session && sessionId036(session))
+        .map((session) => ({ ...session }))
+        .sort((left, right) => (date036(left.started_at ?? left.started_at_ms)?.getTime() || 0) - (date036(right.started_at ?? right.started_at_ms)?.getTime() || 0));
+      state.renderTemplate = payload?.session_render_api_path_template || memberRenderTemplate036(member);
+      state.sessionsAt = Date.now();
+    } catch (error) {
+      state.sessionsError = error;
+    }
+  }
+
+  async function refreshMembers036(card, force = false) {
+    if (!multiActive036(card) || card._multi036MembersLoading) return;
+    card._multi036MembersLoading = true;
+    try {
+      const members = card._multi036Site.members || [];
+      await Promise.all(members.map(async (member) => {
+        await Promise.all([
+          refreshMemberMap036(card, member, force),
+          refreshMemberSessions036(card, member, force)
+        ]);
+      }));
+      await ensureHistoryRenders036(card);
+      renderMulti036(card);
+    } finally {
+      card._multi036MembersLoading = false;
+    }
+  }
+
+  const sessionRenderEndpoint036 = (card, member, sessionId) => {
+    const state = memberState036(card, member.entry_id);
+    const template = state.renderTemplate || memberRenderTemplate036(member);
+    if (template) return String(template).replace("{session_id}", encodeURIComponent(String(sessionId)));
+    return "/api/navimower/session-render/" + encodeURIComponent(String(member.entry_id)) + "/" + encodeURIComponent(String(sessionId));
+  };
+
+  async function getSessionRender036(card, member, session) {
+    if (!(card._multi036RenderCache instanceof Map)) card._multi036RenderCache = new Map();
+    const id = sessionId036(session);
+    if (!id) return null;
+    const key = String(member.entry_id) + ":" + id;
+    if (card._multi036RenderCache.has(key)) return card._multi036RenderCache.get(key);
+    try {
+      const payload = await callApi036(card, sessionRenderEndpoint036(card, member, id));
+      const render = payload?.render || payload;
+      if (render && (String(render?.mowed_area?.path_d || "").trim() || String(render?.travel?.path_d || "").trim())) {
+        card._multi036RenderCache.set(key, render);
+        return render;
+      }
+    } catch (error) {
+      console.debug("[Navimower Map Card] Multi-mower session render unavailable", key, error);
+    }
+    card._multi036RenderCache.set(key, null);
+    return null;
+  }
+
+  async function ensureHistoryRenders036(card) {
+    if (!multiActive036(card) || card._historyDayOffset === null || card._historyDayOffset === undefined) return;
+    const offset = Math.max(0, Number(card._historyDayOffset) || 0);
+    const key = String(offset) + "|" + (card._multi036Site?.members || []).map((member) => {
+      const state = memberState036(card, member.entry_id);
+      return String(member.entry_id) + ":" + state.sessionsAt;
+    }).join("|");
+    if (card._multi036HistoryRenderKey === key || card._multi036HistoryRenderLoading) return;
+    card._multi036HistoryRenderLoading = true;
+    try {
+      await Promise.all((card._multi036Site?.members || []).flatMap((member) => {
+        const sessions = sessionsForDay036(memberState036(card, member.entry_id).sessions, offset);
+        return sessions.map((session) => getSessionRender036(card, member, session));
+      }));
+      card._multi036HistoryRenderKey = key;
+    } finally {
+      card._multi036HistoryRenderLoading = false;
+      renderMultiMap036(card, true);
+    }
+  }
+
+  const bounds036 = (site) => {
+    const direct = site?.combined_svg_bounds;
+    if (direct && [direct.min_x, direct.min_y, direct.max_x, direct.max_y].every((value) => Number.isFinite(Number(value)))) return direct;
+    const items = (site?.members || []).map((member) => member?.svg_bounds).filter((item) => item && [item.min_x, item.min_y, item.max_x, item.max_y].every((value) => Number.isFinite(Number(value))));
+    if (!items.length) return null;
+    return {
+      min_x: Math.min(...items.map((item) => Number(item.min_x))),
+      min_y: Math.min(...items.map((item) => Number(item.min_y))),
+      max_x: Math.max(...items.map((item) => Number(item.max_x))),
+      max_y: Math.max(...items.map((item) => Number(item.max_y)))
+    };
+  };
+
+  const siteLayout036 = (site) => {
+    const box = bounds036(site);
+    if (!box) return null;
+    const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
+    const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
+    const padding = 55;
+    const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
+    const drawnWidth = width * scale;
+    const drawnHeight = height * scale;
+    const offsetX = (1000 - drawnWidth) / 2 - Number(box.min_x) * scale;
+    const offsetY = (1000 - drawnHeight) / 2 - Number(box.min_y) * scale;
+    return { scale, offsetX, offsetY, bounds: box };
+  };
+
+  const memberMatrix036 = (member, layout) => {
+    const matrix = Array.isArray(member?.svg_matrix) && member.svg_matrix.length >= 6 ? member.svg_matrix.map(Number) : null;
+    if (!matrix || matrix.some((value) => !Number.isFinite(value)) || !layout) return null;
+    const s = layout.scale;
+    return [
+      s * matrix[0], s * matrix[1], s * matrix[2], s * matrix[3],
+      s * matrix[4] + layout.offsetX, s * matrix[5] + layout.offsetY
+    ];
+  };
+
+  const matrixString036 = (matrix) => "matrix(" + matrix.map((value) => Number(value).toFixed(8)).join(" ") + ")";
+
+  const transformPoint036 = (matrix, x, y) => [
+    matrix[0] * x + matrix[2] * y + matrix[4],
+    matrix[1] * x + matrix[3] * y + matrix[5]
+  ];
+
+  const rawPoints036 = (points) => (Array.isArray(points) ? points : [])
+    .filter((point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])))
+    .map((point) => Number(point[0]).toFixed(4) + "," + Number(point[1]).toFixed(4))
+    .join(" ");
+
+  const memberIconKey036 = (member) => {
+    const configured = String(member?.mower_icon || "").trim().toLowerCase();
+    if (configured && typeof MOWER_ICON_SPECS_032 !== "undefined" && MOWER_ICON_SPECS_032[configured]) return configured;
+    const model = String(member?.model || member?.vehicle_type || "");
+    if (typeof autoMowerIcon032 === "function") return autoMowerIcon032(model) || "h2";
+    return "h2";
+  };
+
+  const mowerMarkup036 = (card, member, matrix) => {
+    const entities = memberEntities036(member);
+    const x = entityValue036(card, entities.position_x);
+    const y = entityValue036(card, entities.position_y);
+    if (x === null || y === null || !matrix) return { local: "", label: "" };
+    const heading = entityValue036(card, entities.heading);
+    const key = memberIconKey036(member);
+    const spec = typeof MOWER_ICON_SPECS_032 !== "undefined" ? MOWER_ICON_SPECS_032[key] || MOWER_ICON_SPECS_032.h2 : null;
+    if (!spec) return { local: "", label: "" };
+    const zoom = Math.max(1, finite036(card?._view?.scale, 1));
+    const screenScale = Math.max(0.00001, Math.hypot(matrix[0], matrix[1]));
+    const desiredHeight = 58.83 * clamp036(card?._config?.mower_scale, 0.5, 2.5) / zoom;
+    const localScale = desiredHeight / (screenScale * spec.height);
+    const degrees = Number.isFinite(heading) ? 90 - heading : 90;
+    const mowerState = String(state036(card, entities.mower)?.state || "").toLowerCase();
+    const errorClass = ["error", "blocked", "unavailable"].includes(mowerState) ? " nm-multi-mower-error" : "";
+    const local = "<g class=\"nm-multi-mower" + errorClass + "\" transform=\"translate(" + x.toFixed(4) + " " + y.toFixed(4) + ") rotate(" + degrees.toFixed(2) + ") scale(" + localScale.toFixed(7) + ") translate(" + (-spec.width / 2).toFixed(2) + " " + (-spec.height / 2).toFixed(2) + ")\">" + spec.markup + "</g>";
+    const screen = transformPoint036(matrix, x, y);
+    const font = Math.max(10, 13 / zoom);
+    const labelY = screen[1] - 38 / zoom;
+    const label = "<g class=\"nm-multi-mower-name\"><rect x=\"" + (screen[0] - Math.max(24, String(member.name || "Mower").length * font * 0.32)).toFixed(1) + "\" y=\"" + (labelY - font * 0.9).toFixed(1) + "\" width=\"" + Math.max(48, String(member.name || "Mower").length * font * 0.64).toFixed(1) + "\" height=\"" + (font * 1.35).toFixed(1) + "\" rx=\"" + (font * 0.5).toFixed(1) + "\" fill=\"var(--card-background-color,#fff)\" fill-opacity=\".88\"/><text x=\"" + screen[0].toFixed(1) + "\" y=\"" + labelY.toFixed(1) + "\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"" + font.toFixed(1) + "\" font-weight=\"650\" fill=\"var(--primary-text-color)\">" + esc(member.name || "Mower") + "</text></g>";
+    return { local, label };
+  };
+
+  const renderArchive036 = (render, color, opacity, cssClass = "") => {
+    if (!render) return "";
+    const area = String(render?.mowed_area?.path_d || "").trim();
+    const travel = String(render?.travel?.path_d || "").trim();
+    const route = String(render?.route?.path_d || "").trim();
+    const width = Math.max(0.02, finite036(render?.travel?.stroke_width_m, finite036(render?.route?.stroke_width_m, 0.08)));
+    const parts = [];
+    if (area) parts.push("<path class=\"nm-multi-session-area\" d=\"" + esc(area) + "\" fill=\"" + esc(color) + "\" fill-rule=\"evenodd\" clip-rule=\"evenodd\"/>");
+    if (travel) parts.push("<path d=\"" + esc(travel) + "\" fill=\"none\" stroke=\"" + esc(color) + "\" stroke-width=\"" + width.toFixed(3) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+    if (route) parts.push("<path d=\"" + esc(route) + "\" fill=\"none\" stroke=\"" + esc(color) + "\" stroke-width=\"" + width.toFixed(3) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+    return parts.length ? "<g class=\"nm-multi-session-render " + esc(cssClass) + "\" opacity=\"" + clamp036(opacity, 0, 1).toFixed(2) + "\">" + parts.join("") + "</g>" : "";
+  };
+
+  const zoneLabel036 = (card, member, matrix, zone, coverageMap) => {
+    const polygon = Array.isArray(zone?.polygon) ? zone.polygon : [];
+    const valid = polygon.filter((point) => Array.isArray(point) && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
+    if (!valid.length) return "";
+    const x = valid.reduce((sum, point) => sum + Number(point[0]), 0) / valid.length;
+    const y = valid.reduce((sum, point) => sum + Number(point[1]), 0) / valid.length;
+    const screen = transformPoint036(matrix, x, y);
+    const zoom = Math.max(1, finite036(card?._view?.scale, 1));
+    const size = Math.max(10, finite036(card?._config?.zone_label_font_size, 20) / zoom);
+    const coverage = coverageMap.get(Number(zone.id));
+    const pct = finite036(coverage?.pct, null);
+    const text = String(zone.name || "Zone " + zone.id) + (pct !== null ? " " + Math.round(pct) + "%" : "");
+    return "<text class=\"nm-multi-zone-label\" x=\"" + screen[0].toFixed(1) + "\" y=\"" + screen[1].toFixed(1) + "\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"" + size.toFixed(1) + "\" font-weight=\"650\" fill=\"var(--primary-text-color)\" fill-opacity=\"" + clamp036(card?._config?.zone_label_opacity, 0, 1).toFixed(2) + "\" stroke=\"var(--card-background-color,#fff)\" stroke-width=\"" + Math.max(1.5, 3 / zoom).toFixed(1) + "\" paint-order=\"stroke\">" + esc(text) + "</text>";
+  };
+
+  function renderMultiMap036(card, force = false) {
+    ensureMultiUi036(card);
+    const layer = card._multi036Layer;
+    if (!layer) return;
+    if (!multiActive036(card)) {
+      layer.style.display = "none";
+      return;
+    }
+    layer.style.display = "";
+    const site = card._multi036Site;
+    const layout = siteLayout036(site);
+    if (!layout) {
+      layer.innerHTML = "<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"var(--secondary-background-color)\"/><text x=\"500\" y=\"500\" text-anchor=\"middle\" fill=\"var(--secondary-text-color)\">Waiting for validated multi-mower map bounds…</text>";
+      return;
+    }
+
+    const liveSignature = (site.members || []).map((member) => {
+      const entities = memberEntities036(member);
+      return [member.entry_id, state036(card, entities.position_x)?.state, state036(card, entities.position_y)?.state, state036(card, entities.heading)?.state, state036(card, entities.mower)?.state].join(":");
+    }).join("|");
+    const mapSignature = (site.members || []).map((member) => {
+      const payload = memberState036(card, member.entry_id).map;
+      return [member.entry_id, payload?.map?.revision, payload?.current_cycle_render?.revision].join(":");
+    }).join("|");
+    const key = [mapSignature, liveSignature, card._historyDayOffset, card._multi036SelectedSessionKey, card?._view?.scale, card?._config?.show_zone_labels, card?._config?.show_channels, card?._config?.show_vf_off_areas, card?._config?.show_gate_areas, card?._config?.show_custom_areas, card?._config?.map_background_color, card?._config?.trail_color, card?._config?.trail_opacity].join("|");
+    if (!force && key === card._multi036MapRenderKey) return;
+    card._multi036MapRenderKey = key;
+
+    const c = card._config || {};
+    const background = String(c.map_background_color || "").trim() || "var(--secondary-background-color)";
+    const zoneFill = c.zone_fill_color || "#81c784";
+    const zoneStroke = c.zone_stroke_color || "#43a047";
+    const zoneFillOpacity = clamp036(c.zone_fill_opacity, 0, 1);
+    const zoneStrokeWidth = clamp036(c.zone_stroke_width, 0.5, 12);
+    const trailColor = c.trail_color || "#43a047";
+    const trailOpacity = clamp036(c.trail_opacity, 0, 1);
+    const parts = ["<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"" + esc(background) + "\"/>"];
+    const rootLabels = [];
+    const dockMarkers = [];
+
+    for (const member of site.members || []) {
+      const memberState = memberState036(card, member.entry_id);
+      const payload = memberState.map;
+      const map = payload?.map || {};
+      const matrix = memberMatrix036(member, layout);
+      if (!matrix || !payload) continue;
+      const local = [];
+      const coverageMap = new Map((payload?.coverage?.zones || []).map((item) => [Number(item.id), item]));
+
+      for (const zone of map.zones || []) {
+        const points = rawPoints036(zone?.polygon);
+        if (!points) continue;
+        local.push("<polygon points=\"" + points + "\" fill=\"" + esc(zoneFill) + "\" fill-opacity=\"" + zoneFillOpacity.toFixed(2) + "\" stroke=\"" + esc(zoneStroke) + "\" stroke-width=\"" + zoneStrokeWidth.toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+        if (c.show_zone_labels !== false) rootLabels.push(zoneLabel036(card, member, matrix, zone, coverageMap));
+      }
+
+      if (card._historyDayOffset === null || card._historyDayOffset === undefined) {
+        const current = payload?.current_cycle_render;
+        if (current?.scope === "current_cycle") {
+          local.push(renderArchive036({ mowed_area: current.mowed_area, travel: { path_d: "" }, route: { path_d: "" } }, trailColor, trailOpacity, "nm-multi-current-cycle"));
+        }
+      } else {
+        const sessions = sessionsForDay036(memberState.sessions, card._historyDayOffset);
+        for (const session of sessions) {
+          const cacheKey = String(member.entry_id) + ":" + sessionId036(session);
+          const render = card._multi036RenderCache?.get?.(cacheKey);
+          if (render) local.push(renderArchive036(render, trailColor, trailOpacity, "nm-multi-history-session"));
+        }
+      }
+
+      for (const polygon of map.off_limit_areas || []) {
+        const points = rawPoints036(polygon);
+        if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\" fill-opacity=\".08\" stroke=\"" + esc(c.off_limit_color || "#FF5A00") + "\" stroke-width=\"" + clamp036(c.off_limit_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+      }
+      if (c.show_vf_off_areas !== false) {
+        for (const polygon of map.vf_off_areas || []) {
+          const points = rawPoints036(polygon);
+          if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.vf_off_color || "#2F80ED") + "\" fill-opacity=\".06\" stroke=\"" + esc(c.vf_off_color || "#2F80ED") + "\" stroke-width=\"" + clamp036(c.vf_off_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+        }
+      }
+      if (c.show_channels !== false) {
+        for (const channel of map.channels || []) {
+          const points = rawPoints036(channel?.points);
+          if (points) local.push("<polyline points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(c.channel_color || "#808080") + "\" stroke-width=\"" + clamp036(c.channel_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-opacity=\".58\" stroke-linecap=\"round\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+        }
+      }
+      if (c.show_gate_areas !== false) {
+        for (const gate of payload?.gate_areas || []) {
+          const x1 = finite036(gate?.x_min, null), x2 = finite036(gate?.x_max, null), y1 = finite036(gate?.y_min, null), y2 = finite036(gate?.y_max, null);
+          if ([x1, x2, y1, y2].every((value) => value !== null)) local.push("<rect x=\"" + Math.min(x1, x2).toFixed(4) + "\" y=\"" + Math.min(y1, y2).toFixed(4) + "\" width=\"" + Math.abs(x2 - x1).toFixed(4) + "\" height=\"" + Math.abs(y2 - y1).toFixed(4) + "\" fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+        }
+      }
+      if (c.show_custom_areas !== false) {
+        for (const area of payload?.custom_areas || []) {
+          const points = rawPoints036(area?.polygon);
+          if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.custom_area_color || "#8e24aa") + "\" fill-opacity=\"" + clamp036(c.custom_area_fill_opacity, 0, 1).toFixed(2) + "\" stroke=\"" + esc(c.custom_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.custom_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+        }
+      }
+
+      const selectedKey = card._multi036SelectedSessionKey;
+      if (selectedKey && selectedKey.startsWith(String(member.entry_id) + ":")) {
+        const selectedRender = card._multi036RenderCache?.get?.(selectedKey);
+        if (selectedRender) local.push(renderArchive036(selectedRender, trailColor, 1, "nm-multi-selected-session"));
+      }
+
+      const mower = mowerMarkup036(card, member, matrix);
+      local.push(mower.local);
+      if (mower.label) rootLabels.push(mower.label);
+
+      const station = map.station;
+      if (station && Number.isFinite(Number(station.x)) && Number.isFinite(Number(station.y))) {
+        const screen = transformPoint036(matrix, Number(station.x), Number(station.y));
+        if (typeof card._station === "function") dockMarkers.push(card._station(screen[0], screen[1]));
+      }
+
+      parts.push("<g class=\"nm-multi-member-map\" data-entry-id=\"" + esc(member.entry_id) + "\" transform=\"" + matrixString036(matrix) + "\">" + local.join("") + "</g>");
+    }
+
+    parts.push(dockMarkers.join(""));
+    parts.push(rootLabels.join(""));
+
+    if (c.show_map_legend !== false) {
+      parts.push("<g class=\"nm-multi-map-legend\" transform=\"translate(14 14)\"><rect width=\"158\" height=\"112\" rx=\"10\" fill=\"var(--card-background-color,#fff)\" fill-opacity=\"" + clamp036(c.map_legend_opacity, 0, 1).toFixed(2) + "\"/><circle cx=\"14\" cy=\"20\" r=\"5\" fill=\"" + esc(zoneFill) + "\"/><text x=\"28\" y=\"24\" font-size=\"13\" fill=\"var(--primary-text-color)\">Zones</text><circle cx=\"14\" cy=\"46\" r=\"5\" fill=\"" + esc(trailColor) + "\"/><text x=\"28\" y=\"50\" font-size=\"13\" fill=\"var(--primary-text-color)\">Mowed</text><circle cx=\"14\" cy=\"72\" r=\"5\" fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\"/><text x=\"28\" y=\"76\" font-size=\"13\" fill=\"var(--primary-text-color)\">Off-limit</text><circle cx=\"14\" cy=\"98\" r=\"5\" fill=\"" + esc(c.channel_color || "#808080") + "\"/><text x=\"28\" y=\"102\" font-size=\"13\" fill=\"var(--primary-text-color)\">Channel</text></g>");
+    }
+
+    layer.innerHTML = parts.join("");
+  }
+
+  const displayName036 = (member) => String(member?.name || member?.model || "Mower");
+
+  function renderMultiControls036(card) {
+    ensureMultiUi036(card);
+    const host = card._multi036Controls;
+    if (!host) return;
+    if (!multiActive036(card)) {
+      host.hidden = true;
+      return;
+    }
+    host.hidden = false;
+    const members = card._multi036Site?.members || [];
+    host.style.setProperty("--nm-multi-columns", String(Math.max(1, members.length)));
+    host.innerHTML = members.map((member) => {
+      const entities = memberEntities036(member);
+      const mower = state036(card, entities.mower);
+      const unavailable = !mower || ["unknown", "unavailable"].includes(String(mower.state || "").toLowerCase());
+      const battery = state036(card, entities.battery)?.state;
+      const managedOn = String(state036(card, entities.managed_schedule)?.state || "").toLowerCase() === "on";
+      const nativeOn = String(state036(card, entities.native_schedule)?.state || "").toLowerCase() === "on";
+      const scheduleOn = managedOn || nativeOn;
+      const canResume = typeof shouldOfferResume === "function" ? shouldOfferResume(card._hass, mower) : ["paused", "returning"].includes(String(mower?.state || "").toLowerCase());
+      const status = memberState036(card, member.entry_id).command;
+      return "<section class=\"nm-multi-control-member\" data-entry-id=\"" + esc(member.entry_id) + "\"><button type=\"button\" class=\"nm-multi-schedule" + (scheduleOn ? " active" : "") + "\" data-multi-schedule=\"" + esc(member.entry_id) + "\" title=\"Open " + esc(displayName036(member)) + " schedule\"><span>" + esc(displayName036(member)) + "</span><ha-icon icon=\"mdi:calendar-clock\"></ha-icon></button><div class=\"nm-multi-member-meta\"><span>" + esc(mower?.state || "Unavailable") + "</span>" + (battery && !["unknown", "unavailable"].includes(String(battery).toLowerCase()) ? "<span>" + esc(battery) + "%</span>" : "") + "</div><div class=\"nm-multi-command-grid\"><button type=\"button\" data-multi-command=\"mow\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:play\"></ha-icon><span>Mow</span></button>" + (canResume ? "<button type=\"button\" data-multi-command=\"resume\" data-entry-id=\"" + esc(member.entry_id) + "\"><ha-icon icon=\"mdi:play-circle-outline\"></ha-icon><span>Resume</span></button>" : "") + "<button type=\"button\" data-multi-command=\"pause\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:pause\"></ha-icon><span>Pause</span></button><button type=\"button\" data-multi-command=\"dock\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:home-map-marker\"></ha-icon><span>Home</span></button></div>" + (status ? "<div class=\"nm-multi-command-status " + esc(status.kind || "") + "\">" + esc(status.text || "") + "</div>" : "") + "</section>";
+    }).join("");
+  }
+
+  async function runMemberCommand036(card, member, command) {
+    if (!member || !card?._hass?.callService) return;
+    const state = memberState036(card, member.entry_id);
+    const entities = memberEntities036(member);
+    card._multi036ActionMember = member;
+    state.command = { kind: "saving", text: command === "dock" ? "Returning home…" : command === "pause" ? "Pausing…" : "Resuming…" };
+    renderMultiControls036(card);
+    try {
+      if (command === "resume") {
+        const deviceId = memberDevice036(member);
+        await card._hass.callService("navimower", "resume", deviceId ? { device_id: deviceId } : {});
+      } else {
+        const entityId = entities.mower;
+        if (!entityId) throw new Error("Mower entity is unavailable");
+        await card._hass.callService("lawn_mower", command, { entity_id: entityId });
+      }
+      state.command = { kind: "saved", text: command === "dock" ? "Home command sent" : command === "pause" ? "Pause command sent" : "Resume command sent" };
+    } catch (error) {
+      state.command = { kind: "error", text: "Command failed" };
+      console.error("[Navimower Map Card] Multi-mower command failed", command, error);
+    } finally {
+      card._multi036ActionMember = null;
+      renderMultiControls036(card);
+    }
+  }
+
+  const clearDialogFlags036 = (card) => {
+    card._notificationDialogOpen = false;
+    card._beta5SettingsOpen = false;
+    card._beta6SettingsOpen = false;
+  };
+
+  async function openMemberSchedule036(card, member) {
+    if (!member) return;
+    setDialogMember036(card, member);
+    clearDialogFlags036(card);
+    try { await card._openScheduleDialog?.(); } catch (error) { console.error("[Navimower Map Card] Multi-mower schedule open failed", error); }
+  }
+
+  function openMemberMow036(card, member) {
+    if (!member) return;
+    setDialogMember036(card, member);
+    clearDialogFlags036(card);
+    card._mowSequence = [];
+    card._mowReset = true;
+    card._onMowPressed?.();
+  }
+
+  const sessionLabel036 = (card, session) => {
+    const start = date036(session?.started_at ?? session?.started_at_ms);
+    const end = date036(session?.ended_at ?? session?.ended_at_ms);
+    if (typeof card._formatSessionTime === "function") return card._formatSessionTime(start, end, Boolean(session?.active), new Date());
+    if (!start) return session?.active ? "Current session" : "Mowing session";
+    const options = { hour: "2-digit", minute: "2-digit" };
+    return start.toLocaleTimeString([], options) + "–" + (end ? end.toLocaleTimeString([], options) : "…");
+  };
+
+  function renderMultiSessions036(card) {
+    ensureMultiUi036(card);
+    if (!card._sessionsEl) return;
+    if (!multiActive036(card)) return;
+    if (card?._config?.show_session_legend === false) {
+      card._sessionsEl.style.display = "none";
+      return;
+    }
+    const offset = card._historyDayOffset === null || card._historyDayOffset === undefined ? 0 : Math.max(0, Number(card._historyDayOffset) || 0);
+    const groups = (card._multi036Site?.members || []).map((member) => {
+      const sessions = sessionsForDay036(memberState036(card, member.entry_id).sessions, offset);
+      const rows = sessions.length ? sessions.map((session) => {
+        const id = sessionId036(session);
+        const key = String(member.entry_id) + ":" + id;
+        const selected = card._multi036SelectedSessionKey === key;
+        return "<button type=\"button\" class=\"nm-session nm-multi-session" + (selected ? " nm-session-pulsing" : "") + "\" data-multi-session-key=\"" + esc(key) + "\" data-entry-id=\"" + esc(member.entry_id) + "\" data-session-id-multi=\"" + esc(id) + "\" title=\"Show this session on the map\"><span class=\"nm-session-dot\" style=\"background:" + esc(card?._config?.trail_color || "#43a047") + ";opacity:" + clamp036(card?._config?.trail_opacity, 0, 1).toFixed(2) + "\"></span><span>" + esc(sessionLabel036(card, session)) + "</span></button>";
+      }).join("") : "<span class=\"nm-multi-session-empty\">No sessions</span>";
+      return "<section class=\"nm-multi-session-group\"><div class=\"nm-multi-session-heading\">" + esc(displayName036(member)) + "</div><div class=\"nm-multi-session-rows\">" + rows + "</div></section>";
+    }).join("");
+    card._sessionsEl.classList.add("nm-multi-sessions-active");
+    card._sessionsEl.innerHTML = groups;
+    card._sessionsEl.style.display = "grid";
+  }
+
+  async function selectSession036(card, entryId, sessionId, key) {
+    const member = memberById036(card, entryId);
+    if (!member) return;
+    const state = memberState036(card, entryId);
+    const session = state.sessions.find((item) => sessionId036(item) === String(sessionId));
+    if (!session) return;
+    await getSessionRender036(card, member, session);
+    card._multi036SelectedSessionKey = key;
+    card._multi036MapRenderKey = null;
+    renderMultiSessions036(card);
+    renderMultiMap036(card, true);
+    if (card._multi036PulseTimer) clearTimeout(card._multi036PulseTimer);
+    card._multi036PulseTimer = setTimeout(() => {
+      card._multi036SelectedSessionKey = null;
+      card._multi036MapRenderKey = null;
+      renderMultiSessions036(card);
+      renderMultiMap036(card, true);
+      card._multi036PulseTimer = null;
+    }, 1900);
+  }
+
+  const notificationItems036 = (card) => {
+    const rows = [];
+    for (const member of card?._multi036Site?.members || []) {
+      const entityId = memberEntities036(member)?.notification;
+      const source = state036(card, entityId);
+      let items = [];
+      if (typeof notificationItemsFromState === "function") items = notificationItemsFromState(source);
+      else if (source && !["unknown", "unavailable", "no notifications"].includes(String(source.state || "").toLowerCase())) items = [{ ...source.attributes, title: source.state }];
+      for (const item of items || []) rows.push({ ...item, member, notification_entity: entityId });
+    }
+    return rows.sort((left, right) => (date036(right.created_at ?? right.addtime)?.getTime() || 0) - (date036(left.created_at ?? left.addtime)?.getTime() || 0));
+  };
+
+  function syncMultiNotificationBell036(card) {
+    if (!multiActive036(card)) return;
+    const button = card?._notificationButtonEl || card?.querySelector?.(".nm-notification-button");
+    if (!button) return;
+    const unread = notificationItems036(card).some((item) => item.read === false);
+    button.classList.toggle("unread", unread);
+    button.setAttribute("aria-label", unread ? "Open unread notifications" : "Open notifications");
+    button.title = unread ? "Unread notifications · all mowers" : "Notifications · all mowers";
+    button.querySelector?.("ha-icon")?.setAttribute("icon", unread ? "mdi:bell-badge-outline" : "mdi:bell-outline");
+  }
+
+  function renderMultiNotifications036(card) {
+    if (!multiActive036(card) || !card?._modalHostEl || !card._notificationDialogOpen) return;
+    const items = notificationItems036(card);
+    const pageSize = typeof notificationPageSize === "function" ? notificationPageSize(card._config || {}) : Math.max(1, Math.min(10, Number(card?._config?.notification_page_size) || 3));
+    const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+    card._notificationPage = Math.max(0, Math.min(pageCount - 1, Number(card._notificationPage) || 0));
+    const pageItems = items.slice(card._notificationPage * pageSize, card._notificationPage * pageSize + pageSize);
+    const unread = items.some((item) => item.read === false);
+    const body = pageItems.length ? pageItems.map((item) => {
+      const member = item.member;
+      const stamp = typeof formatNotificationTimestamp === "function" ? formatNotificationTimestamp(item.created_at ?? item.addtime, card._hass) : (date036(item.created_at ?? item.addtime)?.toLocaleString() || "Time unavailable");
+      const id = String(item.message_id ?? item.messageId ?? item.id ?? "");
+      const code = item.notification_code ?? item.error_code ?? item.event_code ?? item.code ?? null;
+      return "<article class=\"nm-notification-item" + (item.read === false ? " unread" : "") + "\"><div class=\"nm-notification-meta\"><span class=\"nm-notification-dot\"></span><span class=\"nm-multi-notification-mower\">" + esc(displayName036(member)) + "</span><span class=\"nm-notification-time\">" + esc(stamp) + "</span>" + (code ? "<span class=\"nm-notification-code\">" + esc(code) + "</span>" : "") + "</div><div class=\"nm-notification-item-title\">" + esc(item.title || "Notification") + "</div>" + (item.content ? "<div class=\"nm-notification-content\">" + esc(item.content) + "</div>" : "") + (item.read === false && id ? "<button type=\"button\" class=\"nm-notification-mark-read\" data-multi-notification-read=\"" + esc(id) + "\" data-entry-id=\"" + esc(member.entry_id) + "\">Mark as read</button>" : "") + "</article>";
+    }).join("") : "<div class=\"nm-notification-empty\">No notifications available.</div>";
+    const pager = pageCount > 1 ? "<div class=\"nm-notification-pager\"><button type=\"button\" data-multi-notification-page=\"previous\"" + (card._notificationPage <= 0 ? " disabled" : "") + ">Previous</button><span class=\"nm-notification-page-label\">" + (card._notificationPage + 1) + " / " + pageCount + "</span><button type=\"button\" data-multi-notification-page=\"next\"" + (card._notificationPage >= pageCount - 1 ? " disabled" : "") + ">Next</button></div>" : "";
+    card._modalHostEl.innerHTML = "<div class=\"nm-backdrop nm-notification-backdrop\"><div class=\"nm-dialog nm-notification-dialog\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Notifications\"><div class=\"nm-notification-head\"><div class=\"nm-notification-title\">Notifications</div>" + (unread ? "<button type=\"button\" class=\"nm-notification-mark-all\" data-multi-notification-all>Mark all as read</button>" : "<span></span>") + "<button type=\"button\" class=\"nm-notification-close\" aria-label=\"Close notifications\"><ha-icon icon=\"mdi:close\"></ha-icon></button></div><div class=\"nm-notification-body\">" + body + "</div>" + pager + "</div></div>";
+    const backdrop = card._modalHostEl.querySelector?.(".nm-notification-backdrop");
+    backdrop?.addEventListener("click", (event) => { if (event.target === backdrop) card._closeNotificationDialog?.(); });
+    card._modalHostEl.querySelector?.(".nm-notification-close")?.addEventListener("click", () => card._closeNotificationDialog?.());
+    card._modalHostEl.querySelectorAll?.("[data-multi-notification-page]").forEach((button) => button.addEventListener("click", () => {
+      if (button.disabled) return;
+      card._notificationPage += button.dataset.multiNotificationPage === "next" ? 1 : -1;
+      renderMultiNotifications036(card);
+    }));
+    card._modalHostEl.querySelectorAll?.("[data-multi-notification-read]").forEach((button) => button.addEventListener("click", async () => {
+      const member = memberById036(card, button.dataset.entryId);
+      const deviceId = memberDevice036(member);
+      if (!deviceId) return;
+      button.disabled = true;
+      try { await card._hass.callService("navimower", "mark_notification_read", { device_id: deviceId, message_id: button.dataset.multiNotificationRead }); } catch (error) { console.error("[Navimower Map Card] Multi-mower mark read failed", error); }
+    }));
+    card._modalHostEl.querySelector?.("[data-multi-notification-all]")?.addEventListener("click", async (event) => {
+      event.currentTarget.disabled = true;
+      const members = (card._multi036Site?.members || []).filter((member) => notificationItems036(card).some((item) => item.member?.entry_id === member.entry_id && item.read === false));
+      await Promise.allSettled(members.map((member) => {
+        const deviceId = memberDevice036(member);
+        return deviceId ? card._hass.callService("navimower", "mark_all_notifications_read", { device_id: deviceId }) : Promise.resolve();
+      }));
+    });
+  }
+
+  function syncMultiButton036(card) {
+    ensureMultiUi036(card);
+    const button = card._multi036Button;
+    if (!button) return;
+    ensurePreference036(card);
+    const available = siteAvailable036(card);
+    button.hidden = !available;
+    button.classList.toggle("active", Boolean(card._multi036Requested && available));
+    button.setAttribute("aria-pressed", card._multi036Requested && available ? "true" : "false");
+    button.title = available ? (card._multi036Requested ? "Switch to single mower map" : "Show nearby mower maps together") : "Multi mower requires two validated nearby mower maps";
+    const label = button.querySelector?.("span");
+    if (label) label.textContent = card._multi036Requested && available ? "Single" : "Multi";
+  }
+
+  const hideCoreLayer036 = (element, hide) => {
+    if (!element) return;
+    if (hide) {
+      if (element.dataset.multi036Display === undefined) element.dataset.multi036Display = element.style.display || "";
+      element.style.display = "none";
+    } else if (element.dataset.multi036Display !== undefined) {
+      element.style.display = element.dataset.multi036Display;
+      delete element.dataset.multi036Display;
+    }
+  };
+
+  function applyMultiMode036(card) {
+    ensureMultiUi036(card);
+    const active = multiActive036(card);
+    if (card._multi036ModeApplied === active) {
+      if (active) renderMulti036(card);
+      return;
+    }
+    card._multi036ModeApplied = active;
+    const coreLayers = [card._baseEl, card._historyEl, card._trailEl, card._highlightEl, card._detailsEl, card._labelsEl, card._dynamicEl, card._uiEl];
+    coreLayers.forEach((element) => hideCoreLayer036(element, active));
+    hideCoreLayer036(card._controlsEl, active);
+    hideCoreLayer036(card._commandStatusEl, active);
+    hideCoreLayer036(card._footerEl, active);
+    hideCoreLayer036(card._scheduleButtonEl, active);
+    if (card._multi036Layer) card._multi036Layer.style.display = active ? "" : "none";
+    if (card._multi036Controls) card._multi036Controls.hidden = !active;
+    if (!active) {
+      card._multi036DialogMember = null;
+      card._multi036SelectedSessionKey = null;
+      card._sessionsEl?.classList?.remove?.("nm-multi-sessions-active");
+      card._renderShell?.();
+      card._renderHistory?.();
+      card._renderTrail?.();
+      card._renderMower?.();
+      card._renderFooter?.();
+      card._renderControls?.();
+      card._renderSessions?.();
+      return;
+    }
+    card._historyRenderKey = null;
+    card._sessionsRenderKey = null;
+    card._multi036MapRenderKey = null;
+    card._view = { scale: Math.max(1, finite036(card?._config?.initial_zoom, 1)), cx: 500, cy: 500 };
+    card._initialViewApplied = true;
+    card._applyViewBox?.();
+    void refreshMembers036(card, true);
+    renderMulti036(card);
+  }
+
+  function renderMulti036(card) {
+    if (!multiActive036(card)) return;
+    renderMultiMap036(card);
+    renderMultiControls036(card);
+    renderMultiSessions036(card);
+    syncMultiNotificationBell036(card);
+  }
+
+  function ensureMultiUi036(card) {
+    if (!card?._domReady || typeof document === "undefined") return;
+    if (!card._multi036Button) {
+      const header = card.querySelector?.(".nm-header");
+      if (header) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "nm-multi-button";
+        button.hidden = true;
+        button.setAttribute("aria-label", "Toggle multi mower map");
+        button.setAttribute("aria-pressed", "false");
+        button.innerHTML = "<span>Multi</span><ha-icon icon=\"mdi:robot-mower-outline\"></ha-icon>";
+        const notification = header.querySelector?.(".nm-notification-button");
+        const schedule = header.querySelector?.(".nm-schedule-button");
+        if (notification) notification.before(button);
+        else if (schedule) schedule.before(button);
+        else header.appendChild(button);
+        button.addEventListener("click", () => {
+          if (!siteAvailable036(card)) return;
+          ensurePreference036(card);
+          card._multi036Requested = !card._multi036Requested;
+          savePreference036(card);
+          syncMultiButton036(card);
+          applyMultiMode036(card);
+        });
+        card._multi036Button = button;
+      }
+    }
+    if (!card._multi036Layer && card._svgEl) {
+      const layer = document.createElementNS(SVG_NS, "g");
+      layer.setAttribute("class", "nm-multi-layer");
+      layer.style.display = "none";
+      card._svgEl.appendChild(layer);
+      card._multi036Layer = layer;
+    }
+    if (!card._multi036Controls && card._controlsEl) {
+      const controls = document.createElement("div");
+      controls.className = "nm-multi-controls";
+      controls.hidden = true;
+      card._controlsEl.before(controls);
+      controls.addEventListener("click", (event) => {
+        const scheduleButton = event.target?.closest?.("[data-multi-schedule]");
+        if (scheduleButton) {
+          const member = memberById036(card, scheduleButton.dataset.multiSchedule);
+          void openMemberSchedule036(card, member);
+          return;
+        }
+        const button = event.target?.closest?.("[data-multi-command]");
+        if (!button || button.disabled) return;
+        const member = memberById036(card, button.dataset.entryId);
+        const command = button.dataset.multiCommand;
+        if (command === "mow") openMemberMow036(card, member);
+        else void runMemberCommand036(card, member, command);
+      });
+      card._multi036Controls = controls;
+    }
+    if (card._sessionsEl && !card._sessionsEl.__multi036Click) {
+      card._sessionsEl.__multi036Click = true;
+      card._sessionsEl.addEventListener("click", (event) => {
+        const button = event.target?.closest?.("[data-multi-session-key]");
+        if (!button || !multiActive036(card)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void selectSession036(card, button.dataset.entryId, button.dataset.sessionIdMulti, button.dataset.multiSessionKey);
+      }, true);
+    }
+    if (!card._multi036Styles) {
+      const style = document.createElement("style");
+      style.dataset.multiMower036 = "true";
+      style.textContent = [
+        ".nm-multi-button{height:34px;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:0;border-radius:18px;background:transparent;color:var(--secondary-text-color);font:inherit;font-size:.82rem;font-weight:650;cursor:pointer}",
+        ".nm-multi-button[hidden]{display:none}.nm-multi-button.active{color:#FF5A00;background:color-mix(in srgb,#FF5A00 10%,transparent)}.nm-multi-button ha-icon{--mdc-icon-size:20px}",
+        ".nm-multi-controls{display:grid;grid-template-columns:repeat(var(--nm-multi-columns,2),minmax(0,1fr));gap:10px;margin:10px 2px 0}.nm-multi-controls[hidden]{display:none}",
+        ".nm-multi-control-member{min-width:0;padding:9px;border:1px solid var(--divider-color);border-radius:11px;background:color-mix(in srgb,var(--secondary-background-color) 65%,transparent)}",
+        ".nm-multi-schedule{width:100%;min-height:32px;display:flex;align-items:center;justify-content:space-between;gap:7px;border:0;border-radius:9px;padding:5px 8px;color:var(--primary-text-color);background:transparent;font:inherit;font-weight:700;cursor:pointer}.nm-multi-schedule.active{color:#FF5A00}.nm-multi-schedule ha-icon{--mdc-icon-size:20px}",
+        ".nm-multi-member-meta{display:flex;justify-content:space-between;gap:8px;padding:2px 8px 7px;color:var(--secondary-text-color);font-size:.76rem;text-transform:capitalize}",
+        ".nm-multi-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.nm-multi-command-grid button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;padding:7px 8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit;font-size:.84rem;font-weight:650;cursor:pointer}.nm-multi-command-grid button:disabled{opacity:.45;cursor:default}.nm-multi-command-grid ha-icon{--mdc-icon-size:19px}",
+        ".nm-multi-command-status{padding:6px 4px 0;text-align:center;color:var(--secondary-text-color);font-size:.74rem}.nm-multi-command-status.error{color:var(--error-color,#db4437)}",
+        ".nm-sessions.nm-multi-sessions-active{grid-template-columns:1fr!important;gap:7px!important;width:100%}.nm-multi-session-group{display:grid;grid-template-columns:minmax(80px,auto) 1fr;align-items:start;gap:8px 12px;width:100%}.nm-multi-session-heading{padding-top:2px;color:var(--secondary-text-color);font-size:.76rem;font-weight:750}.nm-multi-session-rows{display:flex;flex-wrap:wrap;gap:5px 10px;min-width:0}.nm-multi-session-empty{color:var(--secondary-text-color);font-size:.8rem;opacity:.7}",
+        ".nm-multi-selected-session .nm-multi-session-area{animation:nm-multi-session-pulse 600ms ease-in-out 3 forwards}@keyframes nm-multi-session-pulse{0%,100%{opacity:.1}50%{opacity:1;filter:drop-shadow(0 0 7px var(--nm-highlight-color,#43a047))}}",
+        ".nm-multi-mower-error{filter:drop-shadow(0 0 7px var(--error-color,#db4437))}.nm-multi-notification-mower{flex:0 0 auto;padding:1px 6px;border-radius:10px;background:var(--secondary-background-color);color:var(--primary-text-color);font-weight:700}",
+        "@media(max-width:620px){.nm-multi-controls{grid-template-columns:1fr}.nm-multi-session-group{grid-template-columns:1fr;gap:2px}.nm-multi-session-heading{padding-left:4px}.nm-multi-command-grid button span{font-size:.8rem}}"
+      ].join("\n");
+      card.appendChild(style);
+      card._multi036Styles = style;
+    }
+  }
+
+  const originalStub036 = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
+  Card.getStubConfig = function multi036StubConfig() {
+    return { ...(originalStub036?.() || {}), multi_mower: false };
+  };
+
+  const originalForm036 = typeof Card.getConfigForm === "function" ? Card.getConfigForm.bind(Card) : null;
+  Card.getConfigForm = function multi036ConfigForm() {
+    const form = originalForm036?.() || { schema: [] };
+    const walk = (node) => {
+      if (!node) return false;
+      if (Array.isArray(node)) {
+        const index = node.findIndex((item) => item?.name === "show_session_legend" || item?.name === "show_map_legend");
+        if (index >= 0 && !node.some((item) => item?.name === "multi_mower")) {
+          node.splice(index + 1, 0, { name: "multi_mower", selector: { boolean: {} } });
+          return true;
+        }
+        for (const item of node) if (walk(item)) return true;
+      } else if (typeof node === "object") {
+        for (const value of Object.values(node)) if (walk(value)) return true;
+      }
+      return false;
+    };
+    walk(form.schema);
+    const label = typeof form.computeLabel === "function" ? form.computeLabel : null;
+    form.computeLabel = (schema) => schema?.name === "multi_mower" ? "Multi mower" : label?.(schema) || schema?.name || "";
+    return form;
+  };
+
+  const originalSetConfig036 = proto.setConfig;
+  if (typeof originalSetConfig036 === "function") {
+    proto.setConfig = function multi036SetConfig(config) {
+      const previousIdentity = this?._config?.entity;
+      const result = originalSetConfig036.call(this, { ...(config || {}), multi_mower: asBool036(config?.multi_mower, false) });
+      if (previousIdentity !== this?._config?.entity) {
+        this._multi036PreferenceLoaded = false;
+        this._multi036Site = null;
+        this._multi036Members = new Map();
+      }
+      ensurePreference036(this);
+      syncMultiButton036(this);
+      applyMultiMode036(this);
+      return result;
+    };
+  }
+
+  const originalEnsureDom036 = proto._ensureDom;
+  if (typeof originalEnsureDom036 === "function") {
+    proto._ensureDom = function multi036EnsureDom(...args) {
+      const result = originalEnsureDom036.apply(this, args);
+      ensureMultiUi036(this);
+      syncMultiButton036(this);
+      return result;
+    };
+  }
+
+  const originalMaybeLoadMap036 = proto._maybeLoadMap;
+  if (typeof originalMaybeLoadMap036 === "function") {
+    proto._maybeLoadMap = async function multi036MaybeLoadMap(...args) {
+      const result = await originalMaybeLoadMap036.apply(this, args);
+      if (this._mapPayload) {
+        const anchor = anchorEntry036(this);
+        const member = anchor ? memberById036(this, anchor) : null;
+        if (member) {
+          const state = memberState036(this, anchor);
+          state.map = this._mapPayload;
+          state.mapAt = Date.now();
+        }
+      }
+      await loadSite036(this, false);
+      if (multiActive036(this)) await refreshMembers036(this, false);
+      return result;
+    };
+  }
+
+  const originalRenderShell036 = proto._renderShell;
+  if (typeof originalRenderShell036 === "function") {
+    proto._renderShell = function multi036RenderShell(...args) {
+      const result = originalRenderShell036.apply(this, args);
+      ensureMultiUi036(this);
+      syncMultiButton036(this);
+      applyMultiMode036(this);
+      syncMultiNotificationBell036(this);
+      return result;
+    };
+  }
+
+  const originalRenderControls036 = proto._renderControls;
+  if (typeof originalRenderControls036 === "function") {
+    proto._renderControls = function multi036RenderControls(...args) {
+      if (multiActive036(this)) {
+        renderMultiControls036(this);
+        return;
+      }
+      return originalRenderControls036.apply(this, args);
+    };
+  }
+
+  const originalRenderSessions036 = proto._renderSessions;
+  if (typeof originalRenderSessions036 === "function") {
+    proto._renderSessions = function multi036RenderSessions(...args) {
+      if (multiActive036(this)) {
+        renderMultiSessions036(this);
+        void ensureHistoryRenders036(this);
+        return;
+      }
+      this._sessionsEl?.classList?.remove?.("nm-multi-sessions-active");
+      return originalRenderSessions036.apply(this, args);
+    };
+  }
+
+  const originalRenderHistory036 = proto._renderHistory;
+  if (typeof originalRenderHistory036 === "function") {
+    proto._renderHistory = function multi036RenderHistory(...args) {
+      if (multiActive036(this)) {
+        void ensureHistoryRenders036(this);
+        renderMultiMap036(this, true);
+        return;
+      }
+      return originalRenderHistory036.apply(this, args);
+    };
+  }
+
+  const originalApplyView036 = proto._applyViewBox;
+  if (typeof originalApplyView036 === "function") {
+    proto._applyViewBox = function multi036ApplyView(...args) {
+      const result = originalApplyView036.apply(this, args);
+      if (multiActive036(this)) renderMultiMap036(this, true);
+      return result;
+    };
+  }
+
+  const originalOpenNotification036 = proto._openNotificationDialog;
+  if (typeof originalOpenNotification036 === "function") {
+    proto._openNotificationDialog = function multi036OpenNotification(...args) {
+      if (!multiActive036(this)) return originalOpenNotification036.apply(this, args);
+      this._mowDialogOpen = false;
+      this._scheduleDialogOpen = false;
+      this._beta6ManagedOpen = false;
+      this._beta2ScheduleOpen = false;
+      this._notificationDialogOpen = true;
+      this._notificationPage = 0;
+      renderMultiNotifications036(this);
+      syncMultiNotificationBell036(this);
+    };
+  }
+
+  const originalRenderDialog036 = proto._renderDialog;
+  if (typeof originalRenderDialog036 === "function") {
+    proto._renderDialog = function multi036RenderDialog(...args) {
+      if (multiActive036(this) && this._notificationDialogOpen) {
+        renderMultiNotifications036(this);
+        return;
+      }
+      return originalRenderDialog036.apply(this, args);
+    };
+  }
+
+  const hassDescriptor036 = Object.getOwnPropertyDescriptor(proto, "hass");
+  if (hassDescriptor036?.set) {
+    Object.defineProperty(proto, "hass", {
+      configurable: true,
+      get: hassDescriptor036.get,
+      set(value) {
+        hassDescriptor036.set.call(this, value);
+        ensureMultiUi036(this);
+        ensurePreference036(this);
+        syncMultiButton036(this);
+        void loadSite036(this, false);
+        if (multiActive036(this)) {
+          const active = (this._multi036Site?.members || []).some((member) => memberIsActive036(this, member));
+          const interval = active ? MAP_REFRESH_ACTIVE_MS : MAP_REFRESH_IDLE_MS;
+          if (!this._multi036LastMemberRefresh || Date.now() - this._multi036LastMemberRefresh >= interval) {
+            this._multi036LastMemberRefresh = Date.now();
+            void refreshMembers036(this, false);
+          }
+          renderMulti036(this);
+        }
+      }
+    });
+  }
+
+  console.info("[Navimower Map Card] 0.3.6-beta1 opt-in multi-mower site view enabled");
 })();

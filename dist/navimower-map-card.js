@@ -6170,7 +6170,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta1";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta2";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -9850,20 +9850,12 @@ if (globalThis.customElements) patchCustomAreas0342();
   };
 
   const ensurePreference036 = (card) => {
-    const key = preferenceKey036(card);
-    if (card._multi036PreferenceKey === key && card._multi036PreferenceLoaded) return;
-    card._multi036PreferenceKey = key;
+    card._multi036PreferenceKey = preferenceKey036(card);
     card._multi036PreferenceLoaded = true;
-    let saved = null;
-    try { saved = key ? globalThis.localStorage?.getItem?.(key) : null; } catch (_error) { saved = null; }
-    card._multi036Requested = saved === "1" ? true : saved === "0" ? false : asBool036(card?._config?.multi_mower, false);
+    card._multi036Requested = asBool036(card?._config?.multi_mower, false);
   };
 
-  const savePreference036 = (card) => {
-    const key = preferenceKey036(card);
-    if (!key) return;
-    try { globalThis.localStorage?.setItem?.(key, card._multi036Requested ? "1" : "0"); } catch (_error) { /* browser storage is optional */ }
-  };
+  const savePreference036 = (_card) => {};
 
   const siteAvailable036 = (card) => Boolean(card?._multi036Site?.multi_mower && card?._multi036Site?.member_order === "west_to_east" && (card._multi036Site?.members || []).length >= 2);
   const multiActive036 = (card) => {
@@ -9891,7 +9883,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     for (const key of [
       "_beta5SchedulerEntities", "_beta6SchedulerEntities", "_beta10SchedulerEntities",
       "_beta10ScheduleDeviceId", "_beta10SchedulerDiscoveryAt", "_beta10SchedulerDiscoveryKey",
-      "_beta2SchedulerEntities", "_beta2ScheduleStatus", "_beta2ScheduleDraft"
+      "_beta2SchedulerIds", "_beta2SchedulerEntities", "_beta2ScheduleStatus", "_beta2ScheduleDraft"
     ]) card[key] = null;
   };
 
@@ -10156,24 +10148,52 @@ if (globalThis.customElements) patchCustomAreas0342();
     const entities = memberEntities036(member);
     const x = entityValue036(card, entities.position_x);
     const y = entityValue036(card, entities.position_y);
-    if (x === null || y === null || !matrix) return { local: "", label: "" };
+    if (x === null || y === null || !matrix) return "";
     const heading = entityValue036(card, entities.heading);
     const key = memberIconKey036(member);
     const spec = typeof MOWER_ICON_SPECS_032 !== "undefined" ? MOWER_ICON_SPECS_032[key] || MOWER_ICON_SPECS_032.h2 : null;
-    if (!spec) return { local: "", label: "" };
+    if (!spec) return "";
     const zoom = Math.max(1, finite036(card?._view?.scale, 1));
-    const screenScale = Math.max(0.00001, Math.hypot(matrix[0], matrix[1]));
-    const desiredHeight = 58.83 * clamp036(card?._config?.mower_scale, 0.5, 2.5) / zoom;
-    const localScale = desiredHeight / (screenScale * spec.height);
-    const degrees = Number.isFinite(heading) ? 90 - heading : 90;
+    const screen = transformPoint036(matrix, x, y);
+    const siteRotation = Math.atan2(matrix[1], matrix[0]) * 180 / Math.PI;
+    const degrees = siteRotation + (Number.isFinite(heading) ? 90 - heading : 90);
+    const scale = 58.83 / spec.height * clamp036(card?._config?.mower_scale, 0.5, 2.5) / zoom;
     const mowerState = String(state036(card, entities.mower)?.state || "").toLowerCase();
     const errorClass = ["error", "blocked", "unavailable"].includes(mowerState) ? " nm-multi-mower-error" : "";
-    const local = "<g class=\"nm-multi-mower" + errorClass + "\" transform=\"translate(" + x.toFixed(4) + " " + y.toFixed(4) + ") rotate(" + degrees.toFixed(2) + ") scale(" + localScale.toFixed(7) + ") translate(" + (-spec.width / 2).toFixed(2) + " " + (-spec.height / 2).toFixed(2) + ")\">" + spec.markup + "</g>";
-    const screen = transformPoint036(matrix, x, y);
-    const font = Math.max(10, 13 / zoom);
-    const labelY = screen[1] - 38 / zoom;
-    const label = "<g class=\"nm-multi-mower-name\"><rect x=\"" + (screen[0] - Math.max(24, String(member.name || "Mower").length * font * 0.32)).toFixed(1) + "\" y=\"" + (labelY - font * 0.9).toFixed(1) + "\" width=\"" + Math.max(48, String(member.name || "Mower").length * font * 0.64).toFixed(1) + "\" height=\"" + (font * 1.35).toFixed(1) + "\" rx=\"" + (font * 0.5).toFixed(1) + "\" fill=\"var(--card-background-color,#fff)\" fill-opacity=\".88\"/><text x=\"" + screen[0].toFixed(1) + "\" y=\"" + labelY.toFixed(1) + "\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-size=\"" + font.toFixed(1) + "\" font-weight=\"650\" fill=\"var(--primary-text-color)\">" + esc(member.name || "Mower") + "</text></g>";
-    return { local, label };
+    return "<g class=\"nm-multi-mower" + errorClass + "\" transform=\"translate(" + screen[0].toFixed(2) + " " + screen[1].toFixed(2) + ") rotate(" + degrees.toFixed(2) + ") scale(" + scale.toFixed(6) + ") translate(" + (-spec.width / 2).toFixed(2) + " " + (-spec.height / 2).toFixed(2) + ")\">" + spec.markup + "</g>";
+  };
+
+  const normalizeLiveTrailSegments036 = (value) => {
+    if (!Array.isArray(value) || !value.length) return [];
+    const pointLike = (point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1]));
+    const clean = (segment) => (Array.isArray(segment) ? segment : [])
+      .filter(pointLike)
+      .map((point) => [Number(point[0]), Number(point[1])]);
+    if (value.every(pointLike)) {
+      const segment = clean(value);
+      return segment.length >= 2 ? [segment] : [];
+    }
+    return value.map(clean).filter((segment) => segment.length >= 2);
+  };
+
+  const liveTrailSegments036 = (card, member, payload) => {
+    if (String(member?.entry_id) === String(anchorEntry036(card)) && typeof card?._activeTrailSegments === "function") {
+      const local = normalizeLiveTrailSegments036(card._activeTrailSegments());
+      if (local.length) return local;
+    }
+    return normalizeLiveTrailSegments036(payload?.trail_segments);
+  };
+
+  const liveTrailSignature036 = (card, member, payload) => liveTrailSegments036(card, member, payload)
+    .map((segment) => {
+      const last = segment.at(-1) || [];
+      return segment.length + ":" + Number(last[0] || 0).toFixed(3) + "," + Number(last[1] || 0).toFixed(3);
+    })
+    .join(";");
+
+  const memberTrailWidthMeters036 = (member) => {
+    if (typeof renderedTrailWidthMeters034 === "function") return renderedTrailWidthMeters034(member?.model || member?.vehicle_type || "");
+    return 0.25;
   };
 
   const renderArchive036 = (render, color, opacity, cssClass = "") => {
@@ -10226,7 +10246,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     }).join("|");
     const mapSignature = (site.members || []).map((member) => {
       const payload = memberState036(card, member.entry_id).map;
-      return [member.entry_id, payload?.map?.revision, payload?.current_cycle_render?.revision].join(":");
+      return [member.entry_id, payload?.map?.revision, payload?.current_cycle_render?.revision, payload?.trail_revision, liveTrailSignature036(card, member, payload)].join(":");
     }).join("|");
     const key = [mapSignature, liveSignature, card._historyDayOffset, card._multi036SelectedSessionKey, card?._view?.scale, card?._config?.show_zone_labels, card?._config?.show_channels, card?._config?.show_vf_off_areas, card?._config?.show_gate_areas, card?._config?.show_custom_areas, card?._config?.map_background_color, card?._config?.trail_color, card?._config?.trail_opacity].join("|");
     if (!force && key === card._multi036MapRenderKey) return;
@@ -10243,6 +10263,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     const parts = ["<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"" + esc(background) + "\"/>"];
     const rootLabels = [];
     const dockMarkers = [];
+    const rootMowers = [];
 
     for (const member of site.members || []) {
       const memberState = memberState036(card, member.entry_id);
@@ -10264,6 +10285,11 @@ if (globalThis.customElements) patchCustomAreas0342();
         const current = payload?.current_cycle_render;
         if (current?.scope === "current_cycle") {
           local.push(renderArchive036({ mowed_area: current.mowed_area, travel: { path_d: "" }, route: { path_d: "" } }, trailColor, trailOpacity, "nm-multi-current-cycle"));
+        }
+        const liveTrailWidth = memberTrailWidthMeters036(member);
+        for (const segment of liveTrailSegments036(card, member, payload)) {
+          const points = rawPoints036(segment);
+          if (points) local.push("<polyline class=\"nm-multi-live-trail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
         }
       } else {
         const sessions = sessionsForDay036(memberState.sessions, card._historyDayOffset);
@@ -10310,8 +10336,7 @@ if (globalThis.customElements) patchCustomAreas0342();
       }
 
       const mower = mowerMarkup036(card, member, matrix);
-      local.push(mower.local);
-      if (mower.label) rootLabels.push(mower.label);
+      if (mower) rootMowers.push(mower);
 
       const station = map.station;
       if (station && Number.isFinite(Number(station.x)) && Number.isFinite(Number(station.y))) {
@@ -10322,8 +10347,9 @@ if (globalThis.customElements) patchCustomAreas0342();
       parts.push("<g class=\"nm-multi-member-map\" data-entry-id=\"" + esc(member.entry_id) + "\" transform=\"" + matrixString036(matrix) + "\">" + local.join("") + "</g>");
     }
 
-    parts.push(dockMarkers.join(""));
     parts.push(rootLabels.join(""));
+    parts.push(dockMarkers.join(""));
+    parts.push(rootMowers.join(""));
 
     if (c.show_map_legend !== false) {
       parts.push("<g class=\"nm-multi-map-legend\" transform=\"translate(14 14)\"><rect width=\"158\" height=\"112\" rx=\"10\" fill=\"var(--card-background-color,#fff)\" fill-opacity=\"" + clamp036(c.map_legend_opacity, 0, 1).toFixed(2) + "\"/><circle cx=\"14\" cy=\"20\" r=\"5\" fill=\"" + esc(zoneFill) + "\"/><text x=\"28\" y=\"24\" font-size=\"13\" fill=\"var(--primary-text-color)\">Zones</text><circle cx=\"14\" cy=\"46\" r=\"5\" fill=\"" + esc(trailColor) + "\"/><text x=\"28\" y=\"50\" font-size=\"13\" fill=\"var(--primary-text-color)\">Mowed</text><circle cx=\"14\" cy=\"72\" r=\"5\" fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\"/><text x=\"28\" y=\"76\" font-size=\"13\" fill=\"var(--primary-text-color)\">Off-limit</text><circle cx=\"14\" cy=\"98\" r=\"5\" fill=\"" + esc(c.channel_color || "#808080") + "\"/><text x=\"28\" y=\"102\" font-size=\"13\" fill=\"var(--primary-text-color)\">Channel</text></g>");
@@ -10391,10 +10417,37 @@ if (globalThis.customElements) patchCustomAreas0342();
     card._beta6SettingsOpen = false;
   };
 
+  const memberSchedulerIds036 = (card, member) => {
+    const frontend = member?.frontend || {};
+    const entities = frontend?.entities || {};
+    return {
+      status: entities.schedule_status || null,
+      managedSwitch: entities.managed_schedule || null,
+      nativeSwitch: entities.native_schedule || null,
+      start: entities.schedule_start || null,
+      end: entities.schedule_end || null,
+      deviceId: frontend.device_id || null,
+      configEntryId: member?.entry_id || null,
+      source: "multi_site_frontend",
+      authoritative: true,
+    };
+  };
+
+  const primeMemberScheduler036 = (card, member) => {
+    const ids = memberSchedulerIds036(card, member);
+    card._beta2SchedulerIds = ids;
+    card._beta10SchedulerEntities = ids;
+    card._beta6SchedulerEntities = ids;
+    card._beta5SchedulerEntities = ids;
+    card._beta10ScheduleDeviceId = ids.deviceId || null;
+    return ids;
+  };
+
   async function openMemberSchedule036(card, member) {
     if (!member) return;
     setDialogMember036(card, member);
     clearDialogFlags036(card);
+    primeMemberScheduler036(card, member);
     try { await card._openScheduleDialog?.(); } catch (error) { console.error("[Navimower Map Card] Multi-mower schedule open failed", error); }
   }
 
@@ -10528,17 +10581,11 @@ if (globalThis.customElements) patchCustomAreas0342();
   }
 
   function syncMultiButton036(card) {
-    ensureMultiUi036(card);
-    const button = card._multi036Button;
+    const button = card._multi036Button || card.querySelector?.(".nm-multi-button");
     if (!button) return;
-    ensurePreference036(card);
-    const available = siteAvailable036(card);
-    button.hidden = !available;
-    button.classList.toggle("active", Boolean(card._multi036Requested && available));
-    button.setAttribute("aria-pressed", card._multi036Requested && available ? "true" : "false");
-    button.title = available ? (card._multi036Requested ? "Switch to single mower map" : "Show nearby mower maps together") : "Multi mower requires two validated nearby mower maps";
-    const label = button.querySelector?.("span");
-    if (label) label.textContent = card._multi036Requested && available ? "Single" : "Multi";
+    button.hidden = true;
+    button.remove?.();
+    card._multi036Button = button;
   }
 
   const hideCoreLayer036 = (element, hide) => {
@@ -10556,7 +10603,10 @@ if (globalThis.customElements) patchCustomAreas0342();
     ensureMultiUi036(card);
     const active = multiActive036(card);
     if (card._multi036ModeApplied === active) {
-      if (active) renderMulti036(card);
+      if (active) {
+        hideCoreLayer036(card._scheduleButtonEl, true);
+        renderMulti036(card);
+      }
       return;
     }
     card._multi036ModeApplied = active;
@@ -10698,7 +10748,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     const walk = (node) => {
       if (!node) return false;
       if (Array.isArray(node)) {
-        const index = node.findIndex((item) => item?.name === "show_session_legend" || item?.name === "show_map_legend");
+        const index = node.findIndex((item) => item?.name === "entity");
         if (index >= 0 && !node.some((item) => item?.name === "multi_mower")) {
           node.splice(index + 1, 0, { name: "multi_mower", selector: { boolean: {} } });
           return true;
@@ -10863,10 +10913,14 @@ if (globalThis.customElements) patchCustomAreas0342();
             void refreshMembers036(this, false);
           }
           renderMulti036(this);
+          hideCoreLayer036(this._scheduleButtonEl, true);
+          if (this._notificationDialogOpen) renderMultiNotifications036(this);
         }
       }
     });
   }
 
   console.info("[Navimower Map Card] 0.3.6-beta1 opt-in multi-mower site view enabled");
+  // 0.3.6-beta2: multi-mower field-test fixes.
+  console.info("[Navimower Map Card] 0.3.6-beta2 multi-mower field-test fixes enabled");
 })();

@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-assert.ok(
-  ["0.3.6-beta2", "0.3.6-beta3"].includes(pkg.version),
+assert.match(
+  pkg.version,
+  /^0\.3\.6-beta\d+$/,
   "beta2 regression must remain valid for later 0.3.6 betas",
 );
 

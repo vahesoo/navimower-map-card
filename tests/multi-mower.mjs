@@ -19,7 +19,7 @@ for (const token of [
   "map_api_path",
   "sessions_api_path",
   "session_render_api_path_template",
-  'entities?.notification',
+  "memberEntities036(member)?.notification",
   "nm-multi-button",
   "nm-multi-controls",
   "data-multi-schedule",
@@ -44,7 +44,7 @@ assert.ok(
   "site discovery must never automatically enable multi-mower mode",
 );
 assert.ok(
-  source.includes('button.dataset.multiCommand === "mow"') || source.includes('command === "mow"'),
+  source.includes('command === "mow"'),
   "multi-mower Mow must remain member-scoped",
 );
 assert.ok(

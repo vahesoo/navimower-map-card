@@ -4,7 +4,9 @@ import { readFile } from "node:fs/promises";
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-assert.equal(packageJson.version, "0.3.6-beta5");
+const releaseMatch = String(packageJson.version || "").match(/^0\.3\.6(?:-beta(\d+))?$/);
+assert.ok(releaseMatch, "beta5 regression must stay on the 0.3.6 release line");
+if (releaseMatch[1]) assert.ok(Number(releaseMatch[1]) >= 5, "beta5 regression requires 0.3.6-beta5 or later");
 assert.match(packageJson.scripts["prepare-release"], /upgrade-osm-underlay-beta5\.mjs/);
 
 assert.match(source, /0\.3\.6-beta5: optional OpenStreetMap underlay/);

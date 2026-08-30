@@ -6177,7 +6177,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta5";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta6";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -11329,10 +11329,18 @@ if (globalThis.customElements) patchCustomAreas0342();
   };
 
   const syncMulti = (card) => {
-    const layer = card?._multi036Layer;
-    if (!layer) return false;
-    if (!underlayEnabled(card) || layer.style.display === "none") {
-      layer.querySelector?.(".nm-osm-underlay")?.remove?.();
+    const multiLayer = card?._multi036Layer;
+    if (!multiLayer || !card?._svgEl) return false;
+    let layer = card._osm036MultiLayer;
+    if (!layer || !layer.isConnected) {
+      layer = document.createElementNS(SVG_NS, "g");
+      layer.setAttribute("class", "nm-osm-multi-underlay-layer");
+      layer.setAttribute("pointer-events", "none");
+      card._svgEl.insertBefore(layer, multiLayer);
+      card._osm036MultiLayer = layer;
+    }
+    if (!underlayEnabled(card) || multiLayer.style.display === "none") {
+      layer.innerHTML = "";
       return false;
     }
     const site = card?._multi036Site;
@@ -11365,18 +11373,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
     const visible = multiVisible ? syncMulti(card) : syncSingle(card);
     ensureAttribution(card, underlayEnabled(card) && visible);
-    if (card?._multi036Layer && !card._osm036Observer) {
-      const observer = new MutationObserver(() => {
-        if (card._osm036Mutating) return;
-        card._osm036Mutating = true;
-        queueMicrotask(() => {
-          syncCard(card);
-          card._osm036Mutating = false;
-        });
-      });
-      observer.observe(card._multi036Layer, { childList: true });
-      card._osm036Observer = observer;
-    }
   };
 
   const previousStub = Card.getStubConfig?.bind(Card);
@@ -11451,4 +11447,66 @@ if (globalThis.customElements) patchCustomAreas0342();
   }
 
   console.info("[Navimower Map Card] 0.3.6-beta5 optional OpenStreetMap underlay enabled");
+})();
+
+
+// 0.3.6-beta6: OSM Multi stability and editor visibility.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower036Beta6Osm) return;
+  Card.__navimower036Beta6Osm = true;
+
+  const previousForm = Card.getConfigForm?.bind(Card);
+  Card.getConfigForm = (...args) => {
+    const form = previousForm?.(...args) || { schema: [] };
+    if (!Array.isArray(form.schema)) return form;
+    const names = new Set(["map_underlay", "osm_underlay_opacity"]);
+    const remove = (items) => {
+      for (const item of Array.isArray(items) ? items : []) {
+        if (!Array.isArray(item?.schema)) continue;
+        item.schema = item.schema.filter((child) => !names.has(child?.name));
+        remove(item.schema);
+      }
+    };
+    remove(form.schema);
+    form.schema = form.schema.filter((item) => item?.name !== "map_underlay_settings");
+    form.schema.push({
+      type: "expandable",
+      name: "map_underlay_settings",
+      title: "Map underlay",
+      flatten: true,
+      schema: [{
+        type: "grid",
+        name: "map_underlay_grid",
+        flatten: true,
+        column_min_width: "220px",
+        schema: [
+          { name: "map_underlay", selector: { select: { options: [
+            { value: "none", label: "None" },
+            { value: "openstreetmap", label: "OpenStreetMap" },
+          ] } } },
+          { name: "osm_underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
+        ],
+      }],
+    });
+    const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+    form.computeLabel = (schema, data) => schema?.name === "map_underlay" ? "Map underlay" : schema?.name === "osm_underlay_opacity" ? "OSM opacity" : baseLabel?.(schema, data) || schema?.name || "";
+    return form;
+  };
+
+  const proto = Card.prototype;
+  for (const method of ["_renderShell", "_ensureDom", "_applyViewBox"]) {
+    const previous = proto[method];
+    if (typeof previous !== "function") continue;
+    proto[method] = function beta6OsmRefresh(...args) {
+      const result = previous.apply(this, args);
+      if (this._osm036Observer) {
+        this._osm036Observer.disconnect?.();
+        this._osm036Observer = null;
+      }
+      return result;
+    };
+  }
+
+  console.info("[Navimower Map Card] 0.3.6-beta6 OSM Multi stability and editor visibility enabled");
 })();

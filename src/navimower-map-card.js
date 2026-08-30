@@ -6177,7 +6177,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta6";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta7";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -9989,6 +9989,7 @@ if (globalThis.customElements) patchCustomAreas0342();
       syncMultiButton036(card);
       applyMultiMode036(card);
       if (multiActive036(card)) await refreshMembers036(card, true);
+      queueMicrotask(() => card._syncOsmUnderlay036?.());
     } catch (error) {
       card._multi036SiteError = error;
       if (!card._multi036Site) card._multi036Site = null;
@@ -10384,7 +10385,8 @@ if (globalThis.customElements) patchCustomAreas0342();
     const trailColor = c.trail_color || "#43a047";
     const trailOpacity = clamp036(c.trail_opacity, 0, 1);
     const legendScale = clamp036(c.map_legend_scale, 0.5, 2);
-    const parts = ["<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"" + esc(background) + "\"/>"];
+    const osmUnderlayActive036 = String(card?._config?.map_underlay || "none").toLowerCase() === "openstreetmap";
+    const parts = ["<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"" + (osmUnderlayActive036 ? "transparent" : esc(background)) + "\"/>"];
     const zoneLabelItems = [];
     const dockMarkers = [];
     const rootMowers = [];
@@ -11375,6 +11377,8 @@ if (globalThis.customElements) patchCustomAreas0342();
     ensureAttribution(card, underlayEnabled(card) && visible);
   };
 
+  proto._syncOsmUnderlay036 = function beta7SyncOsmUnderlay() { syncCard(this); };
+
   const previousStub = Card.getStubConfig?.bind(Card);
   Card.getStubConfig = (...args) => ({ ...(previousStub?.(...args) || {}), map_underlay: "none", osm_underlay_opacity: DEFAULT_OPACITY });
 
@@ -11509,4 +11513,24 @@ if (globalThis.customElements) patchCustomAreas0342();
   }
 
   console.info("[Navimower Map Card] 0.3.6-beta6 OSM Multi stability and editor visibility enabled");
+})();
+
+
+// 0.3.6-beta7: OSM Multi visibility and ready-state sync.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower036Beta7Osm) return;
+  Card.__navimower036Beta7Osm = true;
+
+  const proto = Card.prototype;
+  const previousSetConfig = proto.setConfig;
+  if (typeof previousSetConfig === "function") {
+    proto.setConfig = function beta7OsmSetConfig(config) {
+      const result = previousSetConfig.call(this, config);
+      queueMicrotask(() => this._syncOsmUnderlay036?.());
+      return result;
+    };
+  }
+
+  console.info("[Navimower Map Card] 0.3.6-beta7 OSM Multi visibility and ready-state sync enabled");
 })();

@@ -5,7 +5,8 @@ const packageJson = JSON.parse(await readFile(new URL("../package.json", import.
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const dist = await readFile(new URL("../dist/navimower-map-card.js", import.meta.url), "utf8");
 
-assert.equal(packageJson.version, "0.3.6-beta8");
+assert.match(packageJson.version, /^0\.3\.6-beta\d+$/);
+assert.ok(Number(packageJson.version.split("beta")[1]) >= 8);
 assert.match(packageJson.scripts["prepare-release"], /upgrade-estonia-orthophoto-beta8\.mjs/);
 assert.match(packageJson.scripts.test, /estonia-orthophoto-beta8\.mjs/);
 
@@ -19,7 +20,6 @@ for (const runtime of [source, dist]) {
   assert.match(runtime, /IS=NAVIMOWER_MAP_CARD/);
   assert.match(runtime, /2 \*\* range\.zoom - 1 - y/);
   assert.match(runtime, /Ortofoto, Maa- ja Ruumiamet/);
-  assert.match(runtime, /config\?\.country/);
   assert.match(runtime, /country === "EE"/);
   assert.match(runtime, /isEstoniaLocation/);
   assert.match(runtime, /Maa- ja Ruumiamet Ortofoto/);

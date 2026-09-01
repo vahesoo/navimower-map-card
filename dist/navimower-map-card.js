@@ -6177,7 +6177,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta8";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta9";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -11211,9 +11211,9 @@ if (globalThis.customElements) patchCustomAreas0342();
     return { west: lonLeft, east: lonRight, north: latAt(y), south: latAt(y + 1) };
   };
 
-  const chooseTiles = (bounds) => {
+  const chooseTiles = (bounds, maxZoom = DEFAULT_ZOOM) => {
     if (!bounds) return null;
-    for (let zoom = DEFAULT_ZOOM; zoom >= 15; zoom -= 1) {
+    for (let zoom = Math.min(DEFAULT_ZOOM, maxZoom); zoom >= 15; zoom -= 1) {
       const nw = tilePoint(bounds.north, bounds.west, zoom);
       const se = tilePoint(bounds.south, bounds.east, zoom);
       const minX = Math.floor(Math.min(nw.x, se.x));
@@ -11256,7 +11256,7 @@ if (globalThis.customElements) patchCustomAreas0342();
   };
 
   const tileMarkup = (bounds, screenPoint, opacity, provider = "openstreetmap") => {
-    const range = chooseTiles(bounds);
+    const range = chooseTiles(bounds, provider === "estonia_orthophoto" ? 18 : DEFAULT_ZOOM);
     if (!range) return "";
     const images = [];
     for (let y = range.minY; y <= range.maxY; y += 1) {
@@ -11428,8 +11428,24 @@ if (globalThis.customElements) patchCustomAreas0342();
   Card.getConfigForm = (...args) => {
     const form = previousForm?.(...args) || { schema: [] };
     const rootHass = globalThis.document?.querySelector?.("home-assistant")?.hass;
-    const country = String(rootHass?.config?.country || "").toUpperCase();
-    const estoniaUnderlayAvailable = country === "EE" || Card.__navimower036EstoniaSite === true;
+    const haConfig = rootHass?.config || {};
+    const country = String(haConfig.country || "").toUpperCase();
+    const homeLatitude = finite(haConfig.latitude);
+    const homeLongitude = finite(haConfig.longitude);
+    const homeInEstonia = homeLatitude !== null && homeLongitude !== null
+      && isEstoniaLocation(homeLatitude, homeLongitude);
+    const haTimeZone = String(haConfig.time_zone || "");
+    let browserTimeZone = "";
+    try {
+      browserTimeZone = String(Intl.DateTimeFormat().resolvedOptions().timeZone || "");
+    } catch (_error) {
+      browserTimeZone = "";
+    }
+    const estoniaUnderlayAvailable = country === "EE"
+      || homeInEstonia
+      || haTimeZone === "Europe/Tallinn"
+      || browserTimeZone === "Europe/Tallinn"
+      || Card.__navimower036EstoniaSite === true;
     const walkArrays = (items) => {
       if (!Array.isArray(items)) return false;
       const index = items.findIndex((item) => item?.name === "map_background_color");
@@ -11584,3 +11600,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 // 0.3.6-beta8: Estonia orthophoto underlay.
 console.info("[Navimower Map Card] 0.3.6-beta8 Estonia orthophoto underlay enabled");
+
+
+// 0.3.6-beta9: Estonia orthophoto editor availability and zoom fix.
+console.info("[Navimower Map Card] 0.3.6-beta9 Estonia orthophoto editor availability and zoom fixes enabled");

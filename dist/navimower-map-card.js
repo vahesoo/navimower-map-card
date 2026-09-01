@@ -6177,7 +6177,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta7";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta8";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -10385,8 +10385,8 @@ if (globalThis.customElements) patchCustomAreas0342();
     const trailColor = c.trail_color || "#43a047";
     const trailOpacity = clamp036(c.trail_opacity, 0, 1);
     const legendScale = clamp036(c.map_legend_scale, 0.5, 2);
-    const osmUnderlayActive036 = String(card?._config?.map_underlay || "none").toLowerCase() === "openstreetmap";
-    const parts = ["<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"" + (osmUnderlayActive036 ? "transparent" : esc(background)) + "\"/>"];
+    const mapUnderlayActive036 = ["openstreetmap", "estonia_orthophoto"].includes(String(card?._config?.map_underlay || "none").toLowerCase());
+    const parts = ["<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"" + (mapUnderlayActive036 ? "transparent" : esc(background)) + "\"/>"];
     const zoneLabelItems = [];
     const dockMarkers = [];
     const rootMowers = [];
@@ -11133,8 +11133,22 @@ if (globalThis.customElements) patchCustomAreas0342();
     return Number.isFinite(parsed) ? parsed : fallback;
   };
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, finite(value, minimum)));
-  const underlayEnabled = (card) => String(card?._config?.map_underlay || "none").toLowerCase() === "openstreetmap";
+  const underlayProvider = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
+  const underlayEnabled = (card) => ["openstreetmap", "estonia_orthophoto"].includes(underlayProvider(card));
   const underlayOpacity = (card) => clamp(card?._config?.osm_underlay_opacity ?? DEFAULT_OPACITY, 0.1, 1);
+  const isEstoniaLocation = (lat, lon) => {
+    const latitude = finite(lat);
+    const longitude = finite(lon);
+    return latitude !== null && longitude !== null
+      && latitude >= 57.3 && latitude <= 60.0
+      && longitude >= 21.5 && longitude <= 28.3;
+  };
+  const markEstoniaAvailability = (card, lat, lon) => {
+    const available = isEstoniaLocation(lat, lon);
+    if (available) Card.__navimower036EstoniaSite = true;
+    if (card) card._estoniaOrthophotoAvailable036 = available;
+    return available;
+  };
 
   const georeference = (card) => card?._mapPayload?.georeference || card?._mapPayload?.map?.georeference || null;
   const validGeoreference = (value) => {
@@ -11241,7 +11255,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     return { north, south, east, west };
   };
 
-  const tileMarkup = (bounds, screenPoint, opacity) => {
+  const tileMarkup = (bounds, screenPoint, opacity, provider = "openstreetmap") => {
     const range = chooseTiles(bounds);
     if (!range) return "";
     const images = [];
@@ -11256,7 +11270,10 @@ if (globalThis.customElements) patchCustomAreas0342();
         const b = (ne.y - nw.y) / 256;
         const c = (sw.x - nw.x) / 256;
         const d = (sw.y - nw.y) / 256;
-        const href = "https://tile.openstreetmap.org/" + range.zoom + "/" + x + "/" + y + ".png";
+        const tmsY = 2 ** range.zoom - 1 - y;
+        const href = provider === "estonia_orthophoto"
+          ? "https://tiles.maaamet.ee/tm/tms/1.0.0/foto@GMC/" + range.zoom + "/" + x + "/" + tmsY + ".png?ASUTUS=NAVIMOWER&KESKKOND=LIVE&IS=NAVIMOWER_MAP_CARD"
+          : "https://tile.openstreetmap.org/" + range.zoom + "/" + x + "/" + y + ".png";
         images.push('<image href="' + href + '" x="0" y="0" width="256" height="256" preserveAspectRatio="none" opacity="' + opacity.toFixed(2) + '" transform="matrix(' + [a,b,c,d,nw.x,nw.y].map((v) => Number(v).toFixed(8)).join(" ") + ')"/>');
       }
     }
@@ -11266,18 +11283,25 @@ if (globalThis.customElements) patchCustomAreas0342();
   const ensureAttribution = (card, visible) => {
     const wrap = card?.querySelector?.(".nm-wrap");
     if (!wrap) return;
+    const provider = underlayProvider(card);
     let node = wrap.querySelector?.(".nm-osm-attribution");
     if (!node) {
       node = document.createElement("div");
       node.className = "nm-osm-attribution";
-      node.innerHTML = '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>';
       Object.assign(node.style, {
         position: "absolute", right: "4px", bottom: "4px", zIndex: "8",
         padding: "2px 5px", borderRadius: "4px", fontSize: "10px", lineHeight: "1.2",
         background: "rgba(255,255,255,.78)", color: "#37474f",
       });
-      node.querySelector("a").style.cssText = "color:inherit;text-decoration:none";
       wrap.appendChild(node);
+    }
+    if (node.dataset.provider !== provider) {
+      node.dataset.provider = provider;
+      node.innerHTML = provider === "estonia_orthophoto"
+        ? '<a href="https://geoportaal.maaamet.ee/est/ruumiandmed/ortofotod-p99.html" target="_blank" rel="noopener noreferrer">Ortofoto, Maa- ja Ruumiamet</a>'
+        : '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>';
+      const link = node.querySelector("a");
+      if (link) link.style.cssText = "color:inherit;text-decoration:none";
     }
     node.hidden = !visible;
   };
@@ -11306,12 +11330,18 @@ if (globalThis.customElements) patchCustomAreas0342();
       card._baseEl.querySelector?.(".nm-osm-underlay")?.remove?.();
       return false;
     }
+    const ref = geo?.reference || {};
+    const inEstonia = markEstoniaAvailability(card, ref.latitude, ref.longitude);
+    if (underlayProvider(card) === "estonia_orthophoto" && !inEstonia) {
+      card._baseEl.querySelector?.(".nm-osm-underlay")?.remove?.();
+      return false;
+    }
     const gps = mapPoints(card?._mapPayload?.map || {}).map(([x, y]) => localToWgs84(geo, x, y)).filter(Boolean);
     const bounds = paddedBounds(gps);
     const markup = tileMarkup(bounds, (lat, lon) => {
       const local = wgs84ToLocal(geo, lat, lon);
       return local ? { x: card._layout.sx(local.x), y: card._layout.sy(local.y) } : null;
-    }, underlayOpacity(card));
+    }, underlayOpacity(card), underlayProvider(card));
     return insertOsmGroup(card._baseEl, markup);
   };
 
@@ -11354,6 +11384,11 @@ if (globalThis.customElements) patchCustomAreas0342();
       layer.querySelector?.(".nm-osm-underlay")?.remove?.();
       return false;
     }
+    const inEstonia = markEstoniaAvailability(card, lat0, lon0);
+    if (underlayProvider(card) === "estonia_orthophoto" && !inEstonia) {
+      layer.querySelector?.(".nm-osm-underlay")?.remove?.();
+      return false;
+    }
     const siteBox = site?.combined_site_bounds;
     if (!siteBox || [siteBox.min_east, siteBox.max_east, siteBox.min_north, siteBox.max_north].some((value) => finite(value) === null)) return false;
     const corners = [
@@ -11366,12 +11401,19 @@ if (globalThis.customElements) patchCustomAreas0342();
     const markup = tileMarkup(bounds, (lat, lon) => {
       const { east, north } = offsetMeters(lat0, lon0, lat, lon);
       return { x: layout.offsetX + east * layout.scale, y: layout.offsetY - north * layout.scale };
-    }, underlayOpacity(card));
+    }, underlayOpacity(card), underlayProvider(card));
     return insertOsmGroup(layer, markup);
   };
 
   const syncCard = (card) => {
     if (!card?._config || typeof document === "undefined") return;
+    const siteOrigin = card?._multi036Site?.origin || {};
+    const singleRef = georeference(card)?.reference || {};
+    if (finite(siteOrigin.latitude) !== null && finite(siteOrigin.longitude) !== null) {
+      markEstoniaAvailability(card, siteOrigin.latitude, siteOrigin.longitude);
+    } else if (finite(singleRef.latitude) !== null && finite(singleRef.longitude) !== null) {
+      markEstoniaAvailability(card, singleRef.latitude, singleRef.longitude);
+    }
     const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
     const visible = multiVisible ? syncMulti(card) : syncSingle(card);
     ensureAttribution(card, underlayEnabled(card) && visible);
@@ -11385,6 +11427,9 @@ if (globalThis.customElements) patchCustomAreas0342();
   const previousForm = Card.getConfigForm?.bind(Card);
   Card.getConfigForm = (...args) => {
     const form = previousForm?.(...args) || { schema: [] };
+    const rootHass = globalThis.document?.querySelector?.("home-assistant")?.hass;
+    const country = String(rootHass?.config?.country || "").toUpperCase();
+    const estoniaUnderlayAvailable = country === "EE" || Card.__navimower036EstoniaSite === true;
     const walkArrays = (items) => {
       if (!Array.isArray(items)) return false;
       const index = items.findIndex((item) => item?.name === "map_background_color");
@@ -11394,6 +11439,7 @@ if (globalThis.customElements) patchCustomAreas0342();
             { name: "map_underlay", selector: { select: { options: [
               { value: "none", label: "None" },
               { value: "openstreetmap", label: "OpenStreetMap" },
+              ...(estoniaUnderlayAvailable ? [{ value: "estonia_orthophoto", label: "Maa- ja Ruumiamet Ortofoto" }] : []),
             ] } } },
             { name: "osm_underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
           );
@@ -11405,7 +11451,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     };
     walkArrays(form.schema);
     const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema, data) => schema?.name === "map_underlay" ? "Map underlay" : schema?.name === "osm_underlay_opacity" ? "OSM underlay opacity" : baseLabel?.(schema, data) || schema?.name || "";
+    form.computeLabel = (schema, data) => schema?.name === "map_underlay" ? "Map underlay" : schema?.name === "osm_underlay_opacity" ? "Map underlay opacity" : baseLabel?.(schema, data) || schema?.name || "";
     return form;
   };
 
@@ -11534,3 +11580,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 
   console.info("[Navimower Map Card] 0.3.6-beta7 OSM Multi visibility and ready-state sync enabled");
 })();
+
+
+// 0.3.6-beta8: Estonia orthophoto underlay.
+console.info("[Navimower Map Card] 0.3.6-beta8 Estonia orthophoto underlay enabled");

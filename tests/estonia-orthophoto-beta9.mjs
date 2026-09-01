@@ -11,7 +11,7 @@ assert.match(packageJson.scripts["prepare-release"], /upgrade-estonia-orthophoto
 assert.match(packageJson.scripts.test, /estonia-orthophoto-beta9\.mjs/);
 
 for (const runtime of [source, dist]) {
-  assert.match(runtime, /0\.3\.6-beta9: Estonia orthophoto editor availability fallback/);
+  assert.match(runtime, /0\.3\.6-beta9: Estonia orthophoto editor availability and zoom fix/);
   assert.match(runtime, /haConfig\.latitude/);
   assert.match(runtime, /haConfig\.longitude/);
   assert.match(runtime, /homeInEstonia/);
@@ -20,6 +20,9 @@ for (const runtime of [source, dist]) {
   assert.match(runtime, /Intl\.DateTimeFormat\(\)\.resolvedOptions\(\)\.timeZone/);
   assert.match(runtime, /Card\.__navimower036EstoniaSite/);
   assert.match(runtime, /Maa- ja Ruumiamet Ortofoto/);
+  assert.match(runtime, /chooseTiles = \(bounds, maxZoom = DEFAULT_ZOOM\)/);
+  assert.match(runtime, /Math\.min\(DEFAULT_ZOOM, maxZoom\)/);
+  assert.match(runtime, /provider === "estonia_orthophoto" \? 18 : DEFAULT_ZOOM/);
 }
 
-console.log("0.3.6-beta9 Estonia orthophoto editor availability regression checks passed");
+console.log("0.3.6-beta9 Estonia orthophoto editor and zoom regression checks passed");

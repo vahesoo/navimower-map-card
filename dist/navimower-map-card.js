@@ -6177,7 +6177,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta11";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta12";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -11403,13 +11403,69 @@ if (globalThis.customElements) patchCustomAreas0342();
     return true;
   };
 
+  const googleDynamicFrameOffset12 = (card) => {
+    if (underlayProvider(card) !== "google_satellite") return null;
+    const frame = georeference(card)?.cartographic_frame;
+    const east = finite(frame?.east_m);
+    const north = finite(frame?.north_m);
+    if (frame?.applied !== true || east === null || north === null) return null;
+    return { east, north };
+  };
+
+  const googleDynamicGeoreference12 = (card, geo) => {
+    const frameOffset = googleDynamicFrameOffset12(card);
+    if (!frameOffset || !validGeoreference(geo)) return geo;
+    const ref = geo?.reference || {};
+    const restored = offsetWgs84(
+      Number(ref.latitude),
+      Number(ref.longitude),
+      -frameOffset.east,
+      -frameOffset.north,
+    );
+    if (!restored || finite(restored.lat) === null || finite(restored.lon) === null) return geo;
+    card._googleSatelliteFrameCorrection11 = {
+      mode: "inverse_active_cartographic_translation",
+      east_m: -frameOffset.east,
+      north_m: -frameOffset.north,
+    };
+    return {
+      ...geo,
+      reference: {
+        ...ref,
+        latitude: restored.lat,
+        longitude: restored.lon,
+      },
+    };
+  };
+
+  const googleDynamicSiteOrigin12 = (card, origin) => {
+    const frameOffset = googleDynamicFrameOffset12(card);
+    const latitude = finite(origin?.latitude);
+    const longitude = finite(origin?.longitude);
+    if (!frameOffset || latitude === null || longitude === null) return origin;
+    const restored = offsetWgs84(
+      latitude,
+      longitude,
+      -frameOffset.east,
+      -frameOffset.north,
+    );
+    if (!restored || finite(restored.lat) === null || finite(restored.lon) === null) return origin;
+    card._googleSatelliteFrameCorrection11 = {
+      mode: "inverse_active_cartographic_translation",
+      east_m: -frameOffset.east,
+      north_m: -frameOffset.north,
+    };
+    return { ...origin, latitude: restored.lat, longitude: restored.lon };
+  };
+
   const syncSingle = (card) => {
     if (!card?._baseEl) return false;
     if (!underlayEnabled(card)) {
       card._baseEl.querySelector?.(".nm-osm-underlay")?.remove?.();
       return false;
     }
-    const geo = georeference(card);
+    const activeGeo = georeference(card);
+    const geo = googleDynamicGeoreference12(card, activeGeo);
     if (!validGeoreference(geo) || !card._layout?.sx || !card._layout?.sy) {
       card._baseEl.querySelector?.(".nm-osm-underlay")?.remove?.();
       return false;
@@ -11460,7 +11516,7 @@ if (globalThis.customElements) patchCustomAreas0342();
       return false;
     }
     const site = card?._multi036Site;
-    const origin = site?.origin || {};
+    const origin = googleDynamicSiteOrigin12(card, site?.origin || {});
     const lat0 = finite(origin.latitude);
     const lon0 = finite(origin.longitude);
     const layout = siteLayout(site);
@@ -12189,8 +12245,35 @@ console.info("[Navimower Map Card] 0.3.6-beta9 Estonia orthophoto editor availab
         .map((item) => finite11(item?.maxZoom ?? item?.max_zoom))
         .filter((value) => value !== null);
       if (reportedZooms.length) {
-        const nextZoom = clamp11(Math.floor(Math.min(...reportedZooms)), MIN_GOOGLE_ZOOM11, DEFAULT_GOOGLE_ZOOM11);
+        // maxZoomRects are overlapping availability regions, not independent
+        // viewport-wide caps. A low-resolution fallback rectangle may overlap a
+        // high-resolution imagery rectangle, so taking the minimum collapses a
+        // sharp z19 view to a much coarser zoom as soon as attribution arrives.
+        const centerLat = (bounds.north + bounds.south) / 2;
+        const centerLon = (bounds.east + bounds.west) / 2;
+        const centerZooms = maxZoomRects
+          .filter((item) => {
+            const north = finite11(item?.north);
+            const south = finite11(item?.south);
+            const east = finite11(item?.east);
+            const west = finite11(item?.west);
+            if ([north, south, east, west].some((value) => value === null)) return false;
+            const latitudeInside = centerLat <= north && centerLat >= south;
+            const longitudeInside = west <= east
+              ? centerLon >= west && centerLon <= east
+              : centerLon >= west || centerLon <= east;
+            return latitudeInside && longitudeInside;
+          })
+          .map((item) => finite11(item?.maxZoom ?? item?.max_zoom))
+          .filter((value) => value !== null);
+        const candidates = centerZooms.length ? centerZooms : reportedZooms;
+        const nextZoom = clamp11(Math.floor(Math.max(...candidates)), MIN_GOOGLE_ZOOM11, DEFAULT_GOOGLE_ZOOM11);
         const currentZoom = clamp11(card._googleSatelliteMaxZoom11 ?? DEFAULT_GOOGLE_ZOOM11, MIN_GOOGLE_ZOOM11, DEFAULT_GOOGLE_ZOOM11);
+        card._googleSatelliteViewportZoomRange11 = {
+          min: Math.min(...reportedZooms),
+          max: Math.max(...reportedZooms),
+          selected: nextZoom,
+        };
         if (nextZoom !== currentZoom) {
           card._googleSatelliteMaxZoom11 = nextZoom;
           queueMicrotask(() => card._syncOsmUnderlay036?.());
@@ -12324,3 +12407,7 @@ console.info("[Navimower Map Card] 0.3.6-beta9 Estonia orthophoto editor availab
 
   console.info("[Navimower Map Card] 0.3.6-beta11 unified map underlays enabled");
 })();
+
+
+// 0.3.6-beta12: Google Satellite sharpness and provider-frame normalization.
+console.info("[Navimower Map Card] 0.3.6-beta12 Google Satellite sharpness and provider-frame normalization enabled");

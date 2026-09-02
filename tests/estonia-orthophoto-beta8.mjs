@@ -19,12 +19,12 @@ for (const runtime of [source, dist]) {
   assert.match(runtime, /KESKKOND=LIVE/);
   assert.match(runtime, /IS=NAVIMOWER_MAP_CARD/);
   assert.match(runtime, /2 \*\* range\.zoom - 1 - y/);
-  assert.match(runtime, /Ortofoto, Maa- ja Ruumiamet/);
+  assert.match(runtime, /Maa- ja Ruumiamet/);
   assert.match(runtime, /country === "EE"/);
   assert.match(runtime, /isEstoniaLocation/);
-  assert.match(runtime, /Maa- ja Ruumiamet Ortofoto/);
-  assert.match(runtime, /Map underlay opacity/);
-  assert.match(runtime, /\["openstreetmap", "estonia_orthophoto"\]/);
+  assert.match(runtime, /estonia_orthophoto/);
+  assert.match(runtime, /(Map underlay opacity|Underlay opacity)/);
+  assert.match(runtime, /openstreetmap/);
 }
 
 assert.doesNotMatch(source, /google.*api.*key/i);

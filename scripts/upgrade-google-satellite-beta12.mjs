@@ -2,9 +2,9 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const sourcePath = new URL("../src/navimower-map-card.js", import.meta.url);
 let source = await readFile(sourcePath, "utf8");
-const marker = "// 0.3.6-beta12: preserve Google Satellite detail after viewport metadata.";
+const marker = "// 0.3.6-beta12: Google Satellite sharpness and provider-frame normalization.";
 if (source.includes(marker)) {
-  console.log("0.3.6-beta12 Google Satellite sharpness fix already applied");
+  console.log("0.3.6-beta12 Google Satellite fixes already applied");
   process.exit(0);
 }
 if (!source.includes("// 0.3.6-beta11: unified map underlays, Estonia hybrid and Google Satellite.")) {
@@ -68,7 +68,88 @@ if (!source.includes(oldZoomBlock)) {
   throw new Error("beta11 Google viewport zoom block was not found");
 }
 source = source.replace(oldZoomBlock, newZoomBlock);
-source += `\n\n${marker}\nconsole.info("[Navimower Map Card] 0.3.6-beta12 Google Satellite viewport sharpness fix enabled");\n`;
+
+const syncSingleMarker = `  const syncSingle = (card) => {`;
+if (!source.includes(syncSingleMarker)) throw new Error("beta11 single underlay renderer was not found");
+const frameHelpers = `  const googleDynamicFrameOffset12 = (card) => {
+    if (underlayProvider(card) !== "google_satellite") return null;
+    const frame = georeference(card)?.cartographic_frame;
+    const east = finite(frame?.east_m);
+    const north = finite(frame?.north_m);
+    if (frame?.applied !== true || east === null || north === null) return null;
+    return { east, north };
+  };
+
+  const googleDynamicGeoreference12 = (card, geo) => {
+    const frameOffset = googleDynamicFrameOffset12(card);
+    if (!frameOffset || !validGeoreference(geo)) return geo;
+    const ref = geo?.reference || {};
+    const restored = offsetWgs84(
+      Number(ref.latitude),
+      Number(ref.longitude),
+      -frameOffset.east,
+      -frameOffset.north,
+    );
+    if (!restored || finite(restored.lat) === null || finite(restored.lon) === null) return geo;
+    card._googleSatelliteFrameCorrection11 = {
+      mode: "inverse_active_cartographic_translation",
+      east_m: -frameOffset.east,
+      north_m: -frameOffset.north,
+    };
+    return {
+      ...geo,
+      reference: {
+        ...ref,
+        latitude: restored.lat,
+        longitude: restored.lon,
+      },
+    };
+  };
+
+  const googleDynamicSiteOrigin12 = (card, origin) => {
+    const frameOffset = googleDynamicFrameOffset12(card);
+    const latitude = finite(origin?.latitude);
+    const longitude = finite(origin?.longitude);
+    if (!frameOffset || latitude === null || longitude === null) return origin;
+    const restored = offsetWgs84(
+      latitude,
+      longitude,
+      -frameOffset.east,
+      -frameOffset.north,
+    );
+    if (!restored || finite(restored.lat) === null || finite(restored.lon) === null) return origin;
+    card._googleSatelliteFrameCorrection11 = {
+      mode: "inverse_active_cartographic_translation",
+      east_m: -frameOffset.east,
+      north_m: -frameOffset.north,
+    };
+    return { ...origin, latitude: restored.lat, longitude: restored.lon };
+  };
+
+`;
+source = source.replace(syncSingleMarker, frameHelpers + syncSingleMarker);
+
+const singlePattern = /  const syncSingle = \(card\) => \{[\s\S]*?\n  \};\n\n  const siteLayout/;
+const singleMatch = source.match(singlePattern)?.[0];
+if (!singleMatch) throw new Error("single underlay block was not found");
+if (!singleMatch.includes("    const geo = georeference(card);")) throw new Error("single georeference contract was not found");
+const updatedSingle = singleMatch.replace(
+  "    const geo = georeference(card);",
+  "    const activeGeo = georeference(card);\n    const geo = googleDynamicGeoreference12(card, activeGeo);",
+);
+source = source.replace(singleMatch, updatedSingle);
+
+const multiPattern = /  const syncMulti = \(card\) => \{[\s\S]*?\n  \};\n\n  const syncCard/;
+const multiMatch = source.match(multiPattern)?.[0];
+if (!multiMatch) throw new Error("multi underlay block was not found");
+if (!multiMatch.includes("    const origin = site?.origin || {};")) throw new Error("multi site-origin contract was not found");
+const updatedMulti = multiMatch.replace(
+  "    const origin = site?.origin || {};",
+  "    const origin = googleDynamicSiteOrigin12(card, site?.origin || {});",
+);
+source = source.replace(multiMatch, updatedMulti);
+
+source += `\n\n${marker}\nconsole.info("[Navimower Map Card] 0.3.6-beta12 Google Satellite sharpness and provider-frame normalization enabled");\n`;
 
 await writeFile(sourcePath, source, "utf8");
-console.log("Applied 0.3.6-beta12 Google Satellite viewport sharpness fix");
+console.log("Applied 0.3.6-beta12 Google Satellite sharpness and provider-frame fixes");

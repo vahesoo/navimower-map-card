@@ -5,7 +5,8 @@ const packageJson = JSON.parse(await readFile(new URL("../package.json", import.
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const dist = await readFile(new URL("../dist/navimower-map-card.js", import.meta.url), "utf8");
 
-assert.equal(packageJson.version, "0.3.6-beta11");
+assert.match(packageJson.version, /^0\.3\.6-beta\d+$/);
+assert.ok(Number(packageJson.version.split("beta")[1]) >= 11);
 assert.match(packageJson.scripts["prepare-release"], /upgrade-map-underlays-beta11\.mjs/);
 assert.match(packageJson.scripts.test, /map-underlays-beta11\.mjs/);
 

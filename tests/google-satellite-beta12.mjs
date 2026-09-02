@@ -10,7 +10,7 @@ assert.match(packageJson.scripts["prepare-release"], /upgrade-google-satellite-b
 assert.match(packageJson.scripts.test, /google-satellite-beta12\.mjs/);
 
 for (const runtime of [source, dist]) {
-  assert.match(runtime, /0\.3\.6-beta12: preserve Google Satellite detail after viewport metadata/);
+  assert.match(runtime, /0\.3\.6-beta12: Google Satellite sharpness and provider-frame normalization/);
   assert.match(runtime, /const centerLat = \(bounds\.north \+ bounds\.south\) \/ 2/);
   assert.match(runtime, /const centerLon = \(bounds\.east \+ bounds\.west\) \/ 2/);
   assert.match(runtime, /const centerZooms = maxZoomRects/);
@@ -19,6 +19,16 @@ for (const runtime of [source, dist]) {
   assert.match(runtime, /_googleSatelliteViewportZoomRange11/);
   assert.match(runtime, /selected: nextZoom/);
   assert.doesNotMatch(runtime, /Math\.floor\(Math\.min\(\.\.\.reportedZooms\)\)/);
+
+  assert.match(runtime, /googleDynamicFrameOffset12/);
+  assert.match(runtime, /googleDynamicGeoreference12/);
+  assert.match(runtime, /googleDynamicSiteOrigin12/);
+  assert.match(runtime, /inverse_active_cartographic_translation/);
+  assert.match(runtime, /-frameOffset\.east/);
+  assert.match(runtime, /-frameOffset\.north/);
+  assert.match(runtime, /const activeGeo = georeference\(card\)/);
+  assert.match(runtime, /googleDynamicGeoreference12\(card, activeGeo\)/);
+  assert.match(runtime, /googleDynamicSiteOrigin12\(card, site\?\.origin \|\| \{\}\)/);
 }
 
-console.log("0.3.6-beta12 Google Satellite viewport sharpness regression checks passed");
+console.log("0.3.6-beta12 Google Satellite sharpness/frame regression checks passed");

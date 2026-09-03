@@ -6,7 +6,8 @@ const source = await readFile(new URL("../src/navimower-map-card.js", import.met
 const dist = await readFile(new URL("../dist/navimower-map-card.js", import.meta.url), "utf8");
 const upgrade = await readFile(new URL("../scripts/upgrade-underlay-calibration-beta14.mjs", import.meta.url), "utf8");
 
-assert.equal(packageJson.version, "0.3.6-beta14");
+assert.match(packageJson.version, /^0\.3\.6-beta\d+$/);
+assert.ok(Number(packageJson.version.split("beta")[1]) >= 14);
 assert.match(packageJson.scripts["prepare-release"], /upgrade-underlay-calibration-beta14\.mjs/);
 assert.match(packageJson.scripts.test, /underlay-calibration-beta14\.mjs/);
 

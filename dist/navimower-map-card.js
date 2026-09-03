@@ -6177,7 +6177,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta14";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta15";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -11129,15 +11129,18 @@ if (globalThis.customElements) patchCustomAreas0342();
   const MAX_TILES = 36;
 
   const finite = (value, fallback = null) => {
+    if (value === null || value === undefined || value === "") return fallback;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, finite(value, minimum)));
   const underlayProvider = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
   const frontendUnderlayMetadata = (card) => {
+    const single = card?._mapPayload?.frontend?.map_underlays;
+    const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
+    if (!multiVisible && single && typeof single === "object") return single;
     const multi = card?._multi036Site?.anchor_frontend?.map_underlays;
     if (multi && typeof multi === "object") return multi;
-    const single = card?._mapPayload?.frontend?.map_underlays;
     return single && typeof single === "object" ? single : {};
   };
   const providerAvailable = (card, provider = underlayProvider(card)) => {
@@ -11458,7 +11461,14 @@ if (globalThis.customElements) patchCustomAreas0342();
     return { ...origin, latitude: restored.lat, longitude: restored.lon };
   };
 
-  const providerFrontend13 = (card) => card?._multi036Site?.anchor_frontend || card?._mapPayload?.frontend || {};
+  const providerFrontend13 = (card) => {
+    const single = card?._mapPayload?.frontend;
+    const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
+    if (!multiVisible && single && typeof single === "object") return single;
+    const multi = card?._multi036Site?.anchor_frontend;
+    if (multi && typeof multi === "object") return multi;
+    return single && typeof single === "object" ? single : {};
+  };
 
   const providerFrameName13 = (card) => {
     const provider = underlayProvider(card);
@@ -11838,6 +11848,7 @@ console.info("[Navimower Map Card] 0.3.6-beta9 Estonia orthophoto editor availab
   const MAX_WMS_PIXELS = 1600;
 
   const finite10 = (value, fallback = null) => {
+    if (value === null || value === undefined || value === "") return fallback;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
@@ -12174,6 +12185,7 @@ console.info("[Navimower Map Card] 0.3.6-beta9 Estonia orthophoto editor availab
   const GOOGLE_RETRY_MS11 = 15000;
 
   const finite11 = (value, fallback = null) => {
+    if (value === null || value === undefined || value === "") return fallback;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
@@ -12506,6 +12518,7 @@ console.info("[Navimower Map Card] 0.3.6-beta13 integration-owned provider refer
   const STEP14 = 0.1;
 
   const finite14 = (value, fallback = null) => {
+    if (value === null || value === undefined || value === "") return fallback;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
@@ -12756,3 +12769,7 @@ console.info("[Navimower Map Card] 0.3.6-beta13 integration-owned provider refer
 
   console.info("[Navimower Map Card] 0.3.6-beta14 manual underlay calibration enabled");
 })();
+
+
+// 0.3.6-beta15: single-underlay metadata isolation and null-safe coordinates.
+console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and null-safe coordinate handling enabled");

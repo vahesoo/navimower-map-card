@@ -7,7 +7,6 @@ const dist = await readFile(new URL("../dist/navimower-map-card.js", import.meta
 
 assert.match(packageJson.version, /^0\.3\.6-beta\d+$/);
 assert.ok(Number(packageJson.version.split("beta")[1]) >= 12);
-assert.match(packageJson.scripts["prepare-release"], /upgrade-google-satellite-beta12\.mjs/);
 assert.match(packageJson.scripts.test, /google-satellite-beta12\.mjs/);
 
 for (const runtime of [source, dist]) {

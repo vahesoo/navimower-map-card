@@ -7,7 +7,7 @@ const packageJson = JSON.parse(await readFile(new URL("../package.json", import.
 const releaseMatch = String(packageJson.version || "").match(/^0\.3\.6(?:-beta(\d+))?$/);
 assert.ok(releaseMatch, "beta5 regression must stay on the 0.3.6 release line");
 if (releaseMatch[1]) assert.ok(Number(releaseMatch[1]) >= 5, "beta5 regression requires 0.3.6-beta5 or later");
-assert.match(packageJson.scripts["prepare-release"], /upgrade-osm-underlay-beta5\.mjs/);
+assert.match(packageJson.scripts.test, /osm-underlay-beta5\.mjs/);
 
 assert.match(source, /0\.3\.6-beta5: optional OpenStreetMap underlay/);
 assert.match(source, /map_underlay/);

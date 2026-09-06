@@ -24,9 +24,9 @@ assert.match(source, /callService\("switch", requested \? "turn_on" : "turn_off"
 assert.match(source, /Turning on…/);
 assert.match(source, /Turning off…/);
 
-// Keep the patch deterministic through prepare-release without pinning later releases to 0.3.5.
+// Historical upgrade scripts remain useful migration fixtures, but the current
+// release build validates the cumulative runtime rather than replaying them.
 assert.match(upgrade, /Expected beta12 marker was not found/);
-assert.match(pkg.scripts["prepare-release"], /upgrade-legend-schedule-toggle\.mjs/);
 assert.match(pkg.scripts.test, /legend-schedule-toggle\.mjs/);
 
 console.log("beta13 legend visibility and managed schedule toggle regression checks passed");

@@ -7,7 +7,6 @@ const dist = await readFile(new URL("../dist/navimower-map-card.js", import.meta
 
 assert.match(packageJson.version, /^0\.3\.6-beta\d+$/);
 assert.ok(Number(packageJson.version.split("beta")[1]) >= 11);
-assert.match(packageJson.scripts["prepare-release"], /upgrade-map-underlays-beta11\.mjs/);
 assert.match(packageJson.scripts.test, /map-underlays-beta11\.mjs/);
 
 for (const runtime of [source, dist]) {

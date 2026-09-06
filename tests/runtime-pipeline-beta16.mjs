@@ -12,7 +12,7 @@ assert.ok(notes.startsWith("title: Navimower Map Card 0.3.6-beta16\n"));
 
 assert.equal(
   pkg.scripts["prepare-release"],
-  "node scripts/sync-version.mjs && node scripts/upgrade-runtime-pipeline-beta16.mjs && node scripts/build.mjs",
+  "node scripts/sync-version.mjs && node scripts/prepare-runtime-pipeline-beta16.mjs && node scripts/build.mjs",
   "current source must not replay historical upgrade scripts on every build",
 );
 assert.ok(pkg.scripts.test.includes("tests/runtime-pipeline-beta16.mjs"));

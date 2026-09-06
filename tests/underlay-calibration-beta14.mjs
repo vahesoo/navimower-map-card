@@ -8,7 +8,6 @@ const upgrade = await readFile(new URL("../scripts/upgrade-underlay-calibration-
 
 assert.match(packageJson.version, /^0\.3\.6-beta\d+$/);
 assert.ok(Number(packageJson.version.split("beta")[1]) >= 14);
-assert.match(packageJson.scripts["prepare-release"], /upgrade-underlay-calibration-beta14\.mjs/);
 assert.match(packageJson.scripts.test, /underlay-calibration-beta14\.mjs/);
 
 for (const runtime of [source, dist]) {

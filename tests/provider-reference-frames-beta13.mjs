@@ -8,7 +8,6 @@ const upgrade = await readFile(new URL("../scripts/upgrade-provider-reference-fr
 
 assert.match(packageJson.version, /^0\.3\.6-beta\d+$/);
 assert.ok(Number(packageJson.version.split("beta")[1]) >= 13);
-assert.match(packageJson.scripts["prepare-release"], /upgrade-provider-reference-frames-beta13\.mjs/);
 assert.match(packageJson.scripts.test, /provider-reference-frames-beta13\.mjs/);
 
 for (const runtime of [source, dist]) {

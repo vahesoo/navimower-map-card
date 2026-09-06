@@ -25,9 +25,9 @@ const gridBlock = source.match(/function defaultGridOptions\(\) \{([\s\S]*?)\n\}
 assert.match(gridBlock, /columns: "full"/);
 assert.doesNotMatch(gridBlock, /\brows\s*:/);
 
-// Prepare-release must own the deterministic runtime patch and tests stay read-only.
+// Historical upgrade scripts remain migration fixtures; this regression checks
+// the cumulative runtime and stays read-only during current release builds.
 assert.match(upgrade, /Expected beta13 marker was not found/);
-assert.match(pkg.scripts["prepare-release"], /upgrade-dialog-polish\.mjs/);
 assert.match(pkg.scripts.test, /dialog-polish\.mjs/);
 
 console.log("0.3.5 dialog polish and grid sizing regression checks passed");

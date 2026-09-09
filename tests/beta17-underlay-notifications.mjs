@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { applyBeta17Patch, BETA17_MARKER } from "../scripts/upgrade-beta17-underlay-notifications.mjs";
 
-const fixture = `
+const fixture = String.raw`
   const OFFSET_MIN14 = -5;
   const OFFSET_MAX14 = 5;
     card._notificationPage = Math.max(0, Math.min(pageCount - 1, Number(card._notificationPage) || 0));

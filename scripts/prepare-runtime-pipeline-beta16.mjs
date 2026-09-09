@@ -2,6 +2,12 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const sourcePath = new URL("../src/navimower-map-card.js", import.meta.url);
 let source = await readFile(sourcePath, "utf8");
+const beta16Marker = "// 0.3.6-beta16: prioritized phased loading and selective multi-mower updates.";
+if (source.includes(beta16Marker)) {
+  console.log("Beta16 runtime pipeline already prepared");
+  process.exit(0);
+}
+
 const startMarker = "function withLightweightMapQuery(path) {";
 const endMarker = "\n}\nfunction deriveSessionPaths";
 const start = source.indexOf(startMarker);
@@ -14,7 +20,7 @@ const helper = `function withLightweightMapQuery(path) {
   if (!path) return path;
   const text = String(path);
   const separator = text.includes("?") ? "&" : "?";
-    return \`\${text}\${separator}include_sessions=0&include_daily_trails=0\`;
+    return \`${text}\${separator}include_sessions=0&include_daily_trails=0\`;
 }`;
 source = source.slice(0, start) + helper + source.slice(end + 2);
 await writeFile(sourcePath, source, "utf8");

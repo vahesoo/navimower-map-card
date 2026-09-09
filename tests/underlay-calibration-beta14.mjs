@@ -15,8 +15,8 @@ for (const runtime of [source, dist]) {
   assert.match(runtime, /underlay_east_offset/);
   assert.match(runtime, /underlay_north_offset/);
   assert.match(runtime, /underlay_rotation/);
-  assert.match(runtime, /OFFSET_MIN14 = -5/);
-  assert.match(runtime, /OFFSET_MAX14 = 5/);
+  assert.match(runtime, /OFFSET_MIN14 = -10/);
+  assert.match(runtime, /OFFSET_MAX14 = 10/);
   assert.match(runtime, /ROTATION_MIN14 = -5/);
   assert.match(runtime, /ROTATION_MAX14 = 5/);
   assert.match(runtime, /STEP14 = 0\.1/);

@@ -6177,7 +6177,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta16";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta17";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -10941,8 +10941,8 @@ if (globalThis.customElements) patchCustomAreas0342();
     const items = notificationItems036(card);
     const pageSize = typeof notificationPageSize === "function" ? notificationPageSize(card._config || {}) : Math.max(1, Math.min(10, Number(card?._config?.notification_page_size) || 3));
     const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
-    card._notificationPage = Math.max(0, Math.min(pageCount - 1, Number(card._notificationPage) || 0));
-    const pageItems = items.slice(card._notificationPage * pageSize, card._notificationPage * pageSize + pageSize);
+    card._multi036NotificationPage = Math.max(0, Math.min(pageCount - 1, Number(card._multi036NotificationPage) || 0));
+    const pageItems = items.slice(card._multi036NotificationPage * pageSize, card._multi036NotificationPage * pageSize + pageSize);
     const unread = items.some((item) => item.read === false);
     const body = pageItems.length ? pageItems.map((item) => {
       const member = item.member;
@@ -10951,14 +10951,14 @@ if (globalThis.customElements) patchCustomAreas0342();
       const code = item.notification_code ?? item.error_code ?? item.event_code ?? item.code ?? null;
       return "<article class=\"nm-notification-item" + (item.read === false ? " unread" : "") + "\"><div class=\"nm-notification-meta\"><span class=\"nm-notification-dot\"></span><span class=\"nm-multi-notification-mower\">" + esc(displayName036(member)) + "</span><span class=\"nm-notification-time\">" + esc(stamp) + "</span>" + (code ? "<span class=\"nm-notification-code\">" + esc(code) + "</span>" : "") + "</div><div class=\"nm-notification-item-title\">" + esc(item.title || "Notification") + "</div>" + (item.content ? "<div class=\"nm-notification-content\">" + esc(item.content) + "</div>" : "") + (item.read === false && id ? "<button type=\"button\" class=\"nm-notification-mark-read\" data-multi-notification-read=\"" + esc(id) + "\" data-entry-id=\"" + esc(member.entry_id) + "\">Mark as read</button>" : "") + "</article>";
     }).join("") : "<div class=\"nm-notification-empty\">No notifications available.</div>";
-    const pager = pageCount > 1 ? "<div class=\"nm-notification-pager\"><button type=\"button\" data-multi-notification-page=\"previous\"" + (card._notificationPage <= 0 ? " disabled" : "") + ">Previous</button><span class=\"nm-notification-page-label\">" + (card._notificationPage + 1) + " / " + pageCount + "</span><button type=\"button\" data-multi-notification-page=\"next\"" + (card._notificationPage >= pageCount - 1 ? " disabled" : "") + ">Next</button></div>" : "";
+    const pager = pageCount > 1 ? "<div class=\"nm-notification-pager\"><button type=\"button\" data-multi-notification-page=\"previous\"" + (card._multi036NotificationPage <= 0 ? " disabled" : "") + ">Previous</button><span class=\"nm-notification-page-label\">" + (card._multi036NotificationPage + 1) + " / " + pageCount + "</span><button type=\"button\" data-multi-notification-page=\"next\"" + (card._multi036NotificationPage >= pageCount - 1 ? " disabled" : "") + ">Next</button></div>" : "";
     card._modalHostEl.innerHTML = "<div class=\"nm-backdrop nm-notification-backdrop\"><div class=\"nm-dialog nm-notification-dialog\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Notifications\"><div class=\"nm-notification-head\"><div class=\"nm-notification-title\">Notifications</div>" + (unread ? "<button type=\"button\" class=\"nm-notification-mark-all\" data-multi-notification-all>Mark all as read</button>" : "<span></span>") + "<button type=\"button\" class=\"nm-notification-close\" aria-label=\"Close notifications\"><ha-icon icon=\"mdi:close\"></ha-icon></button></div><div class=\"nm-notification-body\">" + body + "</div>" + pager + "</div></div>";
     const backdrop = card._modalHostEl.querySelector?.(".nm-notification-backdrop");
     backdrop?.addEventListener("click", (event) => { if (event.target === backdrop) card._closeNotificationDialog?.(); });
     card._modalHostEl.querySelector?.(".nm-notification-close")?.addEventListener("click", () => card._closeNotificationDialog?.());
     card._modalHostEl.querySelectorAll?.("[data-multi-notification-page]").forEach((button) => button.addEventListener("click", () => {
       if (button.disabled) return;
-      card._notificationPage += button.dataset.multiNotificationPage === "next" ? 1 : -1;
+      card._multi036NotificationPage += button.dataset.multiNotificationPage === "next" ? 1 : -1;
       renderMultiNotifications036(card);
     }));
     card._modalHostEl.querySelectorAll?.("[data-multi-notification-read]").forEach((button) => button.addEventListener("click", async () => {
@@ -11298,7 +11298,7 @@ if (globalThis.customElements) patchCustomAreas0342();
       this._beta6ManagedOpen = false;
       this._beta2ScheduleOpen = false;
       this._notificationDialogOpen = true;
-      this._notificationPage = 0;
+      this._multi036NotificationPage = 0;
       renderMultiNotifications036(this);
       syncMultiNotificationBell036(this);
     };
@@ -12746,8 +12746,8 @@ console.info("[Navimower Map Card] 0.3.6-beta13 integration-owned provider refer
   Card.__navimower036Beta14UnderlayCalibration = true;
 
   const proto = Card.prototype;
-  const OFFSET_MIN14 = -5;
-  const OFFSET_MAX14 = 5;
+  const OFFSET_MIN14 = -10;
+  const OFFSET_MAX14 = 10;
   const ROTATION_MIN14 = -5;
   const ROTATION_MAX14 = 5;
   const STEP14 = 0.1;
@@ -13112,3 +13112,6 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
 
   console.info("[Navimower Map Card] 0.3.6-beta16 prioritized phased loading enabled");
 })();
+
+
+// 0.3.6-beta17: extended underlay offsets and stable multi-mower notification paging.

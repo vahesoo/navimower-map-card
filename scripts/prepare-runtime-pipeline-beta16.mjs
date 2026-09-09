@@ -20,7 +20,7 @@ const helper = `function withLightweightMapQuery(path) {
   if (!path) return path;
   const text = String(path);
   const separator = text.includes("?") ? "&" : "?";
-    return \`${text}\${separator}include_sessions=0&include_daily_trails=0\`;
+    return \`\${text}\${separator}include_sessions=0&include_daily_trails=0\`;
 }`;
 source = source.slice(0, start) + helper + source.slice(end + 2);
 await writeFile(sourcePath, source, "utf8");

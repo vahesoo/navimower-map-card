@@ -68,7 +68,7 @@ assert.throws(
 
 assert.match(notes, /first three points/i);
 assert.match(notes, /28 px/i);
-assert.match(notes, /self-intersection/i);
+assert.match(notes, /self-intersect/i);
 assert.match(notes, /Navimower 0\.4\.4-beta34 or newer/);
 
 console.log("beta20 edge-aware gate-area editor checks passed");

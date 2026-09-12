@@ -6196,7 +6196,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta20";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta21";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -13153,7 +13153,6 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
   const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const MAX_POINTS = 64;
-  const EDGE_INSERT_THRESHOLD_PX = 28;
 
   const esc19 = (value) => String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -13355,7 +13354,7 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
         index = current;
       }
     }
-    return index !== null && distancePx <= EDGE_INSERT_THRESHOLD_PX ? { index, distancePx } : null;
+    return index !== null ? { index, distancePx } : null;
   };
 
   const polygonSelfIntersects20 = (points) => {
@@ -13463,7 +13462,7 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
     if (!editor) return "";
     if (editor.creating && editor.points.length < 3) return "Tap the map to add the first 3 corner points.";
     if (polygonSelfIntersects20(editor.points)) return "Polygon edges cross. Move a corner until the shape no longer intersects itself.";
-    return "Drag corners. Tap near an edge or use + to insert another point.";
+    return "Drag corners. Tap anywhere to insert another point on the nearest edge, or use +.";
   };
 
   function renderOverlay19(card) {
@@ -13782,7 +13781,7 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
     if (editor.points.length >= 3) {
       const nearest = nearestEdge20(card, editor, event.clientX, event.clientY);
       if (!nearest) {
-        editor.status = "Tap near an existing edge or use + to add another point.";
+        editor.status = "Could not determine the nearest polygon edge. Try again.";
         editor.statusKind = "warning";
         updatePanelState19(card);
         return;
@@ -13972,3 +13971,6 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
 
 // 0.3.6-beta20: edge-aware gate-area point insertion and geometry guard.
 console.info("[Navimower Map Card] 0.3.6-beta20 edge-aware gate-area editing enabled");
+
+// 0.3.6-beta21: unrestricted nearest-edge gate-area insertion.
+console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-area insertion enabled");

@@ -17,8 +17,9 @@ const source = await readFile(resolve(root, "src", "navimower-map-card.js"), "ut
 const dist = await readFile(resolve(root, "dist", "navimower-map-card.js"), "utf8");
 const pkg = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const notes = await readFile(resolve(root, ".github", "release-notes", "0.3.6-beta20.md"), "utf8");
+const beta21OrNewer = source.includes("// 0.3.6-beta21: unrestricted nearest-edge gate-area insertion.");
 
-assert.equal(pkg.version, "0.3.6-beta20");
+assert.match(pkg.version, /^0\.3\.6-beta(?:2[0-9]|[3-9][0-9])$/);
 assert.match(pkg.scripts["prepare-release"], /upgrade-beta19-gate-area-editor\.mjs.*upgrade-beta20-gate-area-edge-insert\.mjs/);
 assert.match(pkg.scripts.test, /beta20-gate-area-edge-insert\.mjs/);
 assert.equal(dist, source, "dist must match the deterministic prepared runtime");
@@ -26,25 +27,29 @@ assert.equal(EDGE_INSERT_THRESHOLD_PX, 28);
 
 for (const token of [
   BETA20_MARKER,
-  "EDGE_INSERT_THRESHOLD_PX = 28",
   "nearestEdge20",
   "distanceToSegment20",
   "polygonSelfIntersects20",
   "Tap the map to add the first 3 corner points.",
-  "Tap near an existing edge or use + to add another point.",
   "Fix crossing edges before saving.",
   "Polygon edges must not cross.",
   "invalidGeometry ? \"var(--error-color,#db4437)\"",
   "editor.points.splice(index, 0, local)",
   "nearest.index + 1",
 ]) {
-  assert.ok(source.includes(token), `prepared beta20 runtime must include ${token}`);
+  assert.ok(source.includes(token), `prepared beta20+ runtime must include ${token}`);
 }
 
 assert.match(source, /editor\.creating && editor\.points\.length < 3/);
-assert.match(source, /distancePx <= EDGE_INSERT_THRESHOLD_PX/);
 assert.match(source, /save\.disabled = editor\.busy \|\| editor\.points\.length < 3 \|\| invalidGeometry/);
 assert.ok(!source.includes("if (editor.creating && local && editor.points.length < MAX_POINTS)"), "free point appending after three points must be removed");
+if (beta21OrNewer) {
+  assert.ok(!source.includes("EDGE_INSERT_THRESHOLD_PX = 28"), "beta21+ runtime must remove the edge-distance threshold");
+  assert.ok(!/distancePx <= EDGE_INSERT_THRESHOLD_PX/.test(source), "beta21+ runtime must always choose the nearest edge");
+} else {
+  assert.ok(source.includes("EDGE_INSERT_THRESHOLD_PX = 28"));
+  assert.match(source, /distancePx <= EDGE_INSERT_THRESHOLD_PX/);
+}
 
 const square = [[0, 0], [10, 0], [10, 10], [0, 10]];
 assert.deepEqual(nearestEdgeIndex20(square, [5, -2]), { index: 0, distance: 2 });

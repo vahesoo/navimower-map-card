@@ -10,7 +10,8 @@ const source = await readFile(resolve(root, "src", "navimower-map-card.js"), "ut
 const pkg = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const notes = await readFile(resolve(root, ".github", "release-notes", "0.3.6-beta19.md"), "utf8");
 
-assert.equal(pkg.version, "0.3.6-beta19");
+const betaNumber = Number(String(pkg.version).match(/^0\.3\.6-beta(\d+)$/)?.[1]);
+assert.ok(Number.isFinite(betaNumber) && betaNumber >= 19, "beta19 editor contract must remain valid for later 0.3.6 betas");
 assert.match(pkg.scripts["prepare-release"], /upgrade-beta18-gate-area-polygons\.mjs.*upgrade-beta19-gate-area-editor\.mjs/);
 assert.match(pkg.scripts.test, /beta19-gate-area-editor\.mjs/);
 

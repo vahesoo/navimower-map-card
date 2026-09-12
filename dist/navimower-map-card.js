@@ -1381,6 +1381,13 @@ var NavimowerMapCard = class extends HTMLElement {
     channels.forEach((channel) => (channel.points || []).forEach((point) => stable.push(point)));
     if (this._config.show_gate_areas) {
       gateAreas.forEach((channel) => {
+        const polygon = (Array.isArray(channel?.polygon) ? channel.polygon : [])
+          .map((point) => [Number(point?.[0]), Number(point?.[1])])
+          .filter((point) => point.every(Number.isFinite));
+        if (polygon.length >= 3) {
+          polygon.forEach((point) => stable.push(point));
+          return;
+        }
         stable.push(
           [channel.x_min, channel.y_min],
           [channel.x_min, channel.y_max],
@@ -1514,14 +1521,26 @@ var NavimowerMapCard = class extends HTMLElement {
     }
     if (c.show_gate_areas) {
       gateAreas.forEach((channel) => {
-        const x1 = sx(Number(channel.x_min));
-        const x2 = sx(Number(channel.x_max));
-        const y1 = sy(Number(channel.y_max));
-        const y2 = sy(Number(channel.y_min));
-        details.push(`<rect x="${Math.min(x1, x2).toFixed(1)}" y="${Math.min(y1, y2).toFixed(1)}" width="${Math.abs(x2 - x1).toFixed(1)}" height="${Math.abs(y2 - y1).toFixed(1)}" fill="${escapeHtml(c.gate_area_color)}" fill-opacity=".14" stroke="${escapeHtml(c.gate_area_color)}" stroke-width="3" stroke-dasharray="10 6"/>`);
+        const polygon = (Array.isArray(channel?.polygon) ? channel.polygon : [])
+          .map((point) => [Number(point?.[0]), Number(point?.[1])])
+          .filter((point) => point.every(Number.isFinite));
+        let gateX;
+        let gateY;
+        if (polygon.length >= 3) {
+          const screen = polygon.map((point) => [sx(point[0]), sy(point[1])]);
+          details.push(`<polygon points="${this._pointString(polygon)}" fill="${escapeHtml(c.gate_area_color)}" fill-opacity=".14" stroke="${escapeHtml(c.gate_area_color)}" stroke-width="3" stroke-dasharray="10 6" stroke-linejoin="round"/>`);
+          gateX = screen.reduce((sum, point) => sum + point[0], 0) / screen.length;
+          gateY = Math.min(...screen.map((point) => point[1])) + 24;
+        } else {
+          const x1 = sx(Number(channel.x_min));
+          const x2 = sx(Number(channel.x_max));
+          const y1 = sy(Number(channel.y_max));
+          const y2 = sy(Number(channel.y_min));
+          details.push(`<rect x="${Math.min(x1, x2).toFixed(1)}" y="${Math.min(y1, y2).toFixed(1)}" width="${Math.abs(x2 - x1).toFixed(1)}" height="${Math.abs(y2 - y1).toFixed(1)}" fill="${escapeHtml(c.gate_area_color)}" fill-opacity=".14" stroke="${escapeHtml(c.gate_area_color)}" stroke-width="3" stroke-dasharray="10 6"/>`);
+          gateX = (x1 + x2) / 2;
+          gateY = Math.min(y1, y2) + 24;
+        }
         const gateLabel = channel.name || "Gate area";
-        const gateX = (x1 + x2) / 2;
-        const gateY = Math.min(y1, y2) + 24;
         labels.push(this._label(gateX, gateY, gateLabel, 19));
         const gateWidth = Math.max(54, String(gateLabel).length * 11.5);
         labelObstacles.push({ left: gateX - gateWidth / 2, right: gateX + gateWidth / 2, top: gateY - 21, bottom: gateY + 7 });
@@ -6177,7 +6196,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta17";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta18";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -10630,6 +10649,11 @@ if (globalThis.customElements) patchCustomAreas0342();
       }
       if (c.show_gate_areas !== false) {
         for (const gate of payload?.gate_areas || []) {
+          const polygon = rawPoints036(gate?.polygon);
+          if (polygon && (Array.isArray(gate?.polygon) ? gate.polygon.length : 0) >= 3) {
+            local.push("<polygon points=\"" + polygon + "\" fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+            continue;
+          }
           const x1 = finite036(gate?.x_min, null), x2 = finite036(gate?.x_max, null), y1 = finite036(gate?.y_min, null), y2 = finite036(gate?.y_max, null);
           if ([x1, x2, y1, y2].every((value) => value !== null)) local.push("<rect x=\"" + Math.min(x1, x2).toFixed(4) + "\" y=\"" + Math.min(y1, y2).toFixed(4) + "\" width=\"" + Math.abs(x2 - x1).toFixed(4) + "\" height=\"" + Math.abs(y2 - y1).toFixed(4) + "\" fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
         }
@@ -13115,3 +13139,6 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
 
 
 // 0.3.6-beta17: extended underlay offsets and stable multi-mower notification paging.
+
+
+// 0.3.6-beta18: exact polygon gate-area rendering in Single and Multi mower views.

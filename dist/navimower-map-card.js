@@ -6196,7 +6196,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta19";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6-beta20";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -13153,6 +13153,7 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
   const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const MAX_POINTS = 64;
+  const EDGE_INSERT_THRESHOLD_PX = 28;
 
   const esc19 = (value) => String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -13326,6 +13327,72 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
     return viewBox.width / rect.width;
   };
 
+  const distanceToSegment20 = (point, start, end) => {
+    const px = Number(point?.[0]), py = Number(point?.[1]);
+    const ax = Number(start?.[0]), ay = Number(start?.[1]);
+    const bx = Number(end?.[0]), by = Number(end?.[1]);
+    if (![px, py, ax, ay, bx, by].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
+    const dx = bx - ax, dy = by - ay;
+    const length2 = dx * dx + dy * dy;
+    if (length2 <= 1e-12) return Math.hypot(px - ax, py - ay);
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / length2));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  };
+
+  const nearestEdge20 = (card, editor, clientX, clientY) => {
+    const click = rootPoint19(card, clientX, clientY);
+    if (!click || !editor || editor.points.length < 3) return null;
+    const points = editor.points.map((point) => localToRoot19(card, editor.target, point));
+    if (points.some((point) => !point || !point.every(Number.isFinite))) return null;
+    const unit = Math.max(1e-9, rootUnitsPerPixel19(card));
+    let index = null;
+    let distancePx = Number.POSITIVE_INFINITY;
+    for (let current = 0; current < points.length; current += 1) {
+      const next = (current + 1) % points.length;
+      const candidate = distanceToSegment20(click, points[current], points[next]) / unit;
+      if (candidate < distancePx) {
+        distancePx = candidate;
+        index = current;
+      }
+    }
+    return index !== null && distancePx <= EDGE_INSERT_THRESHOLD_PX ? { index, distancePx } : null;
+  };
+
+  const polygonSelfIntersects20 = (points) => {
+    if (!Array.isArray(points) || points.length < 4) return false;
+    const epsilon = 1e-9;
+    const cross = (a, b, c) =>
+      (Number(b[0]) - Number(a[0])) * (Number(c[1]) - Number(a[1])) -
+      (Number(b[1]) - Number(a[1])) * (Number(c[0]) - Number(a[0]));
+    const onSegment = (point, start, end) => {
+      if (Math.abs(cross(start, end, point)) > epsilon) return false;
+      return Number(point[0]) >= Math.min(Number(start[0]), Number(end[0])) - epsilon &&
+        Number(point[0]) <= Math.max(Number(start[0]), Number(end[0])) + epsilon &&
+        Number(point[1]) >= Math.min(Number(start[1]), Number(end[1])) - epsilon &&
+        Number(point[1]) <= Math.max(Number(start[1]), Number(end[1])) + epsilon;
+    };
+    const intersects = (a1, a2, b1, b2) => {
+      const c1 = cross(a1, a2, b1), c2 = cross(a1, a2, b2);
+      const c3 = cross(b1, b2, a1), c4 = cross(b1, b2, a2);
+      if (((c1 > epsilon && c2 < -epsilon) || (c1 < -epsilon && c2 > epsilon)) &&
+          ((c3 > epsilon && c4 < -epsilon) || (c3 < -epsilon && c4 > epsilon))) return true;
+      return (Math.abs(c1) <= epsilon && onSegment(b1, a1, a2)) ||
+        (Math.abs(c2) <= epsilon && onSegment(b2, a1, a2)) ||
+        (Math.abs(c3) <= epsilon && onSegment(a1, b1, b2)) ||
+        (Math.abs(c4) <= epsilon && onSegment(a2, b1, b2));
+    };
+    const count = points.length;
+    for (let first = 0; first < count; first += 1) {
+      const firstNext = (first + 1) % count;
+      for (let second = first + 1; second < count; second += 1) {
+        const secondNext = (second + 1) % count;
+        if (first === second || firstNext === second || secondNext === first) continue;
+        if (intersects(points[first], points[firstNext], points[second], points[secondNext])) return true;
+      }
+    }
+    return false;
+  };
+
   const defaultName19 = (payload) => {
     const used = new Set(gateAreas19(payload).map((area) => slug19(area?.name || area?.slug)));
     if (!used.has("gate_area")) return "Gate area";
@@ -13394,8 +13461,9 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
 
   const editorHint19 = (editor) => {
     if (!editor) return "";
-    if (editor.creating && editor.points.length < 3) return "Tap the map to add at least 3 corner points.";
-    return "Drag corner points. Tap + on an edge to add another point.";
+    if (editor.creating && editor.points.length < 3) return "Tap the map to add the first 3 corner points.";
+    if (polygonSelfIntersects20(editor.points)) return "Polygon edges cross. Move a corner until the shape no longer intersects itself.";
+    return "Drag corners. Tap near an edge or use + to insert another point.";
   };
 
   function renderOverlay19(card) {
@@ -13417,7 +13485,8 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
     const vertexRadius = Math.max(3 * unit, 7 * unit);
     const midpointRadius = Math.max(3 * unit, 6 * unit);
     const pointString = rootPoints.map((point) => point[0].toFixed(2) + "," + point[1].toFixed(2)).join(" ");
-    const color = esc19(card?._config?.gate_area_color || "#8e24aa");
+    const invalidGeometry = polygonSelfIntersects20(editor.points);
+    const color = esc19(invalidGeometry ? "var(--error-color,#db4437)" : (card?._config?.gate_area_color || "#8e24aa"));
     const parts = [];
     if (rootPoints.length >= 3) {
       parts.push('<polygon class="nm-gate19-preview" points="' + pointString + '" fill="' + color + '" fill-opacity=".22" stroke="' + color + '" stroke-width="3" stroke-dasharray="10 6" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>');
@@ -13452,13 +13521,14 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
     const remove = panel.querySelector("[data-gate19-remove]");
     const deletion = panel.querySelector("[data-gate19-delete]");
     const selected = Number.isInteger(editor.selected) && editor.selected >= 0 && editor.selected < editor.points.length ? editor.points[editor.selected] : null;
+    const invalidGeometry = polygonSelfIntersects20(editor.points);
     if (meta) meta.textContent = editor.points.length + " points" + (selected ? " · X " + selected[0].toFixed(2) + " · Y " + selected[1].toFixed(2) : "");
     if (hint) hint.textContent = editorHint19(editor);
     if (status) {
-      status.textContent = editor.status || "";
-      status.className = "nm-gate19-status " + (editor.statusKind || "");
+      status.textContent = editor.status || (invalidGeometry ? "Fix crossing edges before saving." : "");
+      status.className = "nm-gate19-status " + (editor.statusKind || (invalidGeometry ? "error" : ""));
     }
-    if (save) save.disabled = editor.busy || editor.points.length < 3 || !String(editor.name || "").trim();
+    if (save) save.disabled = editor.busy || editor.points.length < 3 || invalidGeometry || !String(editor.name || "").trim();
     if (remove) remove.disabled = editor.busy || !selected || editor.points.length <= 3;
     if (deletion) {
       deletion.disabled = editor.busy;
@@ -13594,6 +13664,12 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
       updatePanelState19(card);
       return;
     }
+    if (polygonSelfIntersects20(editor.points)) {
+      editor.status = "Polygon edges must not cross.";
+      editor.statusKind = "error";
+      updatePanelState19(card);
+      return;
+    }
     if (editor.target.mode === "multi" && !editor.target.deviceId) {
       editor.status = "Mower device ID is unavailable. Refresh the map and try again.";
       editor.statusKind = "error";
@@ -13690,10 +13766,33 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
       return;
     }
 
-    if (editor.creating && local && editor.points.length < MAX_POINTS) {
+    if (!local || editor.points.length >= MAX_POINTS) return;
+
+    if (editor.creating && editor.points.length < 3) {
       editor.points.push(local);
       editor.selected = editor.points.length - 1;
       editor.confirmDelete = false;
+      editor.status = "";
+      editor.statusKind = "";
+      renderOverlay19(card);
+      updatePanelState19(card);
+      return;
+    }
+
+    if (editor.points.length >= 3) {
+      const nearest = nearestEdge20(card, editor, event.clientX, event.clientY);
+      if (!nearest) {
+        editor.status = "Tap near an existing edge or use + to add another point.";
+        editor.statusKind = "warning";
+        updatePanelState19(card);
+        return;
+      }
+      const index = nearest.index + 1;
+      editor.points.splice(index, 0, local);
+      editor.selected = index;
+      editor.confirmDelete = false;
+      editor.status = "";
+      editor.statusKind = "";
       renderOverlay19(card);
       updatePanelState19(card);
     }
@@ -13870,3 +13969,6 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
 
   console.info("[Navimower Map Card] 0.3.6-beta19 visual gate-area editor enabled");
 })();
+
+// 0.3.6-beta20: edge-aware gate-area point insertion and geometry guard.
+console.info("[Navimower Map Card] 0.3.6-beta20 edge-aware gate-area editing enabled");

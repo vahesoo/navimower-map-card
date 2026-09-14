@@ -28,8 +28,28 @@ for (const token of [
   "MOWER_ICON_SPECS_032",
   "autoMowerIcon032",
   'callService("navimower", "mark_notification_read"',
+  'callService("navimower", "mark_all_notifications_read"',
+  'callService("navimower", "resume"',
+  'callService("lawn_mower", command',
 ]) {
-  assert.ok(source.includes(token), `missing multi-mower runtime marker: ${token}`);
+  assert.ok(source.includes(token), `multi-mower runtime is missing ${token}`);
 }
 
-console.log(`${pkg.version} multi-mower regression checks passed`);
+assert.ok(
+  source.includes("card._multi036Requested = asBool036(card?._config?.multi_mower, false)"),
+  "multi-mower mode must remain explicit and default to the configured false value",
+);
+assert.ok(
+  !source.includes("_multi036Requested = siteAvailable036"),
+  "site discovery must never automatically enable multi-mower mode",
+);
+assert.ok(
+  source.includes('command === "mow"'),
+  "multi-mower Mow must remain member-scoped",
+);
+assert.ok(
+  source.includes('command === "dock"') && source.includes("Home command sent"),
+  "multi-mower Home button must keep using the mower dock service",
+);
+
+console.log(`${pkg.version} multi-mower runtime contract checks passed`);

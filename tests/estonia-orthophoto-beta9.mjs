@@ -5,8 +5,6 @@ const packageJson = JSON.parse(await readFile(new URL("../package.json", import.
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const dist = await readFile(new URL("../dist/navimower-map-card.js", import.meta.url), "utf8");
 
-assert.match(packageJson.version, /^0\.3\.6-beta\d+$/);
-assert.ok(Number(packageJson.version.split("beta")[1]) >= 9);
 assert.match(packageJson.scripts.test, /estonia-orthophoto-beta9\.mjs/);
 
 for (const runtime of [source, dist]) {

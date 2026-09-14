@@ -22,6 +22,8 @@ assert.equal(
   "beta2 runtime patch must be applied exactly once",
 );
 
+const plain = (value) => JSON.parse(JSON.stringify(value));
+
 class MockLine {
   constructor() {
     this.attributes = new Map();
@@ -83,14 +85,14 @@ card._mapPayload = {
 };
 card._trail = [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]];
 assert.deepEqual(
-  card._activeTrailSegments(),
+  plain(card._activeTrailSegments()),
   [[[2, 0], [3, 0], [4, 0]]],
   "browser live MQTT must append only after the server-trimmed tail anchor",
 );
 
 card._mapPayload.trail_segments = [];
 assert.deepEqual(
-  card._activeTrailSegments(),
+  plain(card._activeTrailSegments()),
   [[[2, 0], [3, 0], [4, 0]]],
   "temporary empty payloads must keep the same-session authoritative tail sticky",
 );
@@ -102,7 +104,7 @@ card._mapPayload = {
 };
 card._trail = [[10, 0], [11, 0]];
 assert.deepEqual(
-  card._activeTrailSegments(),
+  plain(card._activeTrailSegments()),
   [[[10, 0], [11, 0]]],
   "a new session must start from its own backend anchor",
 );
@@ -110,7 +112,7 @@ assert.deepEqual(
 card._mapPayload.trail_segments = [[[20, 0], [21, 0]]];
 card._trail = [[0, 0], [1, 0], [2, 0]];
 assert.deepEqual(
-  card._activeTrailSegments(),
+  plain(card._activeTrailSegments()),
   [[[20, 0], [21, 0]]],
   "missing anchor match must never resurrect the full local MQTT session",
 );

@@ -6,7 +6,7 @@ Navimower Map Card is a Home Assistant frontend for the Navimower integration. T
 
 The Navimower integration owns:
 
-- private-cloud and MQTT communication;
+- Navimow account/cloud and MQTT communication;
 - mower state and commands;
 - map decoding and mower-local X/Y geometry;
 - current-cycle and completed-session history;
@@ -27,7 +27,7 @@ The Map Card owns presentation and interaction:
 - Gate-area drawing/editing before a validated service call;
 - routing user actions to the correct Home Assistant mower/device.
 
-The card never calls the Navimow private cloud directly.
+The card communicates with mower/account services only through Home Assistant and Navimower integration APIs. Navimow account credentials, account session tokens and map-provider secrets remain backend-owned and are not card configuration.
 
 ## One mower-local geometry frame
 
@@ -86,9 +86,9 @@ Home Assistant state remains authoritative after service calls. The frontend doe
 
 ## Schedule and mower actions
 
-The card is not a scheduler. Native Navimow Schedule and Navimower Schedule execution remain in the integration/vendor backend.
+The card is not a scheduler. Native Navimow Schedule and Navimower Schedule execution remain in the integration/mower backend.
 
-The card opens the appropriate member-scoped Schedule UI and sends edits/actions through Home Assistant. Likewise Resume, Mow, Pause and Dock are Home Assistant/integration calls, not direct vendor requests.
+The card opens the appropriate member-scoped Schedule UI and sends edits/actions through Home Assistant. Likewise Resume, Mow, Pause and Dock are Home Assistant/integration calls, not direct service-provider requests.
 
 For `navimower.mow`, the card uses internal IDs from `map.zones[].id`. Display labels such as `Zone 2` are presentation text, not command IDs.
 

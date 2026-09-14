@@ -110,4 +110,4 @@ The base map and primary mower controls are intentionally useful before optional
 - Navimower 0.4.3 provides the stable 0.3.5-era backend current-cycle/history baseline.
 - Navimower 0.4.4-beta28 or newer provides the phased `include_current_cycle=0` / `current_cycle_only=1` contract used by the current optimized path.
 - Older supported combined Map API responses remain usable through the compatibility path.
-- Navimower `0.4.4-beta36` is the recommended companion for Map Card `0.3.6-beta22`.
+- The latest Navimower 0.4.4 beta is the recommended companion for Map Card `0.3.6-beta23`.

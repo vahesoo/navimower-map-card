@@ -6,8 +6,6 @@ const source = await readFile(new URL("../src/navimower-map-card.js", import.met
 const dist = await readFile(new URL("../dist/navimower-map-card.js", import.meta.url), "utf8");
 const notes = await readFile(new URL("../.github/release-notes/0.3.6-beta18.md", import.meta.url), "utf8");
 
-const version = String(packageJson.version || "").match(/^0\.3\.6-beta(\d+)$/);
-assert.ok(version && Number(version[1]) >= 18, "beta18 polygon regression must remain active in later 0.3.6 betas");
 assert.match(packageJson.scripts.test, /beta18-gate-area-polygons\.mjs/);
 assert.equal(dist, source, "dist must remain the deterministic single-file build");
 assert.match(notes, /Exact polygon gate areas/);

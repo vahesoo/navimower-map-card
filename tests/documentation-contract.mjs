@@ -57,11 +57,11 @@ for (const token of [
   "nearest existing polygon edge",
   "no maximum screen-distance threshold",
   "3 to 64",
-  "self-intersecting",
   "navimower.set_gate_area",
 ]) {
   assert.ok(gate.includes(token), `Gate editor guide missing ${token}`);
 }
+assert.match(gate, /self-intersect/i, "Gate editor guide must document self-intersection protection");
 
 const session = read("docs/SESSION_API.md");
 assert.ok(session.includes("include_current_cycle=0"));

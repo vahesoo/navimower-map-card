@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-assert.match(pkg.version, /^0\.3\.6(?:-|$)/, "beta4 regression must remain valid for later 0.3.6 builds");
+assert.match(pkg.version, /^0\.3\.(?:6|7)(?:-|$)/, "beta4 regression must remain valid for later 0.3.6+ builds");
 
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
@@ -40,4 +40,4 @@ assert.ok(
   "Single mower schedule behavior must retain the original entity resolvers",
 );
 
-console.log("0.3.6-beta4 multi-mower scope regression checks passed");
+console.log(`${pkg.version} multi-mower scope regression checks passed`);

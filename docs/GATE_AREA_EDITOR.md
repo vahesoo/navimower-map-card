@@ -88,7 +88,7 @@ Multi mower mode first resolves which site member is being edited and then conve
 
 The Map Card does **not** calculate Gate-area occupancy and does not assert a binary sensor from browser pointer geometry.
 
-Navimower integration remains authoritative and, for exact polygon Gate areas, uses mower-local point-in-polygon membership together with its fresh live-position safety rules. Stale/private-cloud fallback position must not become a browser-side reason to assert a physical Gate area.
+Navimower integration remains authoritative and, for exact polygon Gate areas, uses mower-local point-in-polygon membership together with its fresh live-position safety rules. Stale/cloud fallback position must not become a browser-side reason to assert a physical Gate area.
 
 This separation is intentional: closing the Home Assistant dashboard cannot change whether an automation considers the mower inside a Gate area.
 
@@ -96,7 +96,7 @@ This separation is intentional: closing the Home Assistant dashboard cannot chan
 
 - Exact polygon rendering requires Navimower `0.4.4-beta32` or newer for the full polygon payload; older integrations continue through rectangle fallback.
 - Visual Save/Delete requires Navimower `0.4.4-beta34` or newer because those versions provide the Gate-area write services.
-- `0.3.6-beta22` is recommended with Navimower `0.4.4-beta36` for the current full prerelease pair.
+- `0.3.6-beta23` is recommended with the latest Navimower `0.4.4` beta for the current full prerelease pair.
 
 ## Final editor behavior vs development betas
 

@@ -7,8 +7,10 @@ const pkg = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const sourcePath = resolve(root, "src", "navimower-map-card.js");
 const beta1PatchPath = resolve(root, "scripts", "runtime-v037-beta1.js.txt");
 const beta2PatchPath = resolve(root, "scripts", "runtime-v037-beta2.js.txt");
+const beta3PatchPath = resolve(root, "scripts", "runtime-v037-beta3.js.txt");
 const beta1Marker = "// 0.3.7-beta1: vendor retained trail / MQTT tail source debug.";
 const beta2Marker = "// 0.3.7-beta2: stable vendor backbone / MQTT tail and authenticated OSM tiles.";
+const beta3Marker = "// 0.3.7-beta3: selectable LiDAR terrain overlay.";
 let source = await readFile(sourcePath, "utf8");
 
 if (!source.includes(beta1Marker)) {
@@ -34,6 +36,15 @@ if (!source.includes(beta2Marker)) {
   const patch = (await readFile(beta2PatchPath, "utf8")).trim();
   source = `${source.trimEnd()}\n\n${patch}\n`;
   console.log("Applied 0.3.7-beta2 stable trail / OSM proxy runtime patch");
+}
+
+if (!source.includes(beta3Marker)) {
+  if (!source.includes(beta2Marker)) {
+    throw new Error("Expected 0.3.7-beta2 runtime before applying LiDAR beta3");
+  }
+  const patch = (await readFile(beta3PatchPath, "utf8")).trim();
+  source = `${source.trimEnd()}\n\n${patch}\n`;
+  console.log("Applied 0.3.7-beta3 selectable LiDAR terrain overlay runtime patch");
 }
 
 const marker = /var NAVIMOWER_MAP_CARD_VERSION2 = "[^"]+";/;

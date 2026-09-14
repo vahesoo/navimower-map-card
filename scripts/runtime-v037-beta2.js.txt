@@ -1,0 +1,311 @@
+// 0.3.7-beta2: stable vendor backbone / MQTT tail and authenticated OSM tiles.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower037Beta2StableTrailOsm) return;
+  Card.__navimower037Beta2StableTrailOsm = true;
+
+  const proto = Card.prototype;
+  const MATCH_RADIUS_M = 1.0;
+  const SPLIT_DISTANCE_SQ = 25;
+  const OSM_FETCH_CONCURRENCY = 6;
+  const OSM_RETRY_MS = 15000;
+
+  const finite = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const normalizePoint = (raw) => {
+    if (Array.isArray(raw) && raw.length >= 2) {
+      const x = finite(raw[0]);
+      const y = finite(raw[1]);
+      return x === null || y === null ? null : [x, y];
+    }
+    if (raw && typeof raw === "object") {
+      const x = finite(raw.x);
+      const y = finite(raw.y);
+      return x === null || y === null ? null : [x, y];
+    }
+    return null;
+  };
+
+  const normalizeTailSegments = (raw) => {
+    if (!Array.isArray(raw) || !raw.length) return [];
+    const firstPoint = normalizePoint(raw[0]);
+    const input = firstPoint ? [raw] : raw;
+    return input
+      .filter((segment) => Array.isArray(segment))
+      .map((segment) => segment.map(normalizePoint).filter(Boolean))
+      .filter((segment) => segment.length);
+  };
+
+  const copySegments = (segments) =>
+    (segments || []).map((segment) => segment.map((point) => [...point]));
+
+  const trailSessionKey = (card) => String(
+    card?._mapPayload?.trail_session
+      ?? card?._mapPayload?.active_session?.id
+      ?? card?._mapPayload?.active_session?.sequence
+      ?? "",
+  );
+
+  const resetTailCache = (card, sessionKey = "") => {
+    card._nm037Beta2TailSession = sessionKey;
+    card._nm037Beta2ServerTail = [];
+  };
+
+  const appendLiveAfterAnchor = (segments, live, anchor) => {
+    if (!Array.isArray(anchor) || anchor.length < 2 || !Array.isArray(live)) {
+      return segments;
+    }
+    let anchorIndex = -1;
+    for (let index = live.length - 1; index >= 0; index -= 1) {
+      const point = normalizePoint(live[index]);
+      if (!point) continue;
+      if (Math.hypot(point[0] - anchor[0], point[1] - anchor[1]) <= MATCH_RADIUS_M) {
+        anchorIndex = index;
+        break;
+      }
+    }
+    // The integration has already trimmed the server-side MQTT trail to the
+    // vendor endpoint. If the browser cannot match that anchor, never fall back
+    // to the full local session because doing so would redraw the vendor-owned
+    // backbone from MQTT again.
+    if (anchorIndex < 0) return segments;
+
+    for (const raw of live.slice(anchorIndex + 1)) {
+      const point = normalizePoint(raw);
+      if (!point) continue;
+      let current = segments.at(-1);
+      if (!current) {
+        current = [];
+        segments.push(current);
+      }
+      const previous = current.at(-1);
+      if (
+        previous
+        && (point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2
+          > SPLIT_DISTANCE_SQ
+      ) {
+        current = [];
+        segments.push(current);
+      }
+      const last = current.at(-1);
+      if (!last || last[0] !== point[0] || last[1] !== point[1]) {
+        current.push(point);
+      }
+    }
+    return segments;
+  };
+
+  const previousActiveTrailSegments = proto._activeTrailSegments;
+  if (typeof previousActiveTrailSegments === "function") {
+    proto._activeTrailSegments = function stableVendorTailSegments(...args) {
+      const debug = this?._mapPayload?.vendor_trail_debug;
+      const sessionKey = trailSessionKey(this);
+      if (this._nm037Beta2TailSession !== sessionKey) {
+        resetTailCache(this, sessionKey);
+      }
+      if (!debug?.backend_tail_authoritative) {
+        resetTailCache(this, sessionKey);
+        return previousActiveTrailSegments.apply(this, args);
+      }
+
+      const currentServerTail = normalizeTailSegments(this?._mapPayload?.trail_segments);
+      if (currentServerTail.length) {
+        this._nm037Beta2ServerTail = copySegments(currentServerTail);
+      }
+      const stableServerTail = currentServerTail.length
+        ? currentServerTail
+        : copySegments(this._nm037Beta2ServerTail || []);
+      if (!stableServerTail.length) return [];
+
+      const segments = copySegments(stableServerTail);
+      const anchor = segments.at(-1)?.at(-1) || debug?.anchor_xy || null;
+      appendLiveAfterAnchor(segments, this._trail, anchor);
+      return segments.filter((segment) => segment.length >= 2);
+    };
+  }
+
+  const clearBeta1DebugPresentation = (card) => {
+    card?.removeAttribute?.("data-nm-vendor-trail-debug");
+  };
+
+  const previousApplyMapPayload = proto._applyMapPayload;
+  if (typeof previousApplyMapPayload === "function") {
+    proto._applyMapPayload = function stableTrailApplyMapPayload(...args) {
+      const result = previousApplyMapPayload.apply(this, args);
+      clearBeta1DebugPresentation(this);
+      return result;
+    };
+  }
+
+  const previousEnsureDom = proto._ensureDom;
+  if (typeof previousEnsureDom === "function") {
+    proto._ensureDom = function stableTrailEnsureDom(...args) {
+      const result = previousEnsureDom.apply(this, args);
+      clearBeta1DebugPresentation(this);
+      return result;
+    };
+  }
+
+  const previousRenderTrail = proto._renderTrail;
+  if (typeof previousRenderTrail === "function") {
+    proto._renderTrail = function stableTrailRender(...args) {
+      const result = previousRenderTrail.apply(this, args);
+      clearBeta1DebugPresentation(this);
+      const color = String(this?._config?.trail_color || "#43a047");
+      this._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
+        line.setAttribute("stroke", color);
+        line.setAttribute("data-trail-source", "mqtt-tail");
+      });
+      return result;
+    };
+  }
+
+  const apiPath = (path) => String(path || "")
+    .replace(/^\/api\//, "")
+    .replace(/^\/+/, "");
+
+  const provider = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
+  const frontend = (card) => card?._multi036Site?.anchor_frontend
+    || card?._mapPayload?.frontend
+    || {};
+  const mapApiPath = (card) => String(frontend(card)?.map_api_path || "");
+  const activeUnderlayLayer = (card) => {
+    const multiVisible = Boolean(
+      card?._multi036Layer && card._multi036Layer.style.display !== "none",
+    );
+    return multiVisible ? card?._osm036MultiLayer : card?._baseEl;
+  };
+
+  const rawGet = async (card, path) => {
+    const hass = card?._hass;
+    if (!hass || !path) throw new Error("OpenStreetMap backend is unavailable");
+    const relative = apiPath(path);
+    if (typeof hass.callApiRaw === "function") {
+      return await hass.callApiRaw("GET", relative);
+    }
+    if (typeof hass.fetchWithAuth === "function") {
+      return await hass.fetchWithAuth("/api/" + relative);
+    }
+    throw new Error("Authenticated binary requests are unavailable");
+  };
+
+  const releaseOsmObjectUrls = (card, all = false) => {
+    const urls = card?._nm037Beta2OsmObjectUrls;
+    if (!(urls instanceof Map)) return;
+    for (const [image, url] of urls.entries()) {
+      if (!all && image?.isConnected) continue;
+      try { URL.revokeObjectURL(url); } catch (_error) { /* no-op */ }
+      urls.delete(image);
+    }
+  };
+
+  const osmMarker = (image) => {
+    const href = String(image?.getAttribute?.("href") || "");
+    const match = href.match(/^#nm-osm-(\d+)-(\d+)-(\d+)$/);
+    if (!match) return null;
+    return {
+      z: Number(match[1]),
+      x: Number(match[2]),
+      y: Number(match[3]),
+    };
+  };
+
+  const osmProxyPath = (card, tile) => {
+    const base = mapApiPath(card);
+    if (!base || !tile) return "";
+    const separator = base.includes("?") ? "&" : "?";
+    return base + separator
+      + "osm_tile=1&z=" + encodeURIComponent(tile.z)
+      + "&x=" + encodeURIComponent(tile.x)
+      + "&y=" + encodeURIComponent(tile.y);
+  };
+
+  const hydrateOsmTiles = async (card) => {
+    releaseOsmObjectUrls(card);
+    if (provider(card) !== "openstreetmap") {
+      releaseOsmObjectUrls(card, true);
+      return;
+    }
+    const layer = activeUnderlayLayer(card);
+    if (!layer || !mapApiPath(card)) return;
+    const images = Array.from(
+      layer.querySelectorAll?.('image[href^="#nm-osm-"]') || [],
+    );
+    if (!images.length) return;
+    if (!(card._nm037Beta2OsmObjectUrls instanceof Map)) {
+      card._nm037Beta2OsmObjectUrls = new Map();
+    }
+    const now = Date.now();
+    const pending = images.filter((image) => {
+      if (image.getAttribute("data-nm-osm-loading") === "1") return false;
+      const errorAt = Number(image.getAttribute("data-nm-osm-error-at") || 0);
+      return !errorAt || now - errorAt >= OSM_RETRY_MS;
+    });
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < pending.length) {
+        const image = pending[cursor];
+        cursor += 1;
+        const tile = osmMarker(image);
+        const path = osmProxyPath(card, tile);
+        if (!tile || !path) continue;
+        image.setAttribute("data-nm-osm-loading", "1");
+        try {
+          const response = await rawGet(card, path);
+          if (!response?.ok) throw new Error("OpenStreetMap tile request failed");
+          const blob = await response.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          if (!image.isConnected || provider(card) !== "openstreetmap") {
+            URL.revokeObjectURL(objectUrl);
+            continue;
+          }
+          const previous = card._nm037Beta2OsmObjectUrls.get(image);
+          if (previous && previous !== objectUrl) URL.revokeObjectURL(previous);
+          card._nm037Beta2OsmObjectUrls.set(image, objectUrl);
+          image.setAttribute("href", objectUrl);
+          image.removeAttribute("data-nm-osm-error-at");
+        } catch (_error) {
+          image.setAttribute("data-nm-osm-error-at", String(Date.now()));
+        } finally {
+          image.removeAttribute("data-nm-osm-loading");
+        }
+      }
+    };
+    const count = Math.min(OSM_FETCH_CONCURRENCY, pending.length);
+    await Promise.all(Array.from({ length: count }, () => worker()));
+  };
+
+  const scheduleOsm = (card, delay = 0) => {
+    if (!card || card._nm037Beta2OsmTimer) return;
+    card._nm037Beta2OsmTimer = setTimeout(() => {
+      card._nm037Beta2OsmTimer = null;
+      hydrateOsmTiles(card).catch(() => {});
+    }, Math.max(0, delay));
+  };
+
+  const previousUnderlaySync = proto._syncOsmUnderlay036;
+  if (typeof previousUnderlaySync === "function") {
+    proto._syncOsmUnderlay036 = function stableOsmUnderlaySync(...args) {
+      const result = previousUnderlaySync.apply(this, args);
+      scheduleOsm(this, 0);
+      return result;
+    };
+  }
+
+  for (const method of ["_renderStatic", "_applyStaticLayers", "_applyViewBox"]) {
+    const previous = proto[method];
+    if (typeof previous !== "function") continue;
+    proto[method] = function stableOsmRefresh(...args) {
+      const result = previous.apply(this, args);
+      scheduleOsm(this, method === "_applyViewBox" ? 80 : 0);
+      return result;
+    };
+  }
+
+  console.info(
+    "[Navimower Map Card] 0.3.7-beta2 stable vendor/MQTT trail and authenticated OSM tiles enabled",
+  );
+})();

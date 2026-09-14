@@ -6,6 +6,18 @@ assert.match(pkg.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, "package versio
 assert.ok(!/\b(?:beta\d+-version|prepare-beta\d+)\b/.test(pkg.scripts.test || ""), "tests must not depend on beta-specific builders");
 assert.ok(!/npm run (?:build|prepare-release)/.test(pkg.scripts.test || ""), "npm test must be read-only");
 
+const prepareRelease = pkg.scripts["prepare-release"] || "";
+assert.equal(
+  prepareRelease,
+  "node scripts/sync-version.mjs && node scripts/build.mjs",
+  "release preparation must only synchronize the version and build the committed single-file runtime",
+);
+assert.doesNotMatch(
+  prepareRelease,
+  /(?:upgrade-|prepare-runtime-pipeline-beta|beta\d+)/,
+  "historical beta patch scripts must not be part of the active release pipeline",
+);
+
 const notes = `.github/release-notes/${pkg.version}.md`;
 assert.ok(existsSync(notes), `missing release notes: ${notes}`);
 const notesText = readFileSync(notes, "utf8");

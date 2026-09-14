@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+const outlines = await readFile(new URL("../docs/outline-controls.md", import.meta.url), "utf8");
 
 const marker = "0.3.5-beta12: installation visual defaults and uniform stroke widths";
 const markers = source.match(/0\.3\.5-beta12: installation visual defaults and uniform stroke widths/g) || [];
@@ -39,6 +40,7 @@ for (const name of widths) {
   if (!source.includes(`config.${name}`) && !source.includes(`_config?.[name]`)) {
     throw new Error(`Width ${name} is not connected to runtime rendering/cache`);
   }
+  if (!outlines.includes(`\`${name}\``)) throw new Error(`Outline documentation missing ${name}`);
 }
 
 if (!source.includes('mode: "slider"')) throw new Error("Expected slider-based width controls");
@@ -48,14 +50,13 @@ if (!source.includes('syncStrokeWidths')) throw new Error("Static SVG stroke-wid
 for (const needle of [
   "docs/images/navimower-map-card.png",
   "Current cycle",
-  "current_cycle_render.mowed_area.path_d",
-  "Navimower schedule",
-  "Home Assistant **Device** page",
-  "Custom area border width",
-  "Schedule button is orange",
+  "Navimower Schedule",
+  "Custom area",
+  "custom_area_stroke_width: 1.5",
+  "Map underlays",
 ]) {
   if (!readme.includes(needle)) throw new Error(`README missing current feature documentation: ${needle}`);
 }
 if (/doodle/i.test(readme)) throw new Error("README still contains obsolete experimental map terminology");
 
-console.log("Beta12 visual defaults, stroke widths and README regression checks passed");
+console.log("Visual defaults, stroke widths and current README regression checks passed");

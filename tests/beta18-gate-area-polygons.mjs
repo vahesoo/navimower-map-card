@@ -8,7 +8,6 @@ const notes = await readFile(new URL("../.github/release-notes/0.3.6-beta18.md",
 
 const version = String(packageJson.version || "").match(/^0\.3\.6-beta(\d+)$/);
 assert.ok(version && Number(version[1]) >= 18, "beta18 polygon regression must remain active in later 0.3.6 betas");
-assert.match(packageJson.scripts["prepare-release"], /upgrade-beta18-gate-area-polygons\.mjs/);
 assert.match(packageJson.scripts.test, /beta18-gate-area-polygons\.mjs/);
 assert.equal(dist, source, "dist must remain the deterministic single-file build");
 assert.match(notes, /Exact polygon gate areas/);

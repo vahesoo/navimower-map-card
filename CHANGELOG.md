@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.3.6-beta22 - 2026-09-14
+
+### Documentation and release-candidate cleanup
+
+- Reconcile README and supporting docs with the effective 0.3.6 runtime after reviewing the full development line from stable 0.3.5 through beta21.
+- Document opt-in Multi mower Site API behavior, member-scoped controls/Schedule/History, merged notification scoping and selective/prioritized site rendering.
+- Document the final map-underlay architecture: OpenStreetMap, Estonia Ortofoto/Hübriid and authenticated Google Satellite using Navimower-owned provider reference frames and provider-specific Multi mower origins.
+- Document presentation-only underlay calibration, currently ±10 m East/North and ±5° rotation.
+- Document phased base/current-cycle loading, Home Assistant-time-zone History semantics, bounded async/retry behavior and stale-response rejection.
+- Document exact polygon Gate areas and the final visual editor behavior: first three points free, later taps insert into the nearest existing edge without a distance limit, self-intersection blocks Save, and persistence goes through Navimower Gate-area actions.
+- Clarify that Mow uses internal map zone IDs and that first-generation H-series ordering remains mower-controlled.
+- Refresh the stale Session API and outline-control docs and add architecture, Multi mower/underlay and Gate-area editor guides.
+
+### Release pipeline
+
+- Keep the cumulative beta21 frontend behavior; beta22 intentionally makes no new mower/map UI runtime feature change beyond the synchronized version marker.
+- Stop replaying historical beta `upgrade-*` scripts during active release preparation. The cumulative `src/navimower-map-card.js` is now the release source of truth; preparation only synchronizes the version and builds the deterministic `dist` copy.
+- Keep historical beta patch scripts and regressions for development/history while making the current release contract forward-compatible.
+- Recommended companion integration: Navimower `0.4.4-beta36` or newer for the complete current 0.3.6 feature set.
+
+The individual `0.3.6-beta1` ... `0.3.6-beta21` GitHub release notes remain the detailed development history for each intermediate experiment/fix. This entry describes the effective beta22 release candidate rather than repeating superseded intermediate behavior.
+
+## 0.3.5 - 2026-08-27
+
+### Stable baseline
+
+- Promote the tested 0.3.5 beta series without changing beta14 runtime behavior.
+- Use Navimower's integration-owned Map API and backend-prepared current-cycle rendering.
+- Add persistent Custom Area rendering and Visual Editor controls.
+- Add the Navimower Schedule view with native Home Assistant time controls and Custom queue editing.
+- Add the configurable Settings dialog with Home Assistant entity controls.
+- Improve scheduler/device discovery, mobile dialog behavior, editor organization, visibility handling and update performance.
+- Keep current-cycle/history rendering separated so completed cycle data does not require browser-side swath reconstruction.
+- Designed for Navimower integration `0.4.3` or newer.
+
 ## 0.3.4-beta6 - 2026-08-25
 
 ### Added

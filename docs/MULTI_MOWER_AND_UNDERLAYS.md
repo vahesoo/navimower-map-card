@@ -143,14 +143,9 @@ Likewise, Multi site metadata becomes authoritative for site-underlay placement 
 | Capability | Navimower integration |
 | --- | --- |
 | Stable 0.3.5 Single mower feature baseline | 0.4.3+ |
-| Multi mower Site API | 0.4.4-beta4+ |
-| Google Satellite backend | 0.4.4-beta22+ with configured key |
-| Provider reference frames / provider site origins | 0.4.4-beta23+ |
-| Phased current-cycle API used by current performance path | 0.4.4-beta28+ |
-| Exact Gate-area polygons | 0.4.4-beta32+ |
-| Gate-area write services | 0.4.4-beta34+ |
+| Complete 0.3.6 Multi mower / underlay / phased Map API / Gate-area feature set | 0.4.4+ |
 
-For the complete current 0.3.6 prerelease feature set, use the latest Navimower 0.4.4 beta; `0.3.6-beta23` is the current Map Card prerelease.
+The recommended stable pair is Navimower `0.4.4` with Map Card `0.3.6`.
 
 ## Troubleshooting alignment
 

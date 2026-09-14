@@ -6196,7 +6196,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.6";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta1";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -13974,3 +13974,120 @@ console.info("[Navimower Map Card] 0.3.6-beta20 edge-aware gate-area editing ena
 
 // 0.3.6-beta21: unrestricted nearest-edge gate-area insertion.
 console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-area insertion enabled");
+
+// 0.3.7-beta1: vendor retained trail / MQTT tail source debug.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower037Beta1VendorTrailDebug) return;
+  Card.__navimower037Beta1VendorTrailDebug = true;
+
+  const proto = Card.prototype;
+  const MATCH_RADIUS_M = 0.5;
+
+  const originalActiveTrailSegments = proto._activeTrailSegments;
+  if (typeof originalActiveTrailSegments === "function") {
+    proto._activeTrailSegments = function vendorTrailDebugActiveSegments(...args) {
+      const debug = this?._mapPayload?.vendor_trail_debug;
+      if (!debug?.backend_tail_authoritative) {
+        return originalActiveTrailSegments.apply(this, args);
+      }
+
+      const backend = typeof this._normalizeTrailSegments === "function"
+        ? this._normalizeTrailSegments(this._mapPayload?.trail_segments, [])
+        : [];
+      if (!backend.length) return [];
+
+      const segments = backend.map((segment) => segment.map((point) => [...point]));
+      const anchor = segments.at(-1)?.at(-1) || debug?.anchor_xy || null;
+      const live = Array.isArray(this._trail) ? this._trail : [];
+      let anchorIndex = -1;
+      if (Array.isArray(anchor) && anchor.length >= 2) {
+        for (let index = live.length - 1; index >= 0; index -= 1) {
+          const point = live[index];
+          if (!Array.isArray(point) || point.length < 2) continue;
+          if (
+            Math.hypot(
+              Number(point[0]) - Number(anchor[0]),
+              Number(point[1]) - Number(anchor[1]),
+            ) <= MATCH_RADIUS_M
+          ) {
+            anchorIndex = index;
+            break;
+          }
+        }
+      }
+
+      if (anchorIndex >= 0) {
+        for (const point of live.slice(anchorIndex + 1)) {
+          let current = segments.at(-1);
+          if (!current) {
+            current = [];
+            segments.push(current);
+          }
+          const previous = current.at(-1);
+          if (
+            previous
+            && (point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2 > 25
+          ) {
+            current = [];
+            segments.push(current);
+          }
+          const last = current.at(-1);
+          if (!last || last[0] !== point[0] || last[1] !== point[1]) {
+            current.push([...point]);
+          }
+        }
+      }
+      return segments.filter((segment) => segment.length >= 2);
+    };
+  }
+
+  const syncDebugHost = (card) => {
+    const enabled = Boolean(card?._mapPayload?.vendor_trail_debug?.enabled);
+    card?.toggleAttribute?.("data-nm-vendor-trail-debug", enabled);
+    if (
+      !card?.shadowRoot
+      || card.shadowRoot.querySelector?.("style[data-nm-vendor-trail-debug-style]")
+    ) return;
+    const style = document.createElement("style");
+    style.dataset.nmVendorTrailDebugStyle = "1";
+    style.textContent = `
+      :host([data-nm-vendor-trail-debug]) .nm-multi-live-trail {
+        stroke: #ff0000 !important;
+      }
+    `;
+    card.shadowRoot.append(style);
+  };
+
+  const originalApplyMapPayload = proto._applyMapPayload;
+  if (typeof originalApplyMapPayload === "function") {
+    proto._applyMapPayload = function vendorTrailDebugApplyMapPayload(...args) {
+      const result = originalApplyMapPayload.apply(this, args);
+      syncDebugHost(this);
+      return result;
+    };
+  }
+
+  const originalEnsureDom = proto._ensureDom;
+  if (typeof originalEnsureDom === "function") {
+    proto._ensureDom = function vendorTrailDebugEnsureDom(...args) {
+      const result = originalEnsureDom.apply(this, args);
+      syncDebugHost(this);
+      return result;
+    };
+  }
+
+  const originalRenderTrail = proto._renderTrail;
+  if (typeof originalRenderTrail === "function") {
+    proto._renderTrail = function vendorTrailDebugRenderTrail(...args) {
+      const result = originalRenderTrail.apply(this, args);
+      if (this?._mapPayload?.vendor_trail_debug?.enabled) {
+        this._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
+          line.setAttribute("stroke", "#ff0000");
+          line.setAttribute("data-trail-source", "mqtt");
+        });
+      }
+      return result;
+    };
+  }
+})();

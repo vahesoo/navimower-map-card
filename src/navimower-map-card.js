@@ -6196,7 +6196,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta2";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta3";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -14411,5 +14411,533 @@ console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-a
 
   console.info(
     "[Navimower Map Card] 0.3.7-beta2 stable vendor/MQTT trail and authenticated OSM tiles enabled",
+  );
+})();
+
+// 0.3.7-beta3: selectable LiDAR terrain overlay.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower037Beta3LidarTerrain) return;
+  Card.__navimower037Beta3LidarTerrain = true;
+
+  const proto = Card.prototype;
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const DEFAULT_OPACITY = 0.65;
+  const RETRY_MS = 15000;
+
+  const finite = (value, fallback = null) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const clamp = (value, minimum, maximum) => Math.min(
+    maximum,
+    Math.max(minimum, finite(value, minimum)),
+  );
+  const apiPath = (path) => String(path || "")
+    .replace(/^\/api\//, "")
+    .replace(/^\/+/, "");
+
+  const overlayKind = (card) => {
+    const value = String(card?._config?.terrain_overlay || "none").toLowerCase();
+    return value === "terrain" || value === "elevation" ? value : "none";
+  };
+  const overlayOpacity = (card) => clamp(
+    card?._config?.terrain_overlay_opacity ?? DEFAULT_OPACITY,
+    0.1,
+    1,
+  );
+
+  const validExtent = (value) => {
+    if (!value || typeof value !== "object") return null;
+    const minX = finite(value.min_x);
+    const maxX = finite(value.max_x);
+    const minY = finite(value.min_y);
+    const maxY = finite(value.max_y);
+    if ([minX, maxX, minY, maxY].some((item) => item === null)) return null;
+    if (!(minX < maxX && minY < maxY)) return null;
+    return { minX, maxX, minY, maxY };
+  };
+
+  const validMetadata = (metadata, kind) => {
+    if (!metadata || metadata.available !== true) return null;
+    if (String(metadata.reference_frame || "") !== "mower_local_xy") return null;
+    const extent = validExtent(metadata.extent);
+    const resource = metadata?.[kind];
+    if (!extent || resource?.available !== true || !resource?.api_path) return null;
+    return {
+      extent,
+      version: String(metadata.version || "unknown"),
+      apiPath: String(resource.api_path),
+    };
+  };
+
+  const singleMetadata = (card) => card?._mapPayload?.frontend?.terrain_overlay || null;
+  const multiPayload = (card, entryId) => {
+    const states = card?._multi036Members;
+    if (!(states instanceof Map)) return null;
+    return states.get(String(entryId))?.map || null;
+  };
+  const memberMetadata = (card, member) => (
+    member?.frontend?.terrain_overlay
+      || multiPayload(card, member?.entry_id)?.frontend?.terrain_overlay
+      || null
+  );
+
+  const rawGet = async (card, path) => {
+    const hass = card?._hass;
+    if (!hass || !path) throw new Error("LiDAR terrain backend is unavailable");
+    const relative = apiPath(path);
+    if (typeof hass.callApiRaw === "function") {
+      return await hass.callApiRaw("GET", relative);
+    }
+    if (typeof hass.fetchWithAuth === "function") {
+      return await hass.fetchWithAuth("/api/" + relative);
+    }
+    throw new Error("Authenticated binary requests are unavailable");
+  };
+
+  const resourceMaps = (card) => {
+    if (!(card._nm037Beta3TerrainUrls instanceof Map)) {
+      card._nm037Beta3TerrainUrls = new Map();
+    }
+    if (!(card._nm037Beta3TerrainPending instanceof Map)) {
+      card._nm037Beta3TerrainPending = new Map();
+    }
+    if (!(card._nm037Beta3TerrainErrors instanceof Map)) {
+      card._nm037Beta3TerrainErrors = new Map();
+    }
+    return {
+      urls: card._nm037Beta3TerrainUrls,
+      pending: card._nm037Beta3TerrainPending,
+      errors: card._nm037Beta3TerrainErrors,
+    };
+  };
+
+  const resourceKey = (entryId, kind, metadata) => [
+    String(entryId || "single"),
+    kind,
+    String(metadata?.version || metadata?.apiPath || "unknown"),
+  ].join("|");
+
+  const revokeEntryKindOldVersions = (card, entryId, kind, keepKey) => {
+    const { urls } = resourceMaps(card);
+    const prefix = String(entryId || "single") + "|" + kind + "|";
+    for (const [key, url] of urls.entries()) {
+      if (!key.startsWith(prefix) || key === keepKey) continue;
+      try { URL.revokeObjectURL(url); } catch (_error) { /* no-op */ }
+      urls.delete(key);
+    }
+  };
+
+  const releaseAllResources = (card) => {
+    const urls = card?._nm037Beta3TerrainUrls;
+    if (urls instanceof Map) {
+      for (const url of urls.values()) {
+        try { URL.revokeObjectURL(url); } catch (_error) { /* no-op */ }
+      }
+      urls.clear();
+    }
+    card?._nm037Beta3TerrainPending?.clear?.();
+    card?._nm037Beta3TerrainErrors?.clear?.();
+  };
+
+  const requestResource = (card, entryId, kind, metadata) => {
+    const key = resourceKey(entryId, kind, metadata);
+    const { urls, pending, errors } = resourceMaps(card);
+    if (urls.has(key)) return urls.get(key);
+    if (pending.has(key)) return null;
+    const errorAt = Number(errors.get(key) || 0);
+    if (errorAt && Date.now() - errorAt < RETRY_MS) return null;
+
+    const task = (async () => {
+      try {
+        const response = await rawGet(card, metadata.apiPath);
+        if (!response?.ok) throw new Error("LiDAR terrain image request failed");
+        const blob = await response.blob();
+        if (!blob || !Number.isFinite(Number(blob.size)) || Number(blob.size) <= 0) {
+          throw new Error("LiDAR terrain image is empty");
+        }
+        const objectUrl = URL.createObjectURL(blob);
+        const currentKind = overlayKind(card);
+        if (currentKind === "none") {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        const previous = urls.get(key);
+        if (previous && previous !== objectUrl) {
+          try { URL.revokeObjectURL(previous); } catch (_error) { /* no-op */ }
+        }
+        urls.set(key, objectUrl);
+        errors.delete(key);
+        revokeEntryKindOldVersions(card, entryId, kind, key);
+        scheduleTerrain(card, 0);
+      } catch (_error) {
+        errors.set(key, Date.now());
+      } finally {
+        pending.delete(key);
+      }
+    })();
+    pending.set(key, task);
+    return null;
+  };
+
+  const placeSingleLayer = (card, group) => {
+    const parent = card?._baseEl;
+    if (!parent || !group) return;
+    const underlays = Array.from(parent.querySelectorAll?.(
+      ".nm-osm-underlay,.nm-estonia-wms-detail,.nm-estonia-wms-detail-pending",
+    ) || []).filter((node) => node?.parentNode === parent && node !== group);
+    const anchor = underlays.at(-1) || parent.firstElementChild;
+    if (anchor?.parentNode === parent) {
+      if (anchor.nextSibling !== group) anchor.after(group);
+    } else if (parent.firstChild !== group) {
+      parent.insertBefore(group, parent.firstChild || null);
+    }
+  };
+
+  const ensureSingleGroup = (card) => {
+    const parent = card?._baseEl;
+    if (!parent || typeof document === "undefined") return null;
+    let group = card._nm037Beta3SingleTerrainLayer;
+    if (!group || !group.isConnected || group.parentNode !== parent) {
+      group = document.createElementNS(SVG_NS, "g");
+      group.setAttribute("class", "nm-lidar-terrain-overlay");
+      group.setAttribute("pointer-events", "none");
+      card._nm037Beta3SingleTerrainLayer = group;
+    }
+    placeSingleLayer(card, group);
+    return group;
+  };
+
+  const singleTransform = (card, extent) => {
+    if (!card?._layout?.sx || !card?._layout?.sy || !extent) return null;
+    const topLeft = {
+      x: finite(card._layout.sx(extent.minX)),
+      y: finite(card._layout.sy(extent.maxY)),
+    };
+    const topRight = {
+      x: finite(card._layout.sx(extent.maxX)),
+      y: finite(card._layout.sy(extent.maxY)),
+    };
+    const bottomLeft = {
+      x: finite(card._layout.sx(extent.minX)),
+      y: finite(card._layout.sy(extent.minY)),
+    };
+    if ([topLeft.x, topLeft.y, topRight.x, topRight.y, bottomLeft.x, bottomLeft.y].some((value) => value === null)) {
+      return null;
+    }
+    return [
+      topRight.x - topLeft.x,
+      topRight.y - topLeft.y,
+      bottomLeft.x - topLeft.x,
+      bottomLeft.y - topLeft.y,
+      topLeft.x,
+      topLeft.y,
+    ];
+  };
+
+  const appendImage = (parent, url, transform, opacity, entryId, kind, version) => {
+    if (!parent || !url || !Array.isArray(transform) || transform.length < 6) return null;
+    const image = document.createElementNS(SVG_NS, "image");
+    image.setAttribute("href", url);
+    image.setAttribute("x", "0");
+    image.setAttribute("y", "0");
+    image.setAttribute("width", "1");
+    image.setAttribute("height", "1");
+    image.setAttribute("preserveAspectRatio", "none");
+    image.setAttribute("opacity", Number(opacity).toFixed(2));
+    image.setAttribute(
+      "transform",
+      "matrix(" + transform.map((value) => Number(value).toFixed(10)).join(" ") + ")",
+    );
+    image.setAttribute("data-nm-terrain-entry", String(entryId || "single"));
+    image.setAttribute("data-nm-terrain-kind", kind);
+    image.setAttribute("data-nm-terrain-version", String(version || "unknown"));
+    parent.appendChild(image);
+    return image;
+  };
+
+  const syncSingle = (card, kind) => {
+    const group = ensureSingleGroup(card);
+    if (!group) return false;
+    const metadata = validMetadata(singleMetadata(card), kind);
+    if (kind === "none" || !metadata) {
+      group.innerHTML = "";
+      group.style.display = "none";
+      return false;
+    }
+    const transform = singleTransform(card, metadata.extent);
+    if (!transform) {
+      group.innerHTML = "";
+      group.style.display = "none";
+      return false;
+    }
+    const entryId = card?._mapPayload?.frontend?.entry_id || "single";
+    const url = requestResource(card, entryId, kind, metadata);
+    if (!url) {
+      group.innerHTML = "";
+      group.style.display = "none";
+      return false;
+    }
+    group.innerHTML = "";
+    group.style.display = "";
+    appendImage(group, url, transform, overlayOpacity(card), entryId, kind, metadata.version);
+    placeSingleLayer(card, group);
+    return true;
+  };
+
+  const siteLayout = (site) => {
+    const box = site?.combined_svg_bounds;
+    if (!box || [box.min_x, box.min_y, box.max_x, box.max_y].some((value) => finite(value) === null)) {
+      return null;
+    }
+    const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
+    const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
+    const padding = 55;
+    const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
+    const drawnWidth = width * scale;
+    const drawnHeight = height * scale;
+    return {
+      scale,
+      offsetX: (1000 - drawnWidth) / 2 - Number(box.min_x) * scale,
+      offsetY: (1000 - drawnHeight) / 2 - Number(box.min_y) * scale,
+    };
+  };
+
+  const memberMatrix = (member, layout) => {
+    const source = Array.isArray(member?.svg_matrix) && member.svg_matrix.length >= 6
+      ? member.svg_matrix.slice(0, 6).map(Number)
+      : null;
+    if (!source || source.some((value) => !Number.isFinite(value)) || !layout) return null;
+    const scale = layout.scale;
+    return [
+      scale * source[0],
+      scale * source[1],
+      scale * source[2],
+      scale * source[3],
+      scale * source[4] + layout.offsetX,
+      scale * source[5] + layout.offsetY,
+    ];
+  };
+
+  const localRasterTransform = (extent) => [
+    extent.maxX - extent.minX,
+    0,
+    0,
+    extent.minY - extent.maxY,
+    extent.minX,
+    extent.maxY,
+  ];
+
+  const ensureMultiGroup = (card) => {
+    const svg = card?._svgEl;
+    const multi = card?._multi036Layer;
+    if (!svg || !multi || typeof document === "undefined") return null;
+    let group = card._nm037Beta3MultiTerrainLayer;
+    if (!group || !group.isConnected || group.parentNode !== svg) {
+      group = document.createElementNS(SVG_NS, "g");
+      group.setAttribute("class", "nm-lidar-terrain-multi-layer");
+      group.setAttribute("pointer-events", "none");
+      card._nm037Beta3MultiTerrainLayer = group;
+    }
+    if (group.nextSibling !== multi) svg.insertBefore(group, multi);
+    return group;
+  };
+
+  const syncMulti = (card, kind) => {
+    const group = ensureMultiGroup(card);
+    const multi = card?._multi036Layer;
+    if (!group || !multi || multi.style.display === "none" || kind === "none") {
+      if (group) {
+        group.innerHTML = "";
+        group.style.display = "none";
+      }
+      return false;
+    }
+    const site = card?._multi036Site;
+    const layout = siteLayout(site);
+    if (!layout) {
+      group.innerHTML = "";
+      group.style.display = "none";
+      return false;
+    }
+
+    group.innerHTML = "";
+    let rendered = 0;
+    for (const member of site?.members || []) {
+      const metadata = validMetadata(memberMetadata(card, member), kind);
+      const matrix = memberMatrix(member, layout);
+      if (!metadata || !matrix) continue;
+      const entryId = String(member?.entry_id || "");
+      const url = requestResource(card, entryId, kind, metadata);
+      if (!url) continue;
+      const memberGroup = document.createElementNS(SVG_NS, "g");
+      memberGroup.setAttribute("class", "nm-lidar-terrain-member");
+      memberGroup.setAttribute("data-entry-id", entryId);
+      memberGroup.setAttribute(
+        "transform",
+        "matrix(" + matrix.map((value) => Number(value).toFixed(10)).join(" ") + ")",
+      );
+      appendImage(
+        memberGroup,
+        url,
+        localRasterTransform(metadata.extent),
+        overlayOpacity(card),
+        entryId,
+        kind,
+        metadata.version,
+      );
+      group.appendChild(memberGroup);
+      rendered += 1;
+    }
+    group.style.display = rendered ? "" : "none";
+    if (group.nextSibling !== multi) card._svgEl?.insertBefore?.(group, multi);
+    return rendered > 0;
+  };
+
+  const ensureMultiObserver = (card) => {
+    const target = card?._multi036Layer;
+    if (!target || typeof MutationObserver === "undefined") return;
+    const previous = card._nm037Beta3MultiObserver;
+    if (previous?.target === target) return;
+    previous?.observer?.disconnect?.();
+    const observer = new MutationObserver(() => scheduleTerrain(card, 0));
+    observer.observe(target, { childList: true, subtree: true });
+    card._nm037Beta3MultiObserver = { observer, target };
+  };
+
+  const ensureBaseObserver = (card) => {
+    const target = card?._baseEl;
+    if (!target || typeof MutationObserver === "undefined") return;
+    const previous = card._nm037Beta3BaseObserver;
+    if (previous?.target === target) return;
+    previous?.observer?.disconnect?.();
+    const observer = new MutationObserver((mutations) => {
+      const externalChange = mutations.some((mutation) => Array.from(mutation.addedNodes || [])
+        .concat(Array.from(mutation.removedNodes || []))
+        .some((node) => node !== card._nm037Beta3SingleTerrainLayer));
+      if (externalChange) scheduleTerrain(card, 0);
+    });
+    observer.observe(target, { childList: true });
+    card._nm037Beta3BaseObserver = { observer, target };
+  };
+
+  const syncTerrain = (card) => {
+    if (!card || typeof document === "undefined") return;
+    ensureMultiObserver(card);
+    ensureBaseObserver(card);
+    const kind = overlayKind(card);
+    const multiVisible = Boolean(
+      card?._multi036Layer && card._multi036Layer.style.display !== "none",
+    );
+    if (multiVisible) {
+      const single = card._nm037Beta3SingleTerrainLayer;
+      if (single) single.style.display = "none";
+      syncMulti(card, kind);
+    } else {
+      const multi = card._nm037Beta3MultiTerrainLayer;
+      if (multi) multi.style.display = "none";
+      syncSingle(card, kind);
+    }
+  };
+
+  function scheduleTerrain(card, delay = 0) {
+    if (!card || card._nm037Beta3TerrainTimer) return;
+    card._nm037Beta3TerrainTimer = setTimeout(() => {
+      card._nm037Beta3TerrainTimer = null;
+      syncTerrain(card);
+    }, Math.max(0, delay));
+  }
+
+  const previousStub = Card.getStubConfig?.bind(Card);
+  Card.getStubConfig = (...args) => ({
+    ...(previousStub?.(...args) || {}),
+    terrain_overlay: "none",
+    terrain_overlay_opacity: DEFAULT_OPACITY,
+  });
+
+  const previousForm = Card.getConfigForm?.bind(Card);
+  Card.getConfigForm = (...args) => {
+    const form = previousForm?.(...args) || { schema: [] };
+    if (!Array.isArray(form.schema)) return form;
+    const fieldNames = new Set(["terrain_overlay", "terrain_overlay_opacity"]);
+    const strip = (items) => (Array.isArray(items) ? items : []).filter((item) => {
+      if (item?.name === "terrain_overlay_settings" || fieldNames.has(item?.name)) return false;
+      if (Array.isArray(item?.schema)) item.schema = strip(item.schema);
+      return true;
+    });
+    form.schema = strip(form.schema);
+    const settings = {
+      type: "expandable",
+      name: "terrain_overlay_settings",
+      title: "LiDAR overlay",
+      flatten: true,
+      schema: [{
+        type: "grid",
+        name: "terrain_overlay_grid",
+        flatten: true,
+        column_min_width: "220px",
+        schema: [
+          { name: "terrain_overlay", selector: { select: { options: [
+            { value: "none", label: "None" },
+            { value: "terrain", label: "LiDAR terrain" },
+            { value: "elevation", label: "LiDAR elevation" },
+          ] } } },
+          { name: "terrain_overlay_opacity", selector: { number: {
+            min: 0.1,
+            max: 1,
+            step: 0.05,
+            mode: "slider",
+          } } },
+        ],
+      }],
+    };
+    const underlayIndex = form.schema.findIndex((item) => item?.name === "map_underlay_settings");
+    if (underlayIndex >= 0) form.schema.splice(underlayIndex + 1, 0, settings);
+    else form.schema.push(settings);
+    const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+    form.computeLabel = (schema, data) => schema?.name === "terrain_overlay"
+      ? "LiDAR overlay"
+      : schema?.name === "terrain_overlay_opacity"
+        ? "LiDAR opacity"
+        : baseLabel?.(schema, data) || schema?.name || "";
+    return form;
+  };
+
+  for (const method of [
+    "setConfig",
+    "_ensureDom",
+    "_applyMapPayload",
+    "_renderStatic",
+    "_applyStaticLayers",
+    "_applyViewBox",
+    "_syncOsmUnderlay036",
+  ]) {
+    const previous = proto[method];
+    if (typeof previous !== "function") continue;
+    proto[method] = function lidarTerrainRefresh(...args) {
+      const result = previous.apply(this, args);
+      scheduleTerrain(this, method === "_applyViewBox" ? 60 : 0);
+      return result;
+    };
+  }
+
+  const previousDisconnected = proto.disconnectedCallback;
+  proto.disconnectedCallback = function lidarTerrainDisconnected(...args) {
+    clearTimeout(this._nm037Beta3TerrainTimer);
+    this._nm037Beta3TerrainTimer = null;
+    this._nm037Beta3MultiObserver?.observer?.disconnect?.();
+    this._nm037Beta3BaseObserver?.observer?.disconnect?.();
+    this._nm037Beta3MultiObserver = null;
+    this._nm037Beta3BaseObserver = null;
+    releaseAllResources(this);
+    if (typeof previousDisconnected === "function") {
+      return previousDisconnected.apply(this, args);
+    }
+    return undefined;
+  };
+
+  console.info(
+    "[Navimower Map Card] 0.3.7-beta3 selectable LiDAR terrain overlay enabled",
   );
 })();

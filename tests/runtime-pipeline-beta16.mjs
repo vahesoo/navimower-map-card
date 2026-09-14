@@ -6,8 +6,6 @@ const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
 const notes = readFileSync(".github/release-notes/0.3.6-beta16.md", "utf8");
 
-assert.match(pkg.version, /^0\.3\.6-beta\d+$/);
-assert.ok(Number(pkg.version.split("beta")[1]) >= 16);
 assert.equal(dist, source, "dist must remain the deterministic single-file build");
 assert.ok(notes.startsWith("title: Navimower Map Card 0.3.6-beta16\n"));
 

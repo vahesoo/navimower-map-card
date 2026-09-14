@@ -6,7 +6,7 @@ Navimower Map Card 0.3.6 treats the Navimower integration as the source of truth
 
 The normal Map API payload contains the mower's stable/local map geometry and current frontend metadata needed by the card, including zones and the geometry/metadata available for the selected mower.
 
-With Navimower 0.4.4-beta28 or newer the card can request a lightweight first response without waiting for the expensive current-cycle render:
+With Navimower 0.4.4 the card can request a lightweight first response without waiting for the expensive current-cycle render:
 
 ```text
 include_current_cycle=0
@@ -108,6 +108,6 @@ The base map and primary mower controls are intentionally useful before optional
 ## Compatibility
 
 - Navimower 0.4.3 provides the stable 0.3.5-era backend current-cycle/history baseline.
-- Navimower 0.4.4-beta28 or newer provides the phased `include_current_cycle=0` / `current_cycle_only=1` contract used by the current optimized path.
+- Navimower 0.4.4 provides the phased `include_current_cycle=0` / `current_cycle_only=1` contract used by the optimized 0.3.6 path.
 - Older supported combined Map API responses remain usable through the compatibility path.
-- The latest Navimower 0.4.4 beta is the recommended companion for Map Card `0.3.6-beta23`.
+- The recommended stable pair is Navimower `0.4.4` with Map Card `0.3.6`.

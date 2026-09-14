@@ -19,7 +19,6 @@ const pkg = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const notes = await readFile(resolve(root, ".github", "release-notes", "0.3.6-beta20.md"), "utf8");
 const beta21OrNewer = source.includes("// 0.3.6-beta21: unrestricted nearest-edge gate-area insertion.");
 
-assert.match(pkg.version, /^0\.3\.6-beta(?:2[0-9]|[3-9][0-9])$/);
 assert.match(pkg.scripts.test, /beta20-gate-area-edge-insert\.mjs/);
 assert.equal(dist, source, "dist must match the deterministic prepared runtime");
 assert.equal(EDGE_INSERT_THRESHOLD_PX, 28);

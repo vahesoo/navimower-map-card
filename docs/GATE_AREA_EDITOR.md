@@ -94,9 +94,9 @@ This separation is intentional: closing the Home Assistant dashboard cannot chan
 
 ## Compatibility
 
-- Exact polygon rendering requires Navimower `0.4.4-beta32` or newer for the full polygon payload; older integrations continue through rectangle fallback.
-- Visual Save/Delete requires Navimower `0.4.4-beta34` or newer because those versions provide the Gate-area write services.
-- `0.3.6-beta23` is recommended with the latest Navimower `0.4.4` beta for the current full prerelease pair.
+- Navimower `0.4.4` provides exact polygon payloads and the Gate-area Save/Delete services used by Map Card `0.3.6`.
+- Older integrations continue through rectangle fallback where supported, but cannot provide the full stable visual-editor contract.
+- The recommended stable pair is Navimower `0.4.4` with Map Card `0.3.6`.
 
 ## Final editor behavior vs development betas
 

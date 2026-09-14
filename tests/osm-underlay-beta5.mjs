@@ -19,7 +19,7 @@ assert.match(source, /map_underlay/);
 assert.match(source, /osm_underlay_opacity/);
 if (releaseMinor >= 7) {
   assert.doesNotMatch(source, /https:\/\/tile\.openstreetmap\.org\//);
-  assert.match(source, /data-nm-osm-path/);
+  assert.match(source, /osm_tile=1&z=/);
 } else {
   assert.match(source, /https:\/\/tile\.openstreetmap\.org\//);
 }

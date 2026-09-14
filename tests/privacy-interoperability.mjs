@@ -9,6 +9,7 @@ const activePublicDocs = [
   "docs/ARCHITECTURE.md",
   "docs/GATE_AREA_EDITOR.md",
   "docs/MULTI_MOWER_AND_UNDERLAYS.md",
+  "docs/PRIVACY_AND_FRONTEND_BOUNDARY.md",
   "docs/SESSION_API.md",
   "docs/outline-controls.md",
 ];
@@ -43,5 +44,9 @@ assert.ok(architecture.includes("account session tokens and map-provider secrets
 const multi = read("docs/MULTI_MOWER_AND_UNDERLAYS.md");
 assert.ok(multi.includes("API key and provider session token are backend-owned"));
 assert.ok(multi.includes("not exposed to card JavaScript"));
+
+const privacy = read("docs/PRIVACY_AND_FRONTEND_BOUNDARY.md");
+assert.ok(privacy.includes("does not require or store Navimow account credentials"));
+assert.ok(privacy.includes("sanitized Home Assistant Download diagnostics workflow"));
 
 console.log("frontend privacy/interoperability wording checks passed");

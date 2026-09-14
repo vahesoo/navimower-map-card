@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-assert.match(pkg.version, /^0\.3\.6(?:-beta\d+)?$/, "multi-mower regressions must stay valid across the 0.3.6 series");
+assert.match(pkg.version, /^0\.3\.(?:6|7)(?:-beta\d+)?$/, "multi-mower regressions must stay valid across the 0.3.6+ series");
 
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
@@ -52,4 +52,4 @@ assert.ok(
   "multi-mower Home button must keep using the mower dock service",
 );
 
-console.log("0.3.6 multi-mower runtime contract checks passed");
+console.log(`${pkg.version} multi-mower runtime contract checks passed`);

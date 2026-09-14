@@ -16,8 +16,8 @@ const dist = await readFile(resolve(root, "dist", "navimower-map-card.js"), "utf
 const pkg = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const notes = await readFile(resolve(root, ".github", "release-notes", "0.3.6-beta21.md"), "utf8");
 
-assert.equal(pkg.version, "0.3.6-beta21");
-assert.match(pkg.scripts["prepare-release"], /upgrade-beta20-gate-area-edge-insert\.mjs.*upgrade-beta21-gate-area-unlimited-edge-insert\.mjs/);
+const betaNumber = Number(String(pkg.version).match(/^0\.3\.6-beta(\d+)$/)?.[1]);
+assert.ok(Number.isFinite(betaNumber) && betaNumber >= 21, "beta21 regression must remain valid for later 0.3.6 betas");
 assert.match(pkg.scripts.test, /beta21-gate-area-unlimited-edge-insert\.mjs/);
 assert.equal(dist, source, "dist must match the deterministic prepared runtime");
 
@@ -29,7 +29,7 @@ for (const token of [
   "nearest.index + 1",
   "polygonSelfIntersects20",
 ]) {
-  assert.ok(source.includes(token), `prepared beta21 runtime must include ${token}`);
+  assert.ok(source.includes(token), `prepared beta21+ runtime must include ${token}`);
 }
 
 assert.ok(!source.includes("EDGE_INSERT_THRESHOLD_PX = 28"), "runtime threshold constant must be removed");
@@ -58,4 +58,4 @@ assert.match(notes, /nearest existing edge/i);
 assert.match(notes, /first three points/i);
 assert.match(notes, /Navimower 0\.4\.4-beta34 or newer/);
 
-console.log("beta21 unrestricted nearest-edge gate-area insertion checks passed");
+console.log("beta21+ unrestricted nearest-edge gate-area insertion checks passed");

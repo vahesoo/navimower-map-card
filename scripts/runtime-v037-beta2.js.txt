@@ -58,15 +58,25 @@
     if (!Array.isArray(anchor) || anchor.length < 2 || !Array.isArray(live)) {
       return segments;
     }
+
+    // Pick the spatially closest MQTT sample inside the tolerance. If the mower
+    // visited the same coordinate more than once, prefer the newest equally-good
+    // match. A simple backwards first-match can otherwise consume a point that is
+    // already *ahead* of the vendor anchor (for example 1 m ahead with a 1 m
+    // tolerance), making the live tail appear to stop behind the mower.
     let anchorIndex = -1;
+    let anchorDistance = Infinity;
     for (let index = live.length - 1; index >= 0; index -= 1) {
       const point = normalizePoint(live[index]);
       if (!point) continue;
-      if (Math.hypot(point[0] - anchor[0], point[1] - anchor[1]) <= MATCH_RADIUS_M) {
+      const distance = Math.hypot(point[0] - anchor[0], point[1] - anchor[1]);
+      if (distance > MATCH_RADIUS_M) continue;
+      if (distance < anchorDistance - 1e-9) {
         anchorIndex = index;
-        break;
+        anchorDistance = distance;
       }
     }
+
     // The integration has already trimmed the server-side MQTT trail to the
     // vendor endpoint. If the browser cannot match that anchor, never fall back
     // to the full local session because doing so would redraw the vendor-owned

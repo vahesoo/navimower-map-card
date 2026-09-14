@@ -40,7 +40,7 @@ Each mower gets its own control group. Mow, Resume, Pause, Dock and Schedule cal
 
 The global Single mower Schedule header control is not reused as an ambiguous site-wide action. In Multi mower mode Schedule access belongs to the member control group. If a mower has no Navimower-managed Schedule, it must not borrow another member's scheduler entities; native-schedule fallback also remains member-scoped.
 
-The browser does not execute either scheduler. It only presents integration/vendor state and sends Home Assistant actions.
+The browser does not execute either scheduler. It only presents integration/mower state and sends Home Assistant actions.
 
 ## Multi mower History and notifications
 
@@ -91,7 +91,7 @@ Hübriid composes the orthophoto presentation with the hybrid overlay and uses t
 
 ### Google Satellite
 
-Google Satellite uses Navimower's authenticated backend. A Google Map Tiles API key and vendor session token are not card configuration and are not exposed to JavaScript.
+Google Satellite uses Navimower's authenticated Home Assistant backend. A Google Map Tiles API key and provider session token are backend-owned: they are not card configuration and are not exposed to card JavaScript.
 
 The card receives backend-provided authenticated tile/viewport paths and availability metadata, requests protected responses through Home Assistant, and displays Google attribution/copyright returned by the backend.
 
@@ -150,7 +150,7 @@ Likewise, Multi site metadata becomes authoritative for site-underlay placement 
 | Exact Gate-area polygons | 0.4.4-beta32+ |
 | Gate-area write services | 0.4.4-beta34+ |
 
-For the complete current 0.3.6 prerelease feature set, use the latest Navimower 0.4.4 beta; `0.4.4-beta36` is the recommended companion for `0.3.6-beta22`.
+For the complete current 0.3.6 prerelease feature set, use the latest Navimower 0.4.4 beta; `0.3.6-beta23` is the current Map Card prerelease.
 
 ## Troubleshooting alignment
 

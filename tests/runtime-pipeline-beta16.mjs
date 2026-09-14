@@ -13,11 +13,13 @@ assert.ok(notes.startsWith("title: Navimower Map Card 0.3.6-beta16\n"));
 
 const prepareRelease = pkg.scripts["prepare-release"] || "";
 assert.ok(prepareRelease.includes("node scripts/sync-version.mjs"));
-assert.ok(prepareRelease.includes("node scripts/prepare-runtime-pipeline-beta16.mjs"));
 assert.ok(prepareRelease.includes("node scripts/build.mjs"));
+assert.doesNotMatch(
+  prepareRelease,
+  /(?:upgrade-|prepare-runtime-pipeline-beta)/,
+  "later releases must consume the cumulative runtime instead of replaying beta patch scripts",
+);
 assert.ok(pkg.scripts.test.includes("tests/runtime-pipeline-beta16.mjs"));
-assert.ok(!prepareRelease.includes("upgrade-multi-mower-beta4.mjs"));
-assert.ok(!prepareRelease.includes("upgrade-underlay-resilience-beta15.mjs"));
 
 for (const token of [
   "// 0.3.6-beta16: prioritized phased loading and selective multi-mower updates.",

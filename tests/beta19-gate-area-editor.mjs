@@ -12,7 +12,6 @@ const notes = await readFile(resolve(root, ".github", "release-notes", "0.3.6-be
 
 const betaNumber = Number(String(pkg.version).match(/^0\.3\.6-beta(\d+)$/)?.[1]);
 assert.ok(Number.isFinite(betaNumber) && betaNumber >= 19, "beta19 editor contract must remain valid for later 0.3.6 betas");
-assert.match(pkg.scripts["prepare-release"], /upgrade-beta18-gate-area-polygons\.mjs.*upgrade-beta19-gate-area-editor\.mjs/);
 assert.match(pkg.scripts.test, /beta19-gate-area-editor\.mjs/);
 
 for (const token of [

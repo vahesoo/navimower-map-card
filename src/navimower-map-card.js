@@ -6196,7 +6196,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta3";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta4";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -14939,5 +14939,90 @@ console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-a
 
   console.info(
     "[Navimower Map Card] 0.3.7-beta3 selectable LiDAR terrain overlay enabled",
+  );
+})();
+
+// 0.3.7-beta4: vendor backbone with short live MQTT tail.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower037Beta4ShortVendorTail) return;
+  Card.__navimower037Beta4ShortVendorTail = true;
+
+  const proto = Card.prototype;
+  const MAX_TAIL_DISTANCE_M = 8.0;
+
+  const finite = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const point = (raw) => {
+    if (!Array.isArray(raw) || raw.length < 2) return null;
+    const x = finite(raw[0]);
+    const y = finite(raw[1]);
+    return x === null || y === null ? null : [x, y];
+  };
+
+  const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+
+  const trimNewestSegment = (segments, limitM) => {
+    if (!Array.isArray(segments) || !segments.length) return [];
+    const source = Array.isArray(segments.at(-1))
+      ? segments.at(-1).map(point).filter(Boolean)
+      : [];
+    if (!source.length) return [];
+    if (source.length === 1) return [[source[0]]];
+
+    const kept = [source.at(-1)];
+    let used = 0;
+    for (let index = source.length - 2; index >= 0; index -= 1) {
+      const older = source[index];
+      const newer = kept[0];
+      const step = distance(older, newer);
+      if (step <= 0) {
+        kept.unshift(older);
+        continue;
+      }
+      const remaining = limitM - used;
+      if (remaining <= 0) break;
+      if (step <= remaining) {
+        kept.unshift(older);
+        used += step;
+        continue;
+      }
+      const ratio = remaining / step;
+      kept.unshift([
+        newer[0] + (older[0] - newer[0]) * ratio,
+        newer[1] + (older[1] - newer[1]) * ratio,
+      ]);
+      break;
+    }
+    return kept.length ? [kept] : [];
+  };
+
+  const previousActiveTrailSegments = proto._activeTrailSegments;
+  if (typeof previousActiveTrailSegments === "function") {
+    proto._activeTrailSegments = function shortVendorLiveTail(...args) {
+      const segments = previousActiveTrailSegments.apply(this, args);
+      const debug = this?._mapPayload?.vendor_trail_debug;
+      if (!debug?.backend_tail_authoritative) return segments;
+      return trimNewestSegment(segments, MAX_TAIL_DISTANCE_M);
+    };
+  }
+
+  const previousRenderTrail = proto._renderTrail;
+  if (typeof previousRenderTrail === "function") {
+    proto._renderTrail = function shortVendorLiveTailRender(...args) {
+      const result = previousRenderTrail.apply(this, args);
+      const authoritative = Boolean(this?._mapPayload?.vendor_trail_debug?.backend_tail_authoritative);
+      this._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
+        line.setAttribute("data-trail-source", authoritative ? "mqtt-live-tail-short" : "mqtt-session");
+      });
+      return result;
+    };
+  }
+
+  console.info(
+    "[Navimower Map Card] 0.3.7-beta4 vendor backbone / short MQTT live tail enabled",
   );
 })();

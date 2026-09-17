@@ -5,14 +5,22 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const sourcePath = resolve(root, "src", "navimower-map-card.js");
-const source = await readFile(sourcePath, "utf8");
+let source = await readFile(sourcePath, "utf8");
+
+const beta6Marker = "__navimower037Beta6FlickerFree";
+if (!source.includes(beta6Marker)) {
+  const patch = await readFile(resolve(root, "scripts", "runtime-v037-beta6.js.txt"), "utf8");
+  source = `${source.trimEnd()}\n\n${patch.trim()}\n`;
+  console.log("Applied beta6 flicker-free runtime patch");
+}
 
 const marker = /var NAVIMOWER_MAP_CARD_VERSION2 = "[^"]+";/;
 if (!marker.test(source)) {
   throw new Error("Runtime version marker NAVIMOWER_MAP_CARD_VERSION2 was not found");
 }
 const next = source.replace(marker, `var NAVIMOWER_MAP_CARD_VERSION2 = "${pkg.version}";`);
-if (next !== source) {
+const current = await readFile(sourcePath, "utf8");
+if (next !== current) {
   await writeFile(sourcePath, next, "utf8");
   console.log(`Synced runtime version to ${pkg.version}`);
 } else {

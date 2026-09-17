@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { prepareZoneArtifactsBeta8 } from "./prepare-zone-artifacts-beta8.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
@@ -20,6 +21,7 @@ if (!source.includes(beta7Marker)) {
   source = `${source.trimEnd()}\n\n${patch.trim()}\n`;
   console.log("Applied beta7 stable-cycle runtime patch");
 }
+source = await prepareZoneArtifactsBeta8(source, root);
 
 const marker = /var NAVIMOWER_MAP_CARD_VERSION2 = "[^"]+";/;
 if (!marker.test(source)) {

@@ -113,15 +113,11 @@ await flush();
 assert.equal(card._mapPayload.current_cycle_render.mowed_area.path_d, "NEW-CYCLE");
 assert.equal(requests.length, 4);
 
-assert.deepEqual(
-  Card.prototype._beta7CurrentCycleContract(),
-  {
-    stableCycleIdentity: true,
-    geometryRevisionIsFreshnessOnly: true,
-    sameCyclePrefixAccepted: true,
-    crossCycleRejected: true,
-    oneDeferredRequestAtATime: true,
-  },
-);
+const contract = Card.prototype._beta7CurrentCycleContract();
+assert.equal(contract.stableCycleIdentity, true);
+assert.equal(contract.geometryRevisionIsFreshnessOnly, true);
+assert.equal(contract.sameCyclePrefixAccepted, true);
+assert.equal(contract.crossCycleRejected, true);
+assert.equal(contract.oneDeferredRequestAtATime, true);
 
 console.log("beta7 stable-cycle deferred vendor render tests passed");

@@ -6213,7 +6213,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta5";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta6";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -14979,4 +14979,227 @@ console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-a
   console.info(
     "[Navimower Map Card] 0.3.7-beta3 selectable LiDAR terrain overlay enabled",
   );
+})();
+
+// 0.3.7-beta6: flicker-free incremental map refreshes.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower037Beta6FlickerFree) return;
+  Card.__navimower037Beta6FlickerFree = true;
+
+  const proto = Card.prototype;
+
+  const stableHash = (value) => {
+    const text = String(value ?? "");
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  };
+
+  const staticSignature = (payload) => {
+    const map = payload?.map || {};
+    return stableHash(JSON.stringify({
+      mapVersion: payload?.map_version ?? map.version ?? null,
+      zones: map.zones || [],
+      offLimits: map.off_limit_areas || [],
+      vfOff: map.vf_off_areas || [],
+      channels: map.channels || [],
+      station: map.station || null,
+      gateAreas: payload?.gate_areas || [],
+    }));
+  };
+
+  const cycleSignature = (payload) => {
+    const current = payload?.current_cycle_render;
+    if (current?.scope !== "current_cycle") return "";
+    const path = String(current?.mowed_area?.path_d || "");
+    return [current.revision ?? "", path.length, path.slice(-64)].join("|");
+  };
+
+  const trailSignature = (card) => {
+    try {
+      return (card?._activeTrailSegments?.() || []).map((segment) => {
+        const first = segment?.[0] || [];
+        const last = segment?.at?.(-1) || [];
+        return `${segment?.length || 0}:${first?.[0] ?? ""},${first?.[1] ?? ""}:${last?.[0] ?? ""},${last?.[1] ?? ""}`;
+      }).join(";");
+    } catch (_error) {
+      return "";
+    }
+  };
+
+  const zoneProgress = (card, zoneId) => {
+    const direct = card?._zoneDetails?.(zoneId)?.progress;
+    if (direct !== null && direct !== undefined) return direct;
+    const coverage = card?._mapPayload?.coverage?.zones;
+    const row = Array.isArray(coverage)
+      ? coverage.find((item) => Number(item?.id) === Number(zoneId))
+      : null;
+    if (row?.pct !== null && row?.pct !== undefined) return row.pct;
+    const states = card?._mapPayload?.zone_states;
+    const state = Array.isArray(states)
+      ? states.find((item) => Number(item?.id) === Number(zoneId))
+      : null;
+    return state?.coverage_pct ?? null;
+  };
+
+  const syncZoneLabels = (card) => {
+    const labels = card?._labelsEl?.querySelectorAll?.(".nm-zone-label[data-zone-id]") || [];
+    for (const label of labels) {
+      const zoneId = Number(label?.dataset?.zoneId ?? label?.getAttribute?.("data-zone-id"));
+      if (!Number.isFinite(zoneId)) continue;
+      const zone = card?._layout?.zones?.find?.((item) => Number(item?.id) === zoneId);
+      const name = zone?.name || `Zone ${zoneId}`;
+      const progress = zoneProgress(card, zoneId);
+      const value = progress === null || progress === undefined ? name : `${name} · ${progress}%`;
+      const text = label?.querySelector?.("text");
+      if (!text || text.textContent === value) continue;
+      text.textContent = value;
+
+      const metrics = card?._pillMetrics?.(value);
+      const rect = label?.querySelector?.("rect");
+      const cx = Number(label?.dataset?.markerCx ?? text.getAttribute?.("x"));
+      const cy = Number(label?.dataset?.markerCy);
+      if (!metrics || !rect || !Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+      rect.setAttribute("x", (cx - metrics.width / 2).toFixed(1));
+      rect.setAttribute("y", (cy - metrics.height / 2).toFixed(1));
+      rect.setAttribute("width", metrics.width.toFixed(1));
+      rect.setAttribute("height", metrics.height.toFixed(1));
+      rect.setAttribute("rx", (metrics.height / 2).toFixed(1));
+      text.setAttribute("y", (cy + metrics.fontSize * 0.34).toFixed(1));
+      text.setAttribute("font-size", metrics.fontSize.toFixed(1));
+    }
+  };
+
+  const previousStaticSignature = proto._payloadStaticSignature;
+  if (typeof previousStaticSignature === "function") {
+    proto._payloadStaticSignature = function beta6StaticSignature(payload = this._mapPayload) {
+      return staticSignature(payload);
+    };
+  }
+
+  const previousApplyStaticLayers = proto._applyStaticLayers;
+  if (typeof previousApplyStaticLayers === "function") {
+    proto._applyStaticLayers = function beta6ApplyStaticLayers(entry) {
+      const key = this._staticCacheKey?.() || "";
+      const mounted = Boolean(
+        this._baseEl?.childNodes?.length
+        || this._detailsEl?.childNodes?.length
+        || this._labelsEl?.childNodes?.length
+        || this._uiEl?.childNodes?.length
+      );
+      if (mounted && key && this._nm037Beta6StaticKey === key) {
+        syncZoneLabels(this);
+        return;
+      }
+      const result = previousApplyStaticLayers.call(this, entry);
+      this._nm037Beta6StaticKey = key;
+      syncZoneLabels(this);
+      return result;
+    };
+  }
+
+  const previousApplyMapPayload = proto._applyMapPayload;
+  if (typeof previousApplyMapPayload === "function") {
+    proto._applyMapPayload = function beta6ApplyMapPayload(...args) {
+      const previousHistoryKey = this._historyRenderKey;
+      const previousTrailKey = this._trailRenderKey;
+      const beforeCycle = cycleSignature(this._mapPayload);
+      const beforeTrail = trailSignature(this);
+      const result = previousApplyMapPayload.apply(this, args);
+      const afterCycle = cycleSignature(this._mapPayload);
+      const afterTrail = trailSignature(this);
+      if (beforeCycle && beforeCycle === afterCycle) this._historyRenderKey = previousHistoryKey;
+      if (beforeTrail === afterTrail) this._trailRenderKey = previousTrailKey;
+      syncZoneLabels(this);
+      return result;
+    };
+  }
+
+  const previousRenderHistory = proto._renderHistory;
+  if (typeof previousRenderHistory === "function") {
+    proto._renderHistory = function beta6RenderHistory(...args) {
+      const current = this?._mapPayload?.current_cycle_render;
+      const currentView = !this?._historySelectedSessionId
+        && (this?._historyDayOffset === null || this?._historyDayOffset === undefined)
+        && current?.scope === "current_cycle";
+      if (currentView && this?._historyEl && this?._layout) {
+        const path = String(current?.mowed_area?.path_d || "").trim();
+        const existing = this._historyEl.querySelector?.(
+          'g.nm-session-archive[data-session-id="current-cycle"] path.nm-session-area',
+        );
+        const structureKey = [
+          this._mapStaticSignature || "",
+          this?._config?.trail_color || "",
+          this?._config?.trail_opacity ?? "",
+          this?._layout?.scale ?? "",
+        ].join("|");
+        if (existing && this._nm037Beta6CycleStructureKey === structureKey && path) {
+          if (existing.getAttribute?.("d") !== path) existing.setAttribute?.("d", path);
+          const fill = String(this?._config?.trail_color || "#43a047");
+          if (existing.getAttribute?.("fill") !== fill) existing.setAttribute?.("fill", fill);
+          const group = existing.closest?.("g.nm-session-archive");
+          if (group) {
+            const opacity = Math.max(0, Math.min(1, Number(this?._config?.trail_opacity ?? 0.55))).toFixed(2);
+            if (group.getAttribute?.("opacity") !== opacity) group.setAttribute?.("opacity", opacity);
+          }
+          this._historyRenderKey = `beta6-current-cycle|${cycleSignature(this._mapPayload)}|${structureKey}`;
+          return;
+        }
+        if (existing && !path) {
+          existing.closest?.("g.nm-session-archive")?.remove?.();
+          this._historyRenderKey = `beta6-current-cycle-empty|${structureKey}`;
+          return;
+        }
+        const result = previousRenderHistory.apply(this, args);
+        this._nm037Beta6CycleStructureKey = structureKey;
+        return result;
+      }
+      this._nm037Beta6CycleStructureKey = null;
+      return previousRenderHistory.apply(this, args);
+    };
+  }
+
+  const previousRenderTrail = proto._renderTrail;
+  if (typeof previousRenderTrail === "function") {
+    proto._renderTrail = function beta6RenderTrail(...args) {
+      if (
+        this?._historySelectedSessionId
+        || (this?._historyDayOffset !== null && this?._historyDayOffset !== undefined)
+        || !this?._trailEl
+        || !this?._layout
+      ) {
+        return previousRenderTrail.apply(this, args);
+      }
+      const segments = this._activeTrailSegments?.() || [];
+      const lines = Array.from(this._trailEl.querySelectorAll?.("polyline.nm-session-path") || []);
+      if (segments.length && lines.length === segments.length) {
+        const width = typeof trailWidth034 === "function" ? trailWidth034(this) : 8;
+        const rawSessions = Array.isArray(this?._mapPayload?.sessions) ? this._mapPayload.sessions : [];
+        const activeSession = [...rawSessions].reverse().find(
+          (session) => Boolean(session?.active || (session?.ended_at === null && session?.started_at)),
+        );
+        const sessionId = activeSession?.id ?? activeSession?.session_id ?? this._trailSession ?? 0;
+        segments.forEach((segment, index) => {
+          const line = lines[index];
+          const points = this._pointString(segment);
+          if (line.getAttribute?.("points") !== points) line.setAttribute?.("points", points);
+          const color = String(this?._config?.trail_color || "#43a047");
+          if (line.getAttribute?.("stroke") !== color) line.setAttribute?.("stroke", color);
+          const widthText = Number(width).toFixed(1);
+          if (line.getAttribute?.("stroke-width") !== widthText) line.setAttribute?.("stroke-width", widthText);
+          line.setAttribute?.("data-session-id", String(sessionId));
+          line.setAttribute?.("data-trail-source", "mqtt-tail");
+        });
+        this._trailRenderKey = `beta6-live|${trailSignature(this)}|${this?._config?.trail_color || ""}|${width}`;
+        return;
+      }
+      return previousRenderTrail.apply(this, args);
+    };
+  }
+
+  console.info("[Navimower Map Card] 0.3.7-beta6 flicker-free incremental refresh enabled");
 })();

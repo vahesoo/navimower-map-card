@@ -14,6 +14,13 @@ if (!source.includes(beta6Marker)) {
   console.log("Applied beta6 flicker-free runtime patch");
 }
 
+const beta7Marker = "__navimower037Beta7StableCycle";
+if (!source.includes(beta7Marker)) {
+  const patch = await readFile(resolve(root, "scripts", "runtime-v037-beta7.js.txt"), "utf8");
+  source = `${source.trimEnd()}\n\n${patch.trim()}\n`;
+  console.log("Applied beta7 stable-cycle runtime patch");
+}
+
 const marker = /var NAVIMOWER_MAP_CARD_VERSION2 = "[^"]+";/;
 if (!marker.test(source)) {
   throw new Error("Runtime version marker NAVIMOWER_MAP_CARD_VERSION2 was not found");

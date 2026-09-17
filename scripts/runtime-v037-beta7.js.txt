@@ -1,0 +1,239 @@
+// 0.3.7-beta7: accept deferred vendor renders by stable cycle identity.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower037Beta7StableCycle) return;
+  Card.__navimower037Beta7StableCycle = true;
+
+  const proto = Card.prototype;
+  const RETRY_MS = 10_000;
+
+  const baseMapPath = (card) => {
+    const raw = card?._v030BaseApiPath || card?._apiPath?.();
+    return String(raw || "").split(/[?#]/, 1)[0];
+  };
+
+  const cyclePath = (card) => {
+    const base = baseMapPath(card);
+    return base ? base + "?current_cycle_only=1" : null;
+  };
+
+  const vendorRevision = (payload) => {
+    const debug = payload?.vendor_trail_debug;
+    const direct = Number(debug?.revision);
+    if (Number.isFinite(direct)) return String(direct);
+    const first = String(debug?.current_cycle_key ?? "").split(":", 1)[0];
+    return /^\d+$/.test(first) ? first : "";
+  };
+
+  const stableCycleInfo = (payload) => {
+    const debug = payload?.vendor_trail_debug;
+    const cycleIds = debug?.cycle_ids;
+    const owned = Array.isArray(debug?.owned_zone_ids) ? debug.owned_zone_ids : [];
+    if (!cycleIds || typeof cycleIds !== "object" || !owned.length) return null;
+
+    const pairs = [];
+    for (const rawId of owned) {
+      const zoneId = Number(rawId);
+      if (!Number.isFinite(zoneId)) continue;
+      const cycleId = cycleIds[String(zoneId)] ?? cycleIds[zoneId];
+      if (cycleId === null || cycleId === undefined || cycleId === "") return null;
+      pairs.push([String(zoneId), String(cycleId)]);
+    }
+    if (!pairs.length) return null;
+    pairs.sort((left, right) => Number(left[0]) - Number(right[0]) || left[1].localeCompare(right[1]));
+    return {
+      signature: JSON.stringify(pairs),
+      cycles: new Map(pairs),
+      sourceKey: debug?.current_cycle_key ?? null,
+      vendorRevision: vendorRevision(payload),
+    };
+  };
+
+  const renderMatchesStableCycle = (render, payload) => {
+    if (render?.scope !== "current_cycle") return false;
+    const info = stableCycleInfo(payload);
+    if (!info) return false;
+    const rows = Array.isArray(render?.zones) ? render.zones : [];
+    let matched = 0;
+    for (const row of rows) {
+      const zoneId = Number(row?.zone_id);
+      const cycleId = row?.cycle_id;
+      if (!Number.isFinite(zoneId) || cycleId === null || cycleId === undefined || cycleId === "") continue;
+      const expected = info.cycles.get(String(zoneId));
+      if (!expected || expected !== String(cycleId)) return false;
+      matched += 1;
+    }
+    return matched > 0;
+  };
+
+  const scheduleIdle = (callback) => {
+    if (typeof globalThis.requestIdleCallback === "function") {
+      return globalThis.requestIdleCallback(callback, { timeout: 800 });
+    }
+    return globalThis.setTimeout(callback, 0);
+  };
+
+  const clearWrongCycleRender = (card) => {
+    if (!card?._mapPayload?.current_cycle_render) return;
+    const next = { ...card._mapPayload };
+    delete next.current_cycle_render;
+    card._mapPayload = next;
+    card._retainedCycleSourceKey = null;
+    card._historyRenderKey = null;
+    card._trailRenderKey = null;
+    card._nm037Beta6CycleStructureKey = null;
+    card._nm037Beta7AcceptedCycleSignature = null;
+    card._nm037Beta7AcceptedVendorRevision = null;
+    card._nm037Beta7RenderCycleSignature = null;
+    if (card._historyEl) card._historyEl.innerHTML = "";
+    card._queueRender?.({ history: true, trail: true, sessions: true });
+  };
+
+  const queueStableCycle = (card) => {
+    if (!card?._hass?.callApi) return;
+    const info = stableCycleInfo(card?._mapPayload);
+    if (!info) return; // Older integrations keep the beta16 strict compatibility path.
+
+    const render = card?._mapPayload?.current_cycle_render;
+    const renderMatches = renderMatchesStableCycle(render, card._mapPayload);
+    if (
+      renderMatches
+      && card._nm037Beta7AcceptedCycleSignature === info.signature
+      && card._nm037Beta7AcceptedVendorRevision === info.vendorRevision
+    ) return;
+
+    const path = cyclePath(card);
+    if (!path) return;
+    const now = Date.now();
+    if (card._nm037Beta7RetryAt && now < card._nm037Beta7RetryAt) return;
+    if (card._nm037Beta7Loading) {
+      card._nm037Beta7Pending = true;
+      return;
+    }
+
+    const generation = Number(card._beta16CycleGeneration || 0);
+    const requestCycleSignature = info.signature;
+    const requestVendorRevision = info.vendorRevision;
+    const requestSequence = Number(card._nm037Beta7RequestSequence || 0) + 1;
+    card._nm037Beta7RequestSequence = requestSequence;
+    const requestKey = [path, generation, requestCycleSignature, requestVendorRevision, requestSequence].join("|");
+    card._nm037Beta7Loading = requestKey;
+    card._nm037Beta7Pending = false;
+
+    scheduleIdle(async () => {
+      try {
+        const payload = await card._hass.callApi(
+          "GET",
+          String(path).replace(/^\/api\//, "").replace(/^\/+/, ""),
+        );
+        if (
+          Number(card._beta16CycleGeneration || 0) !== generation
+          || cyclePath(card) !== path
+        ) return;
+
+        const currentInfo = stableCycleInfo(card?._mapPayload);
+        if (!currentInfo || currentInfo.signature !== requestCycleSignature) return;
+        const nextRender = payload?.current_cycle_render;
+        if (!renderMatchesStableCycle(nextRender, card._mapPayload)) return;
+        if (requestSequence < Number(card._nm037Beta7AcceptedRequestSequence || 0)) return;
+
+        card._mapPayload = { ...card._mapPayload, current_cycle_render: nextRender };
+        card._retainedCycleSourceKey = card?._mapPayload?.vendor_trail_debug?.current_cycle_key ?? null;
+        card._nm037Beta7AcceptedRequestSequence = requestSequence;
+        card._nm037Beta7AcceptedCycleSignature = currentInfo.signature;
+        card._nm037Beta7AcceptedVendorRevision = requestVendorRevision;
+        card._nm037Beta7RenderCycleSignature = currentInfo.signature;
+        card._historyRenderKey = null;
+        card._trailRenderKey = null;
+        card._queueRender?.({ history: true, trail: true, sessions: true });
+        card._nm037Beta7RetryAt = 0;
+      } catch (error) {
+        if (Number(card._beta16CycleGeneration || 0) === generation) {
+          card._nm037Beta7RetryAt = Date.now() + RETRY_MS;
+          console.debug("[Navimower Map Card] Stable-cycle current-cycle request unavailable", error);
+        }
+      } finally {
+        if (card._nm037Beta7Loading === requestKey) card._nm037Beta7Loading = null;
+        const pending = Boolean(card._nm037Beta7Pending);
+        card._nm037Beta7Pending = false;
+        if (Number(card._beta16CycleGeneration || 0) === generation) {
+          const latest = stableCycleInfo(card?._mapPayload);
+          const needsCatchup = latest && (
+            latest.signature !== card._nm037Beta7AcceptedCycleSignature
+            || latest.vendorRevision !== card._nm037Beta7AcceptedVendorRevision
+            || !renderMatchesStableCycle(card?._mapPayload?.current_cycle_render, card._mapPayload)
+          );
+          if (pending || needsCatchup) queueStableCycle(card);
+        }
+      }
+    });
+  };
+
+  const previousApplyMapPayload = proto._applyMapPayload;
+  if (typeof previousApplyMapPayload === "function") {
+    proto._applyMapPayload = function beta7ApplyMapPayload(...args) {
+      const incoming = args[0];
+      const incomingInfo = stableCycleInfo(incoming);
+      const retained = this?._mapPayload?.current_cycle_render;
+
+      // Suppress beta16's geometry-revision-sensitive deferred request when the
+      // already mounted render is still valid for the incoming stable cycles.
+      // beta7 performs the freshness request independently below.
+      if (incomingInfo && retained && renderMatchesStableCycle(retained, incoming)) {
+        const sourceKey = incoming?.vendor_trail_debug?.current_cycle_key;
+        if (sourceKey !== null && sourceKey !== undefined) this._retainedCycleSourceKey = sourceKey;
+      }
+
+      const result = previousApplyMapPayload.apply(this, args);
+      const currentInfo = stableCycleInfo(this?._mapPayload);
+      const currentRender = this?._mapPayload?.current_cycle_render;
+      if (currentInfo && currentRender) {
+        if (!renderMatchesStableCycle(currentRender, this._mapPayload)) {
+          clearWrongCycleRender(this);
+        } else {
+          this._nm037Beta7RenderCycleSignature = currentInfo.signature;
+        }
+      }
+      queueStableCycle(this);
+      return result;
+    };
+  }
+
+  const previousSetConfig = proto.setConfig;
+  if (typeof previousSetConfig === "function") {
+    proto.setConfig = function beta7SetConfig(config) {
+      const previous = this?._config?.entity || this?._config?.mower_entity || null;
+      const result = previousSetConfig.call(this, config);
+      const current = this?._config?.entity || this?._config?.mower_entity || null;
+      if (previous !== current) {
+        this._nm037Beta7Loading = null;
+        this._nm037Beta7Pending = false;
+        this._nm037Beta7RetryAt = 0;
+        this._nm037Beta7AcceptedRequestSequence = 0;
+        this._nm037Beta7AcceptedCycleSignature = null;
+        this._nm037Beta7AcceptedVendorRevision = null;
+        this._nm037Beta7RenderCycleSignature = null;
+      }
+      queueStableCycle(this);
+      return result;
+    };
+  }
+
+  const previousDisconnected = proto.disconnectedCallback;
+  proto.disconnectedCallback = function beta7Disconnected(...args) {
+    this._nm037Beta7Loading = null;
+    this._nm037Beta7Pending = false;
+    this._nm037Beta7RetryAt = 0;
+    return previousDisconnected?.apply(this, args);
+  };
+
+  proto._beta7CurrentCycleContract = () => ({
+    stableCycleIdentity: true,
+    geometryRevisionIsFreshnessOnly: true,
+    sameCyclePrefixAccepted: true,
+    crossCycleRejected: true,
+    oneDeferredRequestAtATime: true,
+  });
+
+  console.info("[Navimower Map Card] 0.3.7-beta7 stable-cycle deferred vendor rendering enabled");
+})();

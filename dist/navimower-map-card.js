@@ -904,6 +904,9 @@ var NavimowerMapCard = class extends HTMLElement {
       const button = event.target?.closest?.(".nm-history-choice[data-history-offset]");
       if (!button) return;
       const value = button.dataset.historyOffset;
+      this._historySelectedSessionId = null;
+      this._multi036SelectedSessionKey = null;
+      if (this._highlightEl) this._highlightEl.innerHTML = "";
       this._historyDayOffset = value === "today" ? null : Number(value);
       if (this._historyDayOffset === null) this._historyMenuOpen = false;
       this._renderAllDynamic();
@@ -1151,6 +1154,7 @@ var NavimowerMapCard = class extends HTMLElement {
       attrs.trail_session,
       attrs.active_session_id,
       attrs.zone_states_revision,
+      attrs.vendor_trail_revision,
       mapState?.state
     ].join("|");
     if (key === this._mapKey) return;
@@ -1213,6 +1217,13 @@ var NavimowerMapCard = class extends HTMLElement {
       this._lastPointKey = null;
     }
     this._trimTrail();
+    const previousCycle = this._mapPayload?.current_cycle_render;
+    const cycleEntry = String(attrs?.entry_id || this._apiPath?.() || "");
+    if (nextPayload.vendor_trail_debug?.store_version === 1 && !nextPayload.current_cycle_render
+        && previousCycle && this._retainedCycleEntry === cycleEntry) {
+      nextPayload.current_cycle_render = previousCycle;
+    }
+    this._retainedCycleEntry = cycleEntry;
     this._mapPayload = nextPayload;
     this._mapKey = key;
     this._mapStaticSignature = this._payloadStaticSignature(nextPayload);
@@ -1697,17 +1708,13 @@ var NavimowerMapCard = class extends HTMLElement {
     const pulseWidth = Math.min(width * 2.35, 48);
     const color = escapeHtml(this._config.trail_color);
     const paths = session.segments.filter((segment) => segment.length >= 2).map(
-      (segment) => `<polyline points="${this._pointString(segment)}" fill="none" stroke="${color}" stroke-linecap="round" stroke-linejoin="round"/>`
+      (segment) => `<polyline points="${this._pointString(segment)}" fill="none" stroke="${color}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`
     ).join("");
     if (!paths) return;
-    this._highlightEl.innerHTML = `<g class="nm-session-highlight" style="--nm-highlight-color:${color};--nm-highlight-width:${width.toFixed(1)}px;--nm-highlight-pulse-width:${pulseWidth.toFixed(1)}px">${paths}</g>`;
+    this._highlightEl.innerHTML = `<g class="nm-session-selected" style="--nm-highlight-color:${color};--nm-highlight-width:${width.toFixed(1)}px;--nm-highlight-pulse-width:${pulseWidth.toFixed(1)}px">${paths}</g>`;
     const button = [...this._sessionsEl?.querySelectorAll(".nm-session[data-session-id]") || []].find((item) => String(item.dataset.sessionId) === String(sessionId2));
     button?.classList.add("nm-session-pulsing");
-    this._pulseTimer = setTimeout(() => {
-      this._highlightEl.innerHTML = "";
-      button?.classList.remove("nm-session-pulsing");
-      this._pulseTimer = null;
-    }, 1820);
+    this._pulseTimer = null;
   }
   _liveSnapshot() {
     const mapState = this._state(this._resolved.map_entity);
@@ -1810,7 +1817,7 @@ var NavimowerMapCard = class extends HTMLElement {
     });
   }
   _renderTrail() {
-    if (this._historyDayOffset !== null) {
+    if (this._historySelectedSessionId || this._historyDayOffset !== null) {
       this._trailRenderKey = "history";
       if (this._trailEl) this._trailEl.innerHTML = "";
       return;
@@ -3494,6 +3501,7 @@ function patchCard() {
       attrs.trail_session,
       attrs.active_session_id,
       attrs.zone_states_revision,
+      attrs.vendor_trail_revision,
       mapState?.state
     ].join("|");
     if (key === this._mapKey) return;
@@ -3653,29 +3661,38 @@ function patchCard() {
       session.id
     )).join("");
   };
+  proto._renderSelectedSessionArchive = function renderSelectedSessionArchive() {
+    const session = this._sessionRecords({ applyLimit: false }).find((item) => String(item.id) === this._historySelectedSessionId);
+    if (!session || session.active || !this._highlightEl || !this._layout) return;
+    const render = renderEntry(this, session);
+    if (render) this._highlightEl.innerHTML = archiveSvg(render, this._layout, this._config.trail_color, 1, session.id);
+  };
   const originalPulseSessionPath = proto._pulseSessionPath;
-  proto._pulseSessionPath = function patchedPulseSessionPath(requestedId) {
+  proto._pulseSessionPath = async function patchedPulseSessionPath(requestedId) {
+    this._historySelectedSessionId = String(requestedId);
+    if (this._highlightEl) this._highlightEl.innerHTML = "";
+    this._historyRenderKey = null;
+    this._renderHistory();
+    this._renderTrail();
     const session = this._sessionRecords({ applyLimit: false }).find((item) => String(item.id) === String(requestedId));
     if (!session || session.active) return originalPulseSessionPath.call(this, requestedId);
-    const render = renderEntry(this, session);
+    let render = renderEntry(this, session);
     if (!render) {
-      void loadSessionRender(this, session, originalApiPath);
-      return;
+      await loadSessionRender(this, session, originalApiPath);
+      if (this._historySelectedSessionId !== String(requestedId)) return;
+      render = renderEntry(this, session);
+      if (!render) return;
     }
     if (!this._highlightEl || !this._layout) return;
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
     this._highlightEl.innerHTML = "";
     this._sessionsEl?.querySelectorAll(".nm-session-pulsing").forEach((item) => item.classList.remove("nm-session-pulsing"));
     const color = escapeHtml2(this._config.trail_color);
-    const svg = archiveSvg(render, this._layout, this._config.trail_color, 1, session.id).replace('class="nm-session-archive"', `class="nm-session-archive nm-session-archive-highlight" style="--nm-highlight-color:${color}"`);
+    const svg = archiveSvg(render, this._layout, this._config.trail_color, 1, session.id);
     this._highlightEl.innerHTML = svg;
     const button = [...this._sessionsEl?.querySelectorAll(".nm-session[data-session-id]") || []].find((item) => String(item.dataset.sessionId) === String(requestedId));
     button?.classList.add("nm-session-pulsing");
-    this._pulseTimer = setTimeout(() => {
-      this._highlightEl.innerHTML = "";
-      button?.classList.remove("nm-session-pulsing");
-      this._pulseTimer = null;
-    }, 1820);
+    this._pulseTimer = null;
   };
   proto._renderHistoryBar = function patchedHistoryBar() {
     if (!this._historyBarEl) return;
@@ -6196,7 +6213,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta4";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta5";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -8853,6 +8870,11 @@ if (globalThis.customElements) patchCustomAreas0342();
   const previousRenderHistory = proto._renderHistory;
   proto._renderHistory = function backendCurrentCycleHistory() {
     const current = this._mapPayload?.current_cycle_render;
+    if (this._historySelectedSessionId) {
+      if (this._historyEl) this._historyEl.innerHTML = "";
+      this._renderSelectedSessionArchive?.();
+      return;
+    }
     if (this._historyDayOffset !== null || current?.scope !== "current_cycle") {
       return previousRenderHistory?.call(this);
     }
@@ -10061,7 +10083,8 @@ if (globalThis.customElements) patchCustomAreas0342();
 
   async function refreshMemberCurrentCycle036(card, member, generation) {
     const state = memberState036(card, member.entry_id);
-    if (state.map?.current_cycle_render || state.currentCycleLoading) return;
+    const sourceKey = state.map?.vendor_trail_debug?.current_cycle_key;
+    if ((state.map?.current_cycle_render && (sourceKey == null || state.currentCycleSourceKey === sourceKey)) || state.currentCycleLoading) return;
     if (state.currentCycleRetryAt && Date.now() < state.currentCycleRetryAt) return;
     const path = currentCyclePath036(memberMapPath036(member));
     if (!path || !card?._hass?.callApi) return;
@@ -10070,8 +10093,10 @@ if (globalThis.customElements) patchCustomAreas0342();
       const payload = await callApi036(card, path);
       if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return;
       const render = payload?.current_cycle_render;
+      if (state.map?.vendor_trail_debug?.current_cycle_key !== sourceKey) return;
       if (render?.scope === "current_cycle" && state.map) {
         state.map = { ...state.map, current_cycle_render: render };
+        state.currentCycleSourceKey = sourceKey;
         state.currentCycleRetryAt = 0;
         renderMultiMap036(card, true);
       }
@@ -10130,7 +10155,7 @@ if (globalThis.customElements) patchCustomAreas0342();
       state.mapAt = Date.now();
       state.error = null;
       renderMultiMap036(card);
-      if (!state.map?.current_cycle_render) void refreshMemberCurrentCycle036(card, member, generation);
+      void refreshMemberCurrentCycle036(card, member, generation);
       return;
     }
     const interval = memberIsActive036(card, member) ? MAP_REFRESH_ACTIVE_MS : MAP_REFRESH_IDLE_MS;
@@ -10140,11 +10165,17 @@ if (globalThis.customElements) patchCustomAreas0342();
     try {
       const payload = await callApi036(card, addLightweightQuery036(path));
       if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return;
-      if (payload) state.map = payload;
+      if (payload) {
+        const current = state.map?.current_cycle_render;
+        state.map = payload;
+        if (current && !payload.current_cycle_render && payload.vendor_trail_debug?.store_version === 1) {
+          state.map = { ...payload, current_cycle_render: current };
+        }
+      }
       state.mapAt = Date.now();
       state.error = null;
       renderMultiMap036(card);
-      if (!state.map?.current_cycle_render) void refreshMemberCurrentCycle036(card, member, generation);
+      void refreshMemberCurrentCycle036(card, member, generation);
     } catch (error) {
       if (generationMatches036(card, generation)) state.error = error;
     }
@@ -10380,7 +10411,7 @@ if (globalThis.customElements) patchCustomAreas0342();
   const liveTrailSegments036 = (card, member, payload) => {
     if (String(member?.entry_id) === String(anchorEntry036(card)) && typeof card?._activeTrailSegments === "function") {
       const local = normalizeLiveTrailSegments036(card._activeTrailSegments());
-      if (local.length) return local;
+      if (local.length || payload?.vendor_trail_debug?.backend_tail_authoritative) return local;
     }
     return normalizeLiveTrailSegments036(payload?.trail_segments);
   };
@@ -10612,7 +10643,7 @@ if (globalThis.customElements) patchCustomAreas0342();
         if (c.show_zone_labels !== false) zoneLabelItems.push(zoneLabelItem036(card, member, matrix, zone, coverageMap, payload));
       }
 
-      if (card._historyDayOffset === null || card._historyDayOffset === undefined) {
+      if (!card._multi036SelectedSessionKey && (card._historyDayOffset === null || card._historyDayOffset === undefined)) {
         const current = payload?.current_cycle_render;
         if (current?.scope === "current_cycle") {
           local.push(renderArchive036({ mowed_area: current.mowed_area, travel: { path_d: "" }, route: { path_d: "" } }, trailColor, trailOpacity, "nm-multi-current-cycle"));
@@ -10622,7 +10653,7 @@ if (globalThis.customElements) patchCustomAreas0342();
           const points = rawPoints036(segment);
           if (points) local.push("<polyline class=\"nm-multi-live-trail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
         }
-      } else {
+      } else if (!card._multi036SelectedSessionKey) {
         const sessions = sessionsForDay036(card, memberState.sessions, card._historyDayOffset);
         for (const session of sessions) {
           const cacheKey = String(member.entry_id) + ":" + sessionId036(session);
@@ -10920,20 +10951,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     renderMultiSessions036(card);
     renderMultiMap036(card, true);
     if (card._multi036PulseTimer) clearTimeout(card._multi036PulseTimer);
-    card._multi036PulseTimer = setTimeout(() => {
-      if (
-        generationMatches036(card, generation)
-        && card._multi036SelectedSessionKey === requestKey
-      ) {
-        card._multi036SelectedSessionKey = null;
-        card._multi036PendingSelectionKey = null;
-        card._multi036MapRenderKey = null;
-        card._multi036SessionsRenderKey = null;
-        renderMultiSessions036(card);
-        renderMultiMap036(card, true);
-      }
-      card._multi036PulseTimer = null;
-    }, 1900);
+    card._multi036PulseTimer = null;
   }
 
   const notificationItems036 = (card) => {
@@ -13053,14 +13071,18 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
   };
 
   const queueDeferredCycle = (card) => {
-    if (!card?._hass?.callApi || card?._mapPayload?.current_cycle_render) return;
+    if (!card?._hass?.callApi) return;
+    const sourceKey = card?._mapPayload?.vendor_trail_debug?.current_cycle_key;
+    if (card?._mapPayload?.current_cycle_render
+        && (sourceKey == null || card._retainedCycleSourceKey === sourceKey)) return;
     const path = cyclePath(card);
     if (!path) return;
     const now = Date.now();
     if (card._beta16CycleRetryAt && now < card._beta16CycleRetryAt) return;
     const generation = Number(card._beta16CycleGeneration || 0);
-    if (card._beta16CycleLoading === path + "|" + generation) return;
-    card._beta16CycleLoading = path + "|" + generation;
+    const requestKey = path + "|" + generation + "|" + sourceKey;
+    if (card._beta16CycleLoading === requestKey) return;
+    card._beta16CycleLoading = requestKey;
     const schedule = typeof globalThis.requestIdleCallback === "function"
       ? (callback) => globalThis.requestIdleCallback(callback, { timeout: 800 })
       : (callback) => globalThis.setTimeout(callback, 0);
@@ -13070,10 +13092,12 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
         if (
           Number(card._beta16CycleGeneration || 0) !== generation
           || cyclePath(card) !== path
+          || card?._mapPayload?.vendor_trail_debug?.current_cycle_key !== sourceKey
         ) return;
         const render = payload?.current_cycle_render;
         if (render?.scope === "current_cycle" && card._mapPayload) {
           card._mapPayload = { ...card._mapPayload, current_cycle_render: render };
+          card._retainedCycleSourceKey = sourceKey;
           card._historyRenderKey = null;
           card._trailRenderKey = null;
           card._queueRender?.({ history: true, trail: true, sessions: true });
@@ -13085,7 +13109,7 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
           console.debug("[Navimower Map Card] Deferred current-cycle request unavailable", error);
         }
       } finally {
-        if (card._beta16CycleLoading === path + "|" + generation) {
+        if (card._beta16CycleLoading === requestKey) {
           card._beta16CycleLoading = null;
         }
       }
@@ -13108,6 +13132,10 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
       const result = previousSetConfig.call(this, config);
       const current = this?._config?.entity || this?._config?.mower_entity || null;
       if (previous !== current) {
+        this._historySelectedSessionId = null;
+        this._retainedCycleSourceKey = null;
+        this._retainedCycleEntry = null;
+        if (this._highlightEl) this._highlightEl.innerHTML = "";
         this._beta16CycleGeneration = Number(this._beta16CycleGeneration || 0) + 1;
         this._beta16CycleLoading = null;
         this._beta16CycleRetryAt = 0;
@@ -14136,12 +14164,12 @@ console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-a
   const copySegments = (segments) =>
     (segments || []).map((segment) => segment.map((point) => [...point]));
 
-  const trailSessionKey = (card) => String(
+  const trailSessionKey = (card) => [card?._mapPayload?.vendor_trail_debug?.active_zone_id, card?._mapPayload?.vendor_trail_debug?.active_cycle_id, String(
     card?._mapPayload?.trail_session
       ?? card?._mapPayload?.active_session?.id
       ?? card?._mapPayload?.active_session?.sequence
       ?? "",
-  );
+  )].join(":");
 
   const resetTailCache = (card, sessionKey = "") => {
     card._nm037Beta2TailSession = sessionKey;
@@ -14216,6 +14244,17 @@ console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-a
       }
 
       const currentServerTail = normalizeTailSegments(this?._mapPayload?.trail_segments);
+      if (debug.store_version === 1) {
+        // The persistent backend explicitly owns every confirmation, including
+        // an empty tail. Missing phased payloads retain the previous map object;
+        // an explicit [] must never revive the older browser/server tail.
+        this._nm037Beta2ServerTail = copySegments(currentServerTail);
+        if (debug.live_tail_allowed === false) return [];
+        const segments = copySegments(currentServerTail);
+        const anchor = segments.at(-1)?.at(-1);
+        appendLiveAfterAnchor(segments, this._trail, anchor);
+        return segments.filter((segment) => segment.length >= 2);
+      }
       if (currentServerTail.length) {
         this._nm037Beta2ServerTail = copySegments(currentServerTail);
       }
@@ -14939,90 +14978,5 @@ console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-a
 
   console.info(
     "[Navimower Map Card] 0.3.7-beta3 selectable LiDAR terrain overlay enabled",
-  );
-})();
-
-// 0.3.7-beta4: vendor backbone with short live MQTT tail.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || Card.__navimower037Beta4ShortVendorTail) return;
-  Card.__navimower037Beta4ShortVendorTail = true;
-
-  const proto = Card.prototype;
-  const MAX_TAIL_DISTANCE_M = 8.0;
-
-  const finite = (value) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const point = (raw) => {
-    if (!Array.isArray(raw) || raw.length < 2) return null;
-    const x = finite(raw[0]);
-    const y = finite(raw[1]);
-    return x === null || y === null ? null : [x, y];
-  };
-
-  const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-
-  const trimNewestSegment = (segments, limitM) => {
-    if (!Array.isArray(segments) || !segments.length) return [];
-    const source = Array.isArray(segments.at(-1))
-      ? segments.at(-1).map(point).filter(Boolean)
-      : [];
-    if (!source.length) return [];
-    if (source.length === 1) return [[source[0]]];
-
-    const kept = [source.at(-1)];
-    let used = 0;
-    for (let index = source.length - 2; index >= 0; index -= 1) {
-      const older = source[index];
-      const newer = kept[0];
-      const step = distance(older, newer);
-      if (step <= 0) {
-        kept.unshift(older);
-        continue;
-      }
-      const remaining = limitM - used;
-      if (remaining <= 0) break;
-      if (step <= remaining) {
-        kept.unshift(older);
-        used += step;
-        continue;
-      }
-      const ratio = remaining / step;
-      kept.unshift([
-        newer[0] + (older[0] - newer[0]) * ratio,
-        newer[1] + (older[1] - newer[1]) * ratio,
-      ]);
-      break;
-    }
-    return kept.length ? [kept] : [];
-  };
-
-  const previousActiveTrailSegments = proto._activeTrailSegments;
-  if (typeof previousActiveTrailSegments === "function") {
-    proto._activeTrailSegments = function shortVendorLiveTail(...args) {
-      const segments = previousActiveTrailSegments.apply(this, args);
-      const debug = this?._mapPayload?.vendor_trail_debug;
-      if (!debug?.backend_tail_authoritative) return segments;
-      return trimNewestSegment(segments, MAX_TAIL_DISTANCE_M);
-    };
-  }
-
-  const previousRenderTrail = proto._renderTrail;
-  if (typeof previousRenderTrail === "function") {
-    proto._renderTrail = function shortVendorLiveTailRender(...args) {
-      const result = previousRenderTrail.apply(this, args);
-      const authoritative = Boolean(this?._mapPayload?.vendor_trail_debug?.backend_tail_authoritative);
-      this._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
-        line.setAttribute("data-trail-source", authoritative ? "mqtt-live-tail-short" : "mqtt-session");
-      });
-      return result;
-    };
-  }
-
-  console.info(
-    "[Navimower Map Card] 0.3.7-beta4 vendor backbone / short MQTT live tail enabled",
   );
 })();

@@ -19,8 +19,6 @@ assert.ok(
   !source.includes('"https://tile.openstreetmap.org/" + range.zoom + "/" + x + "/" + y + ".png"'),
   "beta2 generated runtime must not issue direct OSM SVG tile requests",
 );
-assert.ok(syncVersion.includes("directOsmExpression"));
-assert.ok(syncVersion.includes("proxiedOsmExpression"));
-assert.ok(syncVersion.includes("OpenStreetMap tile renderer contract was not found"));
+assert.ok(!syncVersion.includes("PatchPath"), "release preparation must not replay old runtime patches");
 
 console.log("0.3.7-beta2 authenticated OSM proxy checks passed");

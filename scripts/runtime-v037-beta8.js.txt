@@ -1,0 +1,380 @@
+// 0.3.7-beta8: shared, cycle-safe per-zone prepared SVG resources.
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimower037Beta8Artifacts) return;
+  Card.__navimower037Beta8Artifacts = true;
+  const proto = Card.prototype;
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const buckets = new WeakMap();
+  let maskSequence = 0;
+  const plainId = (id) => /^[1-9][0-9]{0,9}$/.test(String(id));
+  const basePath = (entry) => "/api/navimower/map/" + encodeURIComponent(entry);
+  const currentView = (card) => !card._historySelectedSessionId && !card._multi036SelectedSessionKey
+    && (card._historyDayOffset === null || card._historyDayOffset === undefined);
+  const authKey = (hass) => hass?.connection || hass?.auth || hass;
+  const cycles = (payload) => payload?.vendor_trail_debug?.cycle_ids || {};
+  const freshness = (payload) => String(payload?.vendor_trail_debug?.current_cycle_key ?? payload?.vendor_trail_revision ?? "");
+  const descriptor = (payload, entry) => {
+    const url = payload?.map_artifacts?.manifest_url;
+    if (payload?.map_artifacts?.schema_version !== 1 || typeof url !== "string") return null;
+    const match = url.match(/^\/api\/navimower\/map\/([^/?#]+)\?artifacts_only=1$/);
+    if (!match) return null;
+    let id;
+    try { id = decodeURIComponent(match[1]); } catch (_error) { return null; }
+    if (!id || (entry && String(entry) !== id) || basePath(id) + "?artifacts_only=1" !== url) return null;
+    return { entry: id, url };
+  };
+  const supported = (card, payload, entry) => descriptor(payload, entry)
+    && (typeof card?._hass?.fetchWithAuth === "function" || typeof card?._hass?.callApiRaw === "function")
+    && typeof globalThis.Image === "function" && typeof URL.createObjectURL === "function";
+
+  async function raw(hass, path, signal) {
+    const response = typeof hass.fetchWithAuth === "function"
+      ? await hass.fetchWithAuth(path, { signal })
+      : await hass.callApiRaw("GET", path.replace(/^\/api\//, ""), undefined, undefined, signal);
+    if (!response?.ok) {
+      const error = new Error("Map artifact HTTP " + (response?.status || "unavailable"));
+      error.status = response?.status;
+      throw error;
+    }
+    return response;
+  }
+  async function timedRequest(hass, path, read, controller = new AbortController()) {
+    const timer = setTimeout(() => controller.abort(), 30_000);
+    try { return await read(await raw(hass, path, controller.signal)); }
+    finally { clearTimeout(timer); }
+  }
+  function bucketFor(hass) {
+    const key = authKey(hass);
+    if (!buckets.has(key)) buckets.set(key, { images: new Map(), manifests: new Map(), active: 0, queue: [] });
+    return buckets.get(key);
+  }
+  function limited(bucket, work) {
+    return new Promise((resolve, reject) => {
+      bucket.queue.push({ work, resolve, reject });
+      const drain = () => {
+        while (bucket.active < 2 && bucket.queue.length) {
+          const item = bucket.queue.shift();
+          bucket.active += 1;
+          Promise.resolve().then(item.work).then(item.resolve, item.reject).finally(() => { bucket.active -= 1; drain(); });
+        }
+      };
+      drain();
+    });
+  }
+  function getManifest(hass, bucket, entry) {
+    if (bucket.manifests.has(entry)) return bucket.manifests.get(entry);
+    const promise = timedRequest(hass, basePath(entry) + "?artifacts_only=1", (response) => response.json());
+    bucket.manifests.set(entry, promise);
+    promise.finally(() => { if (bucket.manifests.get(entry) === promise) bucket.manifests.delete(entry); }).catch(() => {});
+    return promise;
+  }
+  function acquireImage(hass, bucket, entry, zone, artifact) {
+    const key = entry + ":" + zone + ":" + artifact.resource_id;
+    let item = bucket.images.get(key);
+    if (!item) {
+      item = { key, refs: 0, url: null, controller: new AbortController(), artifact };
+      bucket.images.set(key, item);
+      item.promise = limited(bucket, async () => {
+        if (!item.refs) throw new Error("Released artifact request");
+        const blob = await timedRequest(hass, artifact.url, async (response) => {
+          const type = response.headers?.get?.("Content-Type") || "";
+          if (!type.toLowerCase().startsWith("image/svg+xml")) throw new Error("Unexpected artifact format");
+          const body = await response.blob();
+          if (body.size > 16 * 1024 * 1024) throw new Error("Artifact exceeds image budget");
+          return body;
+        }, item.controller);
+        if (!item.refs) throw new Error("Released artifact response");
+        const url = URL.createObjectURL(blob);
+        try {
+          const image = new Image();
+          let timer;
+          const ready = typeof image.decode === "function"
+            ? (image.src = url, image.decode())
+            : new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = url; });
+          try {
+            await Promise.race([ready, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Artifact decode timeout")), 30_000); })]);
+          } finally { clearTimeout(timer); }
+          if (!item.refs) throw new Error("Released artifact decode");
+          item.url = url;
+          return item;
+        } catch (error) { URL.revokeObjectURL(url); throw error; }
+      });
+      item.promise.catch(() => {});
+    }
+    item.refs += 1;
+    let released = false;
+    return { item, release() {
+      if (released) return;
+      released = true;
+      item.refs -= 1;
+      if (!item.refs) {
+        if (bucket.images.get(key) === item) bucket.images.delete(key);
+        item.controller.abort();
+        if (item.url) URL.revokeObjectURL(item.url);
+      }
+    } };
+  }
+  function validateManifest(value, entry, payload) {
+    if (value?.schema_version !== 1 || value.scope !== "current_cycle_artifacts"
+        || value.entry_id !== entry || value.coordinate_space !== "map_xy_m"
+        || !Array.isArray(value.zones) || !Array.isArray(value.fallback_zone_ids)) throw new Error("Invalid artifact manifest");
+    const known = cycles(payload);
+    const seen = new Set();
+    for (const row of value.zones) {
+      const id = String(row?.zone_id);
+      if (!plainId(id) || seen.has(id) || !row.cycle_id || known[id] !== row.cycle_id) throw new Error("Artifact cycle mismatch");
+      seen.add(id);
+      const a = row.artifact;
+      if (a == null) continue;
+      if (a.format !== "svg" || a.usage !== "alpha_mask" || a.coordinate_space !== "map_xy_m"
+          || !/^[a-f0-9]{64}$/.test(a.resource_id) || !Array.isArray(a.bounds) || a.bounds.length !== 4
+          || !a.bounds.every((v) => typeof v === "number" && Number.isFinite(v))
+          || a.bounds[2] <= a.bounds[0] || a.bounds[3] <= a.bounds[1]
+          || a.url !== basePath(entry) + "?zone_artifact=" + id + "&artifact_id=" + a.resource_id) throw new Error("Invalid zone artifact");
+    }
+    const mapped = (payload?.map?.zones || []).map((row) => String(row.id));
+    const fallbacks = new Set(value.fallback_zone_ids.map(String));
+    if (mapped.some((id) => !seen.has(id) && !fallbacks.has(id))) throw new Error("Incomplete artifact manifest");
+    return value;
+  }
+  function dropRow(row) {
+    row.pending?.release(); row.loaded?.release();
+    for (const node of row.nodes?.values?.() || []) node.remove();
+    row.nodes?.clear?.();
+  }
+  function set(node, key, value) { const text = String(value); if (node.getAttribute(key) !== text) node.setAttribute(key, text); }
+  function svg(tag, attributes = {}) {
+    const node = document.createElementNS(SVG_NS, tag);
+    for (const [key, value] of Object.entries(attributes)) set(node, key, value);
+    return node;
+  }
+
+  class Client {
+    constructor(card, entry) {
+      this.card = card; this.entry = entry; this.bucket = bucketFor(card._hass);
+      this.auth = authKey(card._hass); this.rows = new Map(); this.mode = "legacy";
+      this.closed = false; this.epoch = 0; this.metrics = { manifests: 0, downloads: 0, swaps: 0, errors: 0 };
+    }
+    update(payload) {
+      this.payload = payload;
+      const known = cycles(payload);
+      for (const [id, row] of this.rows) {
+        if (known[id] !== row.cycle) { dropRow(row); this.rows.delete(id); this.epoch += 1; }
+      }
+      const ids = (payload?.map?.zones || []).map((row) => String(row.id));
+      const owned = new Set((payload?.vendor_trail_debug?.owned_zone_ids || []).map(String));
+      const mode = ids.length && ids.every((id) => owned.has(id) && known[id]) ? "resources" : "legacy";
+      if (this.mode !== mode) { this.mode = mode; this.accepted = null; this.changed(true); }
+      if (mode === "resources" && this.accepted !== freshness(payload)) void this.refresh();
+      return mode === "resources";
+    }
+    changed(structure = false) {
+      if (this.closed) return;
+      this.card._queueRender?.({ history: true });
+      if (structure && !this.card._nmBeta8StructureQueued) {
+        this.card._nmBeta8StructureQueued = true;
+        queueMicrotask(() => {
+          this.card._nmBeta8StructureQueued = false;
+          if (this.closed) return;
+          this.card._multi036MapRenderKey = null;
+          this.card._beta8RefreshMultiRender?.();
+        });
+      }
+      this.card._drawZoneArtifactMembers?.();
+    }
+    later(ms) {
+      if (this.closed || this.timer) return;
+      this.timer = setTimeout(() => { this.timer = null; void this.refresh(); }, ms);
+    }
+    async refresh() {
+      if (this.closed || this.loading || this.mode !== "resources") return;
+      if (Date.now() < (this.retryAt || 0)) { this.later(this.retryAt - Date.now()); return; }
+      this.loading = true;
+      const epoch = this.epoch, wanted = freshness(this.payload);
+      let again = false;
+      try {
+        const manifest = await getManifest(this.card._hass, this.bucket, this.entry);
+        if (this.closed || this.auth !== authKey(this.card._hass)) return;
+        if (epoch !== this.epoch) { again = true; return; }
+        validateManifest(manifest, this.entry, this.payload);
+        this.metrics.manifests += 1;
+        // The legacy composite is the lossless compatibility path for a mower
+        // with any MQTT/History fallback zones. Never layer it over zone masks.
+        if (manifest.fallback_zone_ids.length) throw new Error("Awaiting matching base-map ownership");
+        const present = new Set(manifest.zones.map((row) => String(row.zone_id)));
+        for (const [id, row] of this.rows) if (!present.has(id)) { dropRow(row); this.rows.delete(id); }
+        for (const desc of manifest.zones) {
+          const id = String(desc.zone_id);
+          let row = this.rows.get(id);
+          if (row && row.cycle !== desc.cycle_id) { dropRow(row); this.rows.delete(id); row = null; }
+          if (!row) { row = { id, cycle: desc.cycle_id, nodes: new Map() }; this.rows.set(id, row); }
+          row.target = desc.artifact;
+          if (!desc.artifact) { dropRow(row); row.pending = null; row.loaded = null; }
+          else this.load(row);
+        }
+        this.accepted = wanted; this.retryAt = 0;
+        again = manifest.building || manifest.zones.some((row) => row.pending) || wanted !== freshness(this.payload);
+        this.changed();
+      } catch (_error) {
+        if (!this.closed) { this.metrics.errors += 1; this.retryAt = Date.now() + 10_000; again = true; }
+      } finally {
+        this.loading = false;
+        if (again && !this.closed) this.later(this.retryAt ? 10_000 : 2_000);
+      }
+    }
+    load(row) {
+      if (this.closed || row.pending || !row.target || row.target.resource_id === row.loaded?.item.artifact.resource_id) return;
+      const handle = acquireImage(this.card._hass, this.bucket, this.entry, row.id, row.target);
+      row.pending = handle; this.metrics.downloads += 1;
+      handle.item.promise.then(() => {
+        if (this.closed || this.rows.get(row.id) !== row || row.pending !== handle
+            || cycles(this.payload)[row.id] !== row.cycle || this.auth !== authKey(this.card._hass)) { handle.release(); return; }
+        const previous = row.loaded;
+        row.loaded = handle; row.pending = null;
+        // Update all mounted uses BEFORE releasing the old blob URL.
+        this.changed(); this.card._renderHistory?.();
+        previous?.release(); this.metrics.swaps += 1;
+        this.load(row); // A newer same-cycle resource may have arrived in flight.
+      }).catch((error) => {
+        handle.release();
+        if (this.closed || this.rows.get(row.id) !== row || row.pending !== handle) return;
+        row.pending = null; this.metrics.errors += 1;
+        this.accepted = null;
+        if (error?.status === 410) { row.target = null; this.later(2_000); }
+        else { this.retryAt = Date.now() + 10_000; this.later(10_000); }
+      });
+    }
+    draw(host, transform) {
+      if (!host) return;
+      host.style.display = this.mode === "resources" && currentView(this.card) ? "" : "none";
+      if (transform) set(host, "transform", transform);
+      for (const row of this.rows.values()) {
+        const item = row.loaded?.item;
+        if (!item?.url) continue;
+        for (const [parent, node] of row.nodes) if (!parent.isConnected || node.parentNode !== parent) row.nodes.delete(parent);
+        let node = row.nodes.get(host);
+        if (!node || node.parentNode !== host) {
+          // Single and Multi have distinct nodes but share one decoded resource.
+          const existing = Array.from(host.children || []).find((n) => n.getAttribute("data-zone-id") === row.id);
+          node = existing || svg("g", { "data-zone-id": row.id });
+          row.nodes.set(host, node);
+          if (!existing) {
+            const maskId = "nm-zone-mask-" + (++maskSequence);
+            const mask = svg("mask", { id: maskId, maskUnits: "userSpaceOnUse", maskContentUnits: "userSpaceOnUse", "mask-type": "alpha", style: "mask-type:alpha" });
+            mask.appendChild(svg("image", { preserveAspectRatio: "none" }));
+            const defs = svg("defs"); defs.appendChild(mask); node.appendChild(defs);
+            node.appendChild(svg("rect", { mask: "url(#" + maskId + ")" })); host.appendChild(node);
+          }
+        }
+        const mask = node.querySelector("mask"), image = node.querySelector("image"), rect = node.querySelector("rect");
+        const [x, y, x2, y2] = item.artifact.bounds;
+        for (const element of [mask, image, rect]) for (const [key, value] of Object.entries({ x, y, width: x2 - x, height: y2 - y })) set(element, key, value);
+        set(image, "href", item.url);
+        set(rect, "fill", this.card._config?.trail_color || "#43a047");
+        set(host, "opacity", Math.max(0, Math.min(1, Number(this.card._config?.trail_opacity ?? 0.55))));
+        set(node, "data-cycle-id", row.cycle); set(node, "data-resource-id", item.artifact.resource_id);
+      }
+      for (const node of Array.from(host.children || [])) {
+        const row = this.rows.get(node.getAttribute("data-zone-id"));
+        if (!row?.loaded || node.getAttribute("data-cycle-id") !== row.cycle) node.remove();
+      }
+    }
+    close() {
+      this.closed = true; clearTimeout(this.timer);
+      for (const row of this.rows.values()) dropRow(row);
+      this.rows.clear();
+    }
+  }
+
+  function clientFor(card, payload, entry) {
+    const info = supported(card, payload, entry) ? descriptor(payload, entry) : null;
+    if (!info || card._nmBeta8Disconnected) {
+      const id = String(entry || payload?.frontend?.entry_id || "");
+      const previous = card._nmBeta8Clients?.get?.(id);
+      if (previous) { previous.close(); card._nmBeta8Clients.delete(id); }
+      return null;
+    }
+    if (!(card._nmBeta8Clients instanceof Map)) card._nmBeta8Clients = new Map();
+    let client = card._nmBeta8Clients.get(info.entry);
+    if (client && client.auth !== authKey(card._hass)) { client.close(); card._nmBeta8Clients.delete(info.entry); client = null; }
+    if (!client) { client = new Client(card, info.entry); card._nmBeta8Clients.set(info.entry, client); }
+    client.update(payload);
+    return client;
+  }
+  proto._zoneArtifactsHandled = function(payload = this._mapPayload, entry = null) {
+    return clientFor(this, payload, entry)?.mode === "resources";
+  };
+  proto._zoneArtifactsMode = function(entry) { return this._nmBeta8Clients?.get?.(String(entry))?.mode || "legacy"; };
+  proto._drawZoneArtifactMembers = function() {
+    const anchor = descriptor(this._mapPayload)?.entry;
+    const allowed = new Set([anchor]);
+    if (this._config?.multi_mower) for (const member of this._multi036Site?.members || []) allowed.add(String(member.entry_id));
+    for (const [entry, client] of this._nmBeta8Clients || []) {
+      if (!allowed.has(entry)) { client.close(); this._nmBeta8Clients.delete(entry); }
+    }
+    for (const host of this._multi036Layer?.querySelectorAll?.("[data-nm-artifacts-entry]") || []) {
+      this._nmBeta8Clients?.get?.(host.getAttribute("data-nm-artifacts-entry"))?.draw(host);
+    }
+  };
+  // Morph small Multi map markup in place, treating resource layers as opaque.
+  // This keeps mounted masks/images stable even when live-tail points change.
+  function morph(parent, desired) {
+    const next = Array.from(desired.childNodes || []);
+    for (let i = 0; i < next.length; i += 1) {
+      const fresh = next[i], old = parent.childNodes[i];
+      if (!old) { parent.appendChild(fresh); continue; }
+      if (old.nodeType !== fresh.nodeType || old.nodeName !== fresh.nodeName
+          || (old.nodeType === 1 && old.getAttribute("data-entry-id") !== fresh.getAttribute("data-entry-id"))) { parent.replaceChild(fresh, old); continue; }
+      if (old.nodeType !== 1) { if (old.textContent !== fresh.textContent) old.textContent = fresh.textContent; continue; }
+      if (fresh.hasAttribute("data-nm-artifacts-entry") && old.getAttribute("data-nm-artifacts-entry") === fresh.getAttribute("data-nm-artifacts-entry")) continue;
+      for (const attr of Array.from(old.attributes)) if (!fresh.hasAttribute(attr.name)) old.removeAttribute(attr.name);
+      for (const attr of Array.from(fresh.attributes)) set(old, attr.name, attr.value);
+      morph(old, fresh);
+    }
+    while (parent.childNodes.length > next.length) parent.lastChild.remove();
+  }
+  proto._applyZoneArtifactMultiMarkup = function(layer, markup) {
+    if (!this._nmBeta8Clients?.size || !document.createElementNS) { layer.innerHTML = markup; return; }
+    const holder = svg("g"); holder.innerHTML = markup; morph(layer, holder);
+    this._drawZoneArtifactMembers();
+  };
+  const previousHistory = proto._renderHistory;
+  proto._renderHistory = function(...args) {
+    const client = clientFor(this, this._mapPayload);
+    if (!client || client.mode !== "resources" || !currentView(this)) return previousHistory?.apply(this, args);
+    if (!this._historyEl || !this._layout) return;
+    let host = this._historyEl.querySelector?.(".nm-zone-artifacts");
+    if (!host) { this._historyEl.innerHTML = ""; host = svg("g", { class: "nm-zone-artifacts", "pointer-events": "none" }); this._historyEl.appendChild(host); }
+    const l = this._layout;
+    client.draw(host, `matrix(${l.scale} 0 0 ${-l.scale} ${l.sx(0)} ${l.sy(0)})`);
+  };
+  const previousApply = proto._applyMapPayload;
+  proto._applyMapPayload = function(...args) {
+    const result = previousApply?.apply(this, args);
+    clientFor(this, this._mapPayload);
+    this._drawZoneArtifactMembers();
+    return result;
+  };
+  const previousBar = proto._renderHistoryBar;
+  proto._renderHistoryBar = function(...args) {
+    const result = previousBar?.apply(this, args);
+    if (this._zoneArtifactsHandled()) for (const button of this._historyBarEl?.querySelectorAll?.('[data-history-offset="today"]') || []) button.textContent = "Current cycle";
+    return result;
+  };
+  function closeClients(card) { for (const client of card._nmBeta8Clients?.values?.() || []) client.close(); card._nmBeta8Clients?.clear?.(); }
+  const previousConfig = proto.setConfig;
+  proto.setConfig = function(config) {
+    if (this._config?.entity !== config?.entity || this._config?.mower_entity !== config?.mower_entity
+        || this._config?.multi_mower !== config?.multi_mower) closeClients(this);
+    return previousConfig?.call(this, config);
+  };
+  const previousDisconnected = proto.disconnectedCallback;
+  proto.disconnectedCallback = function(...args) { this._nmBeta8Disconnected = true; closeClients(this); return previousDisconnected?.apply(this, args); };
+  const previousConnected = proto.connectedCallback;
+  proto.connectedCallback = function(...args) { this._nmBeta8Disconnected = false; return previousConnected?.apply(this, args); };
+  proto._zoneArtifactDiagnostics = function() {
+    return Array.from(this._nmBeta8Clients?.values?.() || [], (client) => ({ entry_id: client.entry, mode: client.mode, ...client.metrics, ready_zones: [...client.rows.values()].filter((row) => row.loaded).length }));
+  };
+  console.info("[Navimower Map Card] 0.3.7-beta8 per-zone prepared resources enabled");
+})();

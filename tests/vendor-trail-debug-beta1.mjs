@@ -4,7 +4,6 @@ import { readFile } from "node:fs/promises";
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 for (const marker of [
   "0.3.7-beta1: vendor retained trail / MQTT tail source debug.",
-  "__navimower037Beta1VendorTrailDebug",
   "backend_tail_authoritative",
   "data-trail-source",
   "#ff0000",

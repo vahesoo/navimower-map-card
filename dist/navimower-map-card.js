@@ -3450,25 +3450,6 @@ function patchCard() {
     this._v030BaseApiPath = stripQuery(raw);
     return withLightweightMapQuery(raw);
   };
-  const originalEnsureDom = proto._ensureDom;
-  proto._ensureDom = function patchedEnsureDom() {
-    const result = originalEnsureDom.call(this);
-    injectV030Styles(this);
-    markStableSvgStrokes(this);
-    return result;
-  };
-  const originalApplyStaticLayers = proto._applyStaticLayers;
-  proto._applyStaticLayers = function patchedApplyStaticLayers(entry) {
-    const result = originalApplyStaticLayers.call(this, entry);
-    markStableSvgStrokes(this);
-    return result;
-  };
-  const originalRenderStatic = proto._renderStatic;
-  proto._renderStatic = function patchedRenderStatic() {
-    const result = originalRenderStatic.call(this);
-    markStableSvgStrokes(this);
-    return result;
-  };
   proto._maybeLoadMap = async function patchedMaybeLoadMap() {
     if (!this._config || !this._hass || this._loadingMap) return;
     const apiPath = this._apiPath();
@@ -3876,6 +3857,8 @@ function wrapOutlineRefresh(proto, methodName) {
   if (typeof original !== "function") return;
   proto[methodName] = function outlinedRefresh(...args) {
     const result = original.apply(this, args);
+    if (methodName === "_ensureDom") injectV030Styles(this);
+    markStableSvgStrokes(this);
     applyOutlineSettings(this);
     return result;
   };

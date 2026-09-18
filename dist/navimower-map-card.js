@@ -6067,11 +6067,13 @@ node.splice(mowerIndex, 0, iconField);
 
   const originalSetConfig = proto.setConfig;
   proto.setConfig = function beta032SetConfig(config) {
-    const incoming = {
-      ...(config || {}),
-      history_days: historyDays032(config?.history_days),
-      mower_icon: mowerIconConfig032(config?.mower_icon)
-    };
+    const incoming = { ...(config || {}) };
+    if (incoming.show_custom_areas === undefined) incoming.show_custom_areas = true;
+    if (incoming.custom_area_color === undefined) incoming.custom_area_color = incoming.gate_area_color || "#8e24aa";
+    if (incoming.custom_area_fill_opacity === undefined) incoming.custom_area_fill_opacity = 0.14;
+    if (incoming.custom_area_stroke_width === undefined) incoming.custom_area_stroke_width = 3;
+    incoming.history_days = historyDays032(incoming.history_days);
+    incoming.mower_icon = mowerIconConfig032(incoming.mower_icon);
     const result = originalSetConfig.call(this, incoming);
     if (this._historyDayOffset !== null && Number(this._historyDayOffset) >= this._config.history_days) {
       this._historyDayOffset = null;
@@ -6262,16 +6264,6 @@ function patchCustomAreas0342() {
     };
     form.computeLabel = (schema) => labels[schema?.name] || baseCompute?.(schema) || schema?.name || "";
     return form;
-  };
-
-  const originalSetConfig = proto.setConfig;
-  proto.setConfig = function customAreaSetConfig0342(config) {
-    const next = { ...config };
-    if (next.show_custom_areas === undefined) next.show_custom_areas = true;
-    if (next.custom_area_color === undefined) next.custom_area_color = next.gate_area_color || "#8e24aa";
-    if (next.custom_area_fill_opacity === undefined) next.custom_area_fill_opacity = 0.14;
-    if (next.custom_area_stroke_width === undefined) next.custom_area_stroke_width = 3;
-    return originalSetConfig.call(this, next);
   };
 
   function customAreas(card) {

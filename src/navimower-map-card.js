@@ -13894,121 +13894,6 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 // 0.3.6-beta21: unrestricted nearest-edge gate-area insertion.
 
-// 0.3.7-beta1: vendor retained trail / MQTT tail source debug.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const MATCH_RADIUS_M = 0.5;
-
-  const originalActiveTrailSegments = proto._activeTrailSegments;
-  if (typeof originalActiveTrailSegments === "function") {
-    proto._activeTrailSegments = function vendorTrailDebugActiveSegments(...args) {
-      const debug = this?._mapPayload?.vendor_trail_debug;
-      if (!debug?.backend_tail_authoritative) {
-        return originalActiveTrailSegments.apply(this, args);
-      }
-
-      const backend = typeof this._normalizeTrailSegments === "function"
-        ? this._normalizeTrailSegments(this._mapPayload?.trail_segments, [])
-        : [];
-      if (!backend.length) return [];
-
-      const segments = backend.map((segment) => segment.map((point) => [...point]));
-      const anchor = segments.at(-1)?.at(-1) || debug?.anchor_xy || null;
-      const live = Array.isArray(this._trail) ? this._trail : [];
-      let anchorIndex = -1;
-      if (Array.isArray(anchor) && anchor.length >= 2) {
-        for (let index = live.length - 1; index >= 0; index -= 1) {
-          const point = live[index];
-          if (!Array.isArray(point) || point.length < 2) continue;
-          if (
-            Math.hypot(
-              Number(point[0]) - Number(anchor[0]),
-              Number(point[1]) - Number(anchor[1]),
-            ) <= MATCH_RADIUS_M
-          ) {
-            anchorIndex = index;
-            break;
-          }
-        }
-      }
-
-      if (anchorIndex >= 0) {
-        for (const point of live.slice(anchorIndex + 1)) {
-          let current = segments.at(-1);
-          if (!current) {
-            current = [];
-            segments.push(current);
-          }
-          const previous = current.at(-1);
-          if (
-            previous
-            && (point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2 > 25
-          ) {
-            current = [];
-            segments.push(current);
-          }
-          const last = current.at(-1);
-          if (!last || last[0] !== point[0] || last[1] !== point[1]) {
-            current.push([...point]);
-          }
-        }
-      }
-      return segments.filter((segment) => segment.length >= 2);
-    };
-  }
-
-  const syncDebugHost = (card) => {
-    const enabled = Boolean(card?._mapPayload?.vendor_trail_debug?.enabled);
-    card?.toggleAttribute?.("data-nm-vendor-trail-debug", enabled);
-    if (
-      !card?.shadowRoot
-      || card.shadowRoot.querySelector?.("style[data-nm-vendor-trail-debug-style]")
-    ) return;
-    const style = document.createElement("style");
-    style.dataset.nmVendorTrailDebugStyle = "1";
-    style.textContent = `
-      :host([data-nm-vendor-trail-debug]) .nm-multi-live-trail {
-        stroke: #ff0000 !important;
-      }
-    `;
-    card.shadowRoot.append(style);
-  };
-
-  const originalApplyMapPayload = proto._applyMapPayload;
-  if (typeof originalApplyMapPayload === "function") {
-    proto._applyMapPayload = function vendorTrailDebugApplyMapPayload(...args) {
-      const result = originalApplyMapPayload.apply(this, args);
-      syncDebugHost(this);
-      return result;
-    };
-  }
-
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function vendorTrailDebugEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      syncDebugHost(this);
-      return result;
-    };
-  }
-
-  const originalRenderTrail = proto._renderTrail;
-  if (typeof originalRenderTrail === "function") {
-    proto._renderTrail = function vendorTrailDebugRenderTrail(...args) {
-      const result = originalRenderTrail.apply(this, args);
-      if (this?._mapPayload?.vendor_trail_debug?.enabled) {
-        this._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
-          line.setAttribute("stroke", "#ff0000");
-          line.setAttribute("data-trail-source", "mqtt");
-        });
-      }
-      return result;
-    };
-  }
-})();
-
 // 0.3.7-beta2: stable vendor backbone / MQTT tail and authenticated OSM tiles.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
@@ -14157,33 +14042,10 @@ if (globalThis.customElements) patchCustomAreas0342();
     };
   }
 
-  const clearBeta1DebugPresentation = (card) => {
-    card?.removeAttribute?.("data-nm-vendor-trail-debug");
-  };
-
-  const previousApplyMapPayload = proto._applyMapPayload;
-  if (typeof previousApplyMapPayload === "function") {
-    proto._applyMapPayload = function stableTrailApplyMapPayload(...args) {
-      const result = previousApplyMapPayload.apply(this, args);
-      clearBeta1DebugPresentation(this);
-      return result;
-    };
-  }
-
-  const previousEnsureDom = proto._ensureDom;
-  if (typeof previousEnsureDom === "function") {
-    proto._ensureDom = function stableTrailEnsureDom(...args) {
-      const result = previousEnsureDom.apply(this, args);
-      clearBeta1DebugPresentation(this);
-      return result;
-    };
-  }
-
   const previousRenderTrail = proto._renderTrail;
   if (typeof previousRenderTrail === "function") {
     proto._renderTrail = function stableTrailRender(...args) {
       const result = previousRenderTrail.apply(this, args);
-      clearBeta1DebugPresentation(this);
       const color = String(this?._config?.trail_color || "#43a047");
       this._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
         line.setAttribute("stroke", color);

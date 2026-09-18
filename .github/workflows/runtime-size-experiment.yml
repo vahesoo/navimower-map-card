@@ -1,0 +1,33 @@
+name: Runtime size experiment
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - src/navimower-map-card.js
+      - .github/workflows/runtime-size-experiment.yml
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Measure current and minified runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          RAW=$(wc -c < src/navimower-map-card.js)
+          npx --yes terser@5 src/navimower-map-card.js --module --compress passes=3 --mangle --output /tmp/navimower-map-card.min.js
+          MIN=$(wc -c < /tmp/navimower-map-card.min.js)
+          gzip -9 -c src/navimower-map-card.js > /tmp/raw.gz
+          gzip -9 -c /tmp/navimower-map-card.min.js > /tmp/min.gz
+          RAW_GZ=$(wc -c < /tmp/raw.gz)
+          MIN_GZ=$(wc -c < /tmp/min.gz)
+          node --check /tmp/navimower-map-card.min.js
+          printf 'raw_bytes=%s\nminified_bytes=%s\nraw_gzip_bytes=%s\nminified_gzip_bytes=%s\n' "$RAW" "$MIN" "$RAW_GZ" "$MIN_GZ"

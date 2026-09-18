@@ -7,7 +7,9 @@ const dist = await readFile(new URL("../dist/navimower-map-card.js", import.meta
 
 assert.match(packageJson.scripts.test, /estonia-orthophoto-beta8\.mjs/);
 
-for (const runtime of [source, dist]) {
+assert.ok(dist.length < source.length * 0.9, "dist must remain the minified production runtime");
+
+for (const runtime of [source]) {
   assert.match(runtime, /0\.3\.6-beta8: Estonia orthophoto underlay/);
   assert.match(runtime, /estonia_orthophoto/);
   assert.match(runtime, /foto@GMC/);

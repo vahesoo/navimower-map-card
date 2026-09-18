@@ -10,7 +10,7 @@ const prepareRelease = pkg.scripts["prepare-release"] || "";
 assert.equal(
   prepareRelease,
   "node scripts/sync-version.mjs && node scripts/build.mjs",
-  "release preparation must only synchronize the version and build the committed single-file runtime",
+  "release preparation must only synchronize the version and build the optimized single-file runtime",
 );
 assert.doesNotMatch(
   prepareRelease,
@@ -26,7 +26,9 @@ assert.ok(notesText.includes(pkg.version), "release notes must name the package 
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
 assert.ok(source.includes(`var NAVIMOWER_MAP_CARD_VERSION2 = "${pkg.version}";`), "runtime version must match package.json");
-assert.equal(dist, source, "dist must be the committed build copy of src");
+assert.ok(Buffer.byteLength(dist) < Buffer.byteLength(source), "optimized dist must be smaller than source");
+assert.ok(dist.includes(pkg.version), "optimized dist must contain the package version");
+assert.ok(dist.includes(`[Navimower Map Card] v${pkg.version} loaded`), "optimized dist must retain the current startup version message");
 
 const startupVersionLogs = [...source.matchAll(/console\.info\(\s*["'`]\[Navimower Map Card\]\s+v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?[^"'\`\r\n]*["'`]\s*,?\s*\);/g)];
 assert.equal(startupVersionLogs.length, 1, "runtime must expose exactly one informational version startup log");

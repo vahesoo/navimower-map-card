@@ -3,10 +3,8 @@ import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const source = readFileSync("src/navimower-map-card.js", "utf8");
-const dist = readFileSync("dist/navimower-map-card.js", "utf8");
 const notes = readFileSync(".github/release-notes/0.3.6-beta16.md", "utf8");
 
-assert.equal(dist, source, "dist must remain the deterministic single-file build");
 assert.ok(notes.startsWith("title: Navimower Map Card 0.3.6-beta16\n"));
 
 const prepareRelease = pkg.scripts["prepare-release"] || "";

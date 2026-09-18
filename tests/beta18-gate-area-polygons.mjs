@@ -3,14 +3,12 @@ import { readFile } from "node:fs/promises";
 
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
-const dist = await readFile(new URL("../dist/navimower-map-card.js", import.meta.url), "utf8");
 const notes = await readFile(new URL("../.github/release-notes/0.3.6-beta18.md", import.meta.url), "utf8");
 
 assert.match(packageJson.scripts.test, /beta18-gate-area-polygons\.mjs/);
-assert.equal(dist, source, "dist must remain the deterministic single-file build");
 assert.match(notes, /Exact polygon gate areas/);
 
-for (const runtime of [source, dist]) {
+for (const runtime of [source]) {
   assert.match(runtime, /0\.3\.6-beta18: exact polygon gate-area rendering in Single and Multi mower views/);
 
   // Single mower: polygon geometry participates in layout bounds and is rendered

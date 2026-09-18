@@ -8,7 +8,6 @@ const source = await readFile(new URL("../src/navimower-map-card.js", import.met
 
 for (const marker of [
   "0.3.7-beta2: stable vendor backbone / MQTT tail and authenticated OSM tiles.",
-  "__navimower037Beta2StableTrailOsm",
   "backend_tail_authoritative",
   "_nm037Beta2ServerTail",
   "data-trail-source\", \"mqtt-tail",

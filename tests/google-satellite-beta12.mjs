@@ -3,11 +3,10 @@ import { readFile } from "node:fs/promises";
 
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
-const dist = await readFile(new URL("../dist/navimower-map-card.js", import.meta.url), "utf8");
 
 assert.match(packageJson.scripts.test, /google-satellite-beta12\.mjs/);
 
-for (const runtime of [source, dist]) {
+for (const runtime of [source]) {
   assert.match(runtime, /0\.3\.6-beta12: Google Satellite sharpness and provider-frame normalization/);
   assert.match(runtime, /const centerLat = \(bounds\.north \+ bounds\.south\) \/ 2/);
   assert.match(runtime, /const centerLon = \(bounds\.east \+ bounds\.west\) \/ 2/);

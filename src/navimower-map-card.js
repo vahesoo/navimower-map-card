@@ -8802,6 +8802,36 @@ if (globalThis.customElements) patchCustomAreas0342();
 })();
 
 
+const VISUAL_DEFAULTS = Object.freeze({
+  map_background_color: "#ffffff",
+  map_legend_opacity: 0.10,
+  zone_label_font_size: 20,
+  zone_label_opacity: 0.75,
+  zone_fill_color: "#81c784",
+  zone_fill_opacity: 0.20,
+  zone_stroke_color: "#43a047",
+  trail_color: "#43a047",
+  trail_opacity: 0.50,
+  off_limit_color: "#FF5A00",
+  vf_off_color: "#2F80ED",
+  channel_color: "#808080",
+  gate_area_color: "#8e24aa",
+  dock_color: "#37474f",
+  custom_area_color: "#8e24aa",
+  custom_area_fill_opacity: 0.10,
+  mower_scale: 1.2,
+  dock_scale: 1.1,
+  zone_marker_scale: 1.1,
+  zone_stroke_width: 1.5,
+  off_limit_stroke_width: 1.5,
+  vf_off_stroke_width: 1.5,
+  channel_stroke_width: 1.5,
+  gate_area_stroke_width: 1.5,
+  dock_stroke_width: 1.5,
+  custom_area_stroke_width: 1.5,
+});
+
+
 // 0.3.5-beta10: organized editor groups and configurable header buttons.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
@@ -8854,7 +8884,10 @@ if (globalThis.customElements) patchCustomAreas0342();
   const previousSetConfig = proto.setConfig;
   if (typeof previousSetConfig === "function") {
     proto.setConfig = function beta10SetConfig(config) {
-      const next = { ...config };
+      const next = { ...(config || {}) };
+      for (const [key, value] of Object.entries(VISUAL_DEFAULTS)) {
+        if (next[key] === undefined || next[key] === null || next[key] === "") next[key] = value;
+      }
       for (const key of BUTTON_FIELDS) {
         if (next[key] === undefined) next[key] = true;
       }
@@ -9251,35 +9284,6 @@ if (globalThis.customElements) patchCustomAreas0342();
   if (!Card || Card.__navimower035Beta12VisualDefaults) return;
   Card.__navimower035Beta12VisualDefaults = true;
 
-  const VISUAL_DEFAULTS = Object.freeze({
-    map_background_color: "#ffffff",
-    map_legend_opacity: 0.10,
-    zone_label_font_size: 20,
-    zone_label_opacity: 0.75,
-    zone_fill_color: "#81c784",
-    zone_fill_opacity: 0.20,
-    zone_stroke_color: "#43a047",
-    trail_color: "#43a047",
-    trail_opacity: 0.50,
-    off_limit_color: "#FF5A00",
-    vf_off_color: "#2F80ED",
-    channel_color: "#808080",
-    gate_area_color: "#8e24aa",
-    dock_color: "#37474f",
-    custom_area_color: "#8e24aa",
-    custom_area_fill_opacity: 0.10,
-    mower_scale: 1.2,
-    dock_scale: 1.1,
-    zone_marker_scale: 1.1,
-    zone_stroke_width: 1.5,
-    off_limit_stroke_width: 1.5,
-    vf_off_stroke_width: 1.5,
-    channel_stroke_width: 1.5,
-    gate_area_stroke_width: 1.5,
-    dock_stroke_width: 1.5,
-    custom_area_stroke_width: 1.5,
-  });
-
   const COLOR_FIELDS = new Set([
     "map_background_color",
     "zone_fill_color",
@@ -9378,16 +9382,6 @@ if (globalThis.customElements) patchCustomAreas0342();
   }
 
   const proto = Card.prototype;
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta12SetConfig(config) {
-      const next = { ...(config || {}) };
-      for (const [key, value] of Object.entries(VISUAL_DEFAULTS)) {
-        if (next[key] === undefined || next[key] === null || next[key] === "") next[key] = value;
-      }
-      return previousSetConfig.call(this, next);
-    };
-  }
 
   function finiteWidth(value, fallback = 1.5) {
     const parsed = Number(value);

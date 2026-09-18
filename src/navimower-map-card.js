@@ -3124,25 +3124,11 @@ function scheduleSaveSucceeded(card) {
 var SESSION_RENDER_CACHE = /* @__PURE__ */ new Map();
 var LIGHTWEIGHT_MAP_CACHE = /* @__PURE__ */ new Map();
 var LATEST_LIGHTWEIGHT_MAP_CACHE = /* @__PURE__ */ new Map();
-var MAP_CACHE_LIMIT2 = 10;
-var MAP_CACHE_FRESH_MS2 = 45e3;
 var INDEX_CACHE_FRESH_MS = 3e4;
 var MAX_HISTORY_DAYS = 31;
 function finite(value, fallback = null) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
-}
-function clamp2(value, minimum, maximum) {
-  return Math.min(maximum, Math.max(minimum, value));
-}
-function cacheSet2(cache, key, value, limit = MAP_CACHE_LIMIT2) {
-  if (!key) return;
-  cache.delete(key);
-  cache.set(key, value);
-  while (cache.size > limit) cache.delete(cache.keys().next().value);
-}
-function escapeHtml2(value) {
-  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 function asDate(value) {
   if (!value) return null;
@@ -3237,18 +3223,18 @@ function archiveSvg(render, layout, color, opacity, id) {
   if (!validArchive(render)) return "";
   const matrix = layoutMatrix(layout);
   if (!matrix) return "";
-  const safeColor = escapeHtml2(color || "#43a047");
-  const safeId = escapeHtml2(id);
-  const safeOpacity = clamp2(finite(opacity, 0.55), 0, 1).toFixed(2);
+  const safeColor = escapeHtml(color || "#43a047");
+  const safeId = escapeHtml(id);
+  const safeOpacity = clamp(finite(opacity, 0.55), 0, 1).toFixed(2);
   const areaPath = String(render?.mowed_area?.path_d || "").trim();
   const travelPath = String(render?.travel?.path_d || "").trim();
   const travelWidth = Math.max(0.02, finite(render?.travel?.stroke_width_m, 0.08));
   const parts = [];
   if (areaPath) {
-    parts.push(`<path class="nm-session-area" d="${escapeHtml2(areaPath)}" fill="${safeColor}" fill-rule="evenodd" clip-rule="evenodd"/>`);
+    parts.push(`<path class="nm-session-area" d="${escapeHtml(areaPath)}" fill="${safeColor}" fill-rule="evenodd" clip-rule="evenodd"/>`);
   }
   if (travelPath) {
-    parts.push(`<path class="nm-session-travel" d="${escapeHtml2(travelPath)}" fill="none" stroke="${safeColor}" stroke-width="${travelWidth}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    parts.push(`<path class="nm-session-travel" d="${escapeHtml(travelPath)}" fill="none" stroke="${safeColor}" stroke-width="${travelWidth}" stroke-linecap="round" stroke-linejoin="round"/>`);
   }
   return `<g class="nm-session-archive" data-session-id="${safeId}" opacity="${safeOpacity}" transform="${matrix.value}">${parts.join("")}</g>`;
 }
@@ -3522,7 +3508,7 @@ function patchCard() {
         sessions: true,
         message: true
       });
-      if (Date.now() - Number(cached.cachedAt || 0) < MAP_CACHE_FRESH_MS2) return;
+      if (Date.now() - Number(cached.cachedAt || 0) < MAP_CACHE_FRESH_MS) return;
     } else {
       const latest = LATEST_LIGHTWEIGHT_MAP_CACHE.get(stripQuery(apiPath));
       if (latest?.payload) {
@@ -3547,8 +3533,8 @@ function patchCard() {
       const payload = await this._hass.callApi("GET", apiCallPath(apiPath));
       const clean = sanitizeMapPayload(payload || {});
       const cachedAt = Date.now();
-      cacheSet2(LIGHTWEIGHT_MAP_CACHE, key, { payload: clean, cachedAt });
-      cacheSet2(LATEST_LIGHTWEIGHT_MAP_CACHE, stripQuery(apiPath), { payload: clean, cachedAt, key });
+      cacheSet(LIGHTWEIGHT_MAP_CACHE, key, { payload: clean, cachedAt });
+      cacheSet(LATEST_LIGHTWEIGHT_MAP_CACHE, stripQuery(apiPath), { payload: clean, cachedAt, key });
       this._applyMapPayload(clean, attrs, key);
     } catch (error) {
       this._loadError = `Map load failed: ${error?.message || error}`;
@@ -3689,7 +3675,7 @@ function patchCard() {
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
     this._highlightEl.innerHTML = "";
     this._sessionsEl?.querySelectorAll(".nm-session-pulsing").forEach((item) => item.classList.remove("nm-session-pulsing"));
-    const color = escapeHtml2(this._config.trail_color);
+    const color = escapeHtml(this._config.trail_color);
     const svg = archiveSvg(render, this._layout, this._config.trail_color, 1, session.id);
     this._highlightEl.innerHTML = svg;
     const button = [...this._sessionsEl?.querySelectorAll(".nm-session[data-session-id]") || []].find((item) => String(item.dataset.sessionId) === String(requestedId));
@@ -3720,7 +3706,7 @@ function patchCard() {
       const value = offset === 0 ? "today" : String(offset);
       const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
       const active = offset === 0 ? selected === null : Number(selected) === offset;
-      return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${value}">${escapeHtml2(label)}</button>`;
+      return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${value}">${escapeHtml(label)}</button>`;
     }).join("");
   };
   proto._renderSessions = function patchedRenderSessions() {
@@ -3746,11 +3732,11 @@ function patchCard() {
       const start = asDate(session.started_at);
       const end = asDate(session.ended_at);
       const label = this._formatSessionTime(start, end, session.active, now);
-      const opacity = clamp2(finite(this._config.trail_opacity, 0.55), 0, 1);
+      const opacity = clamp(finite(this._config.trail_opacity, 0.55), 0, 1);
       const loading = !session.active && this._v030RenderLoading.has(String(session.id));
       const disabled = session.drawable ? "" : " disabled";
       const title = session.drawable ? session.active ? "Pulse this active session route on the map" : "Pulse this completed mowed area on the map" : loading ? "Preparing completed mowed area…" : "Completed mowed area is not available yet";
-      return `<button type="button" class="nm-session" data-session-id="${escapeHtml2(String(session.id))}" title="${escapeHtml2(title)}" aria-label="${escapeHtml2(label)}. ${escapeHtml2(title)}."${disabled}><span class="nm-session-dot" style="background:${escapeHtml2(this._config.trail_color)};opacity:${opacity.toFixed(2)}"></span><span>${escapeHtml2(label)}</span></button>`;
+      return `<button type="button" class="nm-session" data-session-id="${escapeHtml(String(session.id))}" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}. ${escapeHtml(title)}."${disabled}><span class="nm-session-dot" style="background:${escapeHtml(this._config.trail_color)};opacity:${opacity.toFixed(2)}"></span><span>${escapeHtml(label)}</span></button>`;
     }).join("");
     this._sessionsEl.style.display = "flex";
   };
@@ -5503,7 +5489,7 @@ node.splice(mowerIndex, 0, iconField);
       const value = offset === 0 ? "today" : String(offset);
       const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
       const active = offset === 0 ? selected === null : Number(selected) === offset;
-      return "<button type=\"button\" class=\"nm-history-choice" + (active ? " active" : "") + "\" data-history-offset=\"" + value + "\">" + escapeHtml2(label) + "</button>";
+      return "<button type=\"button\" class=\"nm-history-choice" + (active ? " active" : "") + "\" data-history-offset=\"" + value + "\">" + escapeHtml(label) + "</button>";
     }).join("");
   };
 

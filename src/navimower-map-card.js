@@ -226,6 +226,13 @@ var LABELS = Object.freeze({
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
+function defaultGridOptions() {
+  return {
+    columns: "full",
+    min_columns: 3,
+    min_rows: 5
+  };
+}
 function finiteNumber(value, fallback = null) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -557,12 +564,7 @@ var NavimowerMapCard = class extends HTMLElement {
     return this._config?.show_session_legend === false ? 7 : 8;
   }
   getGridOptions() {
-    return {
-      rows: 8,
-      columns: 6,
-      min_rows: 5,
-      min_columns: 3
-    };
+    return defaultGridOptions();
   }
   connectedCallback() {
     this._connected = true;

@@ -9,7 +9,7 @@ const prototypeAssignments = [...source.matchAll(/(?:Card\.prototype|proto(?:\w+
 const overrides = new Map();
 for (const match of prototypeAssignments) overrides.set(match[1], (overrides.get(match[1]) || 0) + 1);
 
-assert.ok(Buffer.byteLength(source) <= 840_000, "runtime must not grow beyond the beta9 consolidation baseline");
+assert.ok(Buffer.byteLength(source) <= 830_000, "runtime must not grow beyond the beta9 consolidation baseline");
 const allowedMarkers = new Set([
   "__navimowerConsolidatedRuntime",
   "__navimowerRuntimeCard",
@@ -23,11 +23,12 @@ assert.deepEqual(
   [],
   "historical per-patch runtime guards must not return",
 );
-assert.ok(patchIifes <= 54, "historical patch-IIFE count must only move downward during consolidation");
-assert.ok(prototypeAssignments.length <= 200, "prototype wrapper count must only move downward during consolidation");
+assert.ok(patchIifes <= 53, "historical patch-IIFE count must only move downward during consolidation");
+assert.ok(prototypeAssignments.length <= 194, "prototype wrapper count must only move downward during consolidation");
 assert.ok((overrides.get("setConfig") || 0) <= 22, "setConfig wrapper depth must not increase");
-assert.ok((overrides.get("_ensureDom") || 0) <= 17, "_ensureDom wrapper depth must not increase");
+assert.ok((overrides.get("_ensureDom") || 0) <= 15, "_ensureDom wrapper depth must not increase");
 assert.ok((overrides.get("_renderDialog") || 0) <= 13, "_renderDialog wrapper depth must not increase");
+assert.ok((overrides.get("_applyMapPayload") || 0) <= 6, "_applyMapPayload wrapper depth must not increase");
 
 assert.doesNotMatch(source, /var NAVIMOWER_MAP_CARD_VERSION = "0\.2\.2";/, "legacy core version constant must not return");
 assert.doesNotMatch(source, /%c NAVIMOWER-MAP-CARD %c v\$\{/, "legacy styled version banners must not return");

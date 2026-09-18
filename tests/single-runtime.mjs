@@ -30,7 +30,7 @@ assert.equal(hacs.filename, "navimower-map-card.js");
 const build = readFileSync("scripts/build.mjs", "utf8");
 assert.match(build, /sourceJs\.length\s*!==\s*1/);
 assert.match(build, /await\s+rm\(distDir/);
-assert.match(build, /terser@\\$\\{TERSER_VERSION\\}/);
+assert.match(build, /terser@\$\{TERSER_VERSION\}/);
 assert.match(build, /--compress/);
 assert.match(build, /--mangle/);
 assert.doesNotMatch(build, /CHANGELOG|README|package\.json|beta\d/i, "build must not mutate metadata or depend on a beta number");

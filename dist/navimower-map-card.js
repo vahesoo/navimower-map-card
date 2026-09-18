@@ -11944,6 +11944,7 @@ if (globalThis.customElements) patchCustomAreas0342();
       if (next.osm_underlay_opacity === undefined) next.osm_underlay_opacity = DEFAULT_OPACITY;
       const result = previousSetConfig.call(this, next);
       queueMicrotask(() => syncCard(this));
+      queueMicrotask(() => this._syncOsmUnderlay036?.());
       return result;
     };
   }
@@ -12040,24 +12041,6 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 })();
 
-
-// 0.3.6-beta7: OSM Multi visibility and ready-state sync.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || Card.__navimower036Beta7Osm) return;
-  Card.__navimower036Beta7Osm = true;
-
-  const proto = Card.prototype;
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta7OsmSetConfig(config) {
-      const result = previousSetConfig.call(this, config);
-      queueMicrotask(() => this._syncOsmUnderlay036?.());
-      return result;
-    };
-  }
-
-})();
 
 
 // 0.3.6-beta8: Estonia orthophoto underlay.

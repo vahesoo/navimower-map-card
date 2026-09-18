@@ -8,8 +8,12 @@ let source = readFileSync("src/navimower-map-card.js", "utf8");
 assert.ok(!source.includes("MAX_TAIL_DISTANCE_M"));
 assert.ok(!source.includes("mqtt-live-tail-short"));
 source = source.replace(/^export\s*\{[^}]*\};?/m, "");
-source = source.replace('  console.info("[Navimower Map Card] 0.3.6-beta1 opt-in multi-mower site view enabled");',
-  '  globalThis.multiTest = {renderMultiMap036, memberState036, refreshMemberMap036, refreshMemberCurrentCycle036};');
+const multiTestAnchor = '  proto._beta8RefreshMultiRender = function() { if (multiActive036(this)) renderMultiMap036(this, true); };';
+assert.ok(source.includes(multiTestAnchor), "multi-mower beta8 test hook anchor missing");
+source = source.replace(
+  multiTestAnchor,
+  multiTestAnchor + '\n  globalThis.multiTest = {renderMultiMap036, memberState036, refreshMemberMap036, refreshMemberCurrentCycle036};',
+);
 const registry = new Map();
 const idle = [];
 const context = vm.createContext({

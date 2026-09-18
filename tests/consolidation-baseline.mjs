@@ -1,0 +1,24 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const source = readFileSync("src/navimower-map-card.js", "utf8");
+const infoLogs = source.match(/console\.info\(/g) || [];
+const sourceSections = source.match(/^\/\/ src\//gm) || [];
+const patchMarkers = new Set([...source.matchAll(/__navimower[0-9A-Za-z_]+/g)].map((match) => match[0]));
+const iifes = source.match(/\(\(\)\s*=>\s*\{/g) || [];
+
+assert.equal(infoLogs.length, 1, "production runtime must expose exactly one informational startup log");
+assert.match(source, /console\.info\("\[Navimower Map Card\] v0\.3\.7-beta9 loaded"\);/);
+assert.ok(!source.includes('NAVIMOWER_MAP_CARD_VERSION = "0.2.2"'), "legacy core version marker must stay removed");
+
+// Temporary upper bounds for the consolidation branch. Tighten these as patches
+// are folded into the canonical implementation. They prevent accidental growth
+// while preserving the beta9 behavior baseline during the refactor.
+assert.ok(source.length <= 834355, `runtime grew during consolidation: ${source.length} chars`);
+assert.ok(sourceSections.length <= 12, `source section count grew: ${sourceSections.length}`);
+assert.ok(patchMarkers.size <= 47, `runtime patch marker count grew: ${patchMarkers.size}`);
+assert.ok(iifes.length <= 54, `runtime patch IIFE count grew: ${iifes.length}`);
+
+console.log(
+  `Consolidation baseline: ${source.length} chars, ${sourceSections.length} sections, ${patchMarkers.size} patch markers, ${iifes.length} IIFEs`,
+);

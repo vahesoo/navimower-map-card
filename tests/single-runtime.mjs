@@ -12,7 +12,7 @@ for (const root of ["src", "dist"]) {
 }
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
-assert.equal(dist, source, "dist must remain an exact build copy of src");
+assert.ok(Buffer.byteLength(dist) < Buffer.byteLength(source), "dist must be an optimized form of src");\nassert.ok(dist.includes(pkg.version), "optimized dist must retain the package version");
 assert.ok(source.includes(`var NAVIMOWER_MAP_CARD_VERSION2 = "${pkg.version}";`), "runtime version must match package.json");
 assert.match(source, /0\.3\.4-beta5: scheduler overview and configurable settings dialog/);
 assert.match(source, /settings_entity_/);
@@ -34,7 +34,7 @@ assert.doesNotMatch(build, /CHANGELOG|README|package\.json|beta\d/i, "build must
 const guard = readFileSync("scripts/check-runtime-layout.mjs", "utf8");
 assert.match(guard, /src must contain exactly one runtime JavaScript file/);
 assert.match(guard, /dist must contain exactly one runtime JavaScript file/);
-assert.match(guard, /byte|exact build copy/i);
+assert.match(guard, /smaller than the readable source/i);
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 assert.match(contributing, /exactly one runtime JavaScript file/i);
 assert.match(contributing, /Do \*\*not\*\* add files such as/);

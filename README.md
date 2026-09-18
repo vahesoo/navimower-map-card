@@ -344,7 +344,7 @@ src/navimower-map-card.js
 dist/navimower-map-card.js
 ```
 
-`dist/navimower-map-card.js` is a deterministic byte-for-byte build copy of the source. The active release pipeline only synchronizes the package/runtime version and rebuilds that single file; historical beta upgrade scripts are not replayed to create a new release candidate.
+`src/navimower-map-card.js` is the readable cumulative source, while `dist/navimower-map-card.js` is the minified production build that HACS installs. The active release pipeline synchronizes the package/runtime version and rebuilds that single optimized file; historical beta upgrade scripts are not replayed to create a new release candidate.
 
 Run:
 

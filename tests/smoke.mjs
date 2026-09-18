@@ -12,11 +12,14 @@ globalThis.Event = class {
   constructor(type, options = {}) { this.type = type; Object.assign(this, options); }
 };
 
-await import("../src/navimower-map-card.js");
-const sourceText = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
+const runtimeRoot = process.argv[2] === "dist" ? "dist" : "src";
+const runtimeUrl = new URL(`../${runtimeRoot}/navimower-map-card.js`, import.meta.url);
+await import(runtimeUrl.href);
+const sourceText = await readFile(runtimeUrl, "utf8");
 const Card = customElements.get("navimower-map-card");
 
-assert.ok(sourceText.includes("NAVIMOWER_MAP_CARD_VERSION"));
+if (runtimeRoot === "src") assert.ok(sourceText.includes("NAVIMOWER_MAP_CARD_VERSION"));
+else assert.ok(sourceText.includes("[Navimower Map Card]"));
 assert.equal(typeof Card, "function");
 assert.equal(window.customCards.length, 1);
 assert.equal(window.customCards[0].type, "navimower-map-card");
@@ -313,15 +316,17 @@ returnCard._hass.states["sensor.return_x"] = { state: "5", attributes: {} };
 returnCard._updateLive(false);
 assert.deepEqual(returnCard._trail, [[4, 5], [4.5, 5]]);
 
-assert.ok(sourceText.includes("LATEST_MAP_PAYLOAD_CACHE"));
-assert.ok(sourceText.includes("daily_trails_revision"));
-assert.ok(sourceText.includes("recordTrail"));
-assert.ok(sourceText.includes("MAP_PAYLOAD_CACHE"));
-assert.ok(sourceText.includes("STATIC_MAP_CACHE"));
-assert.ok(sourceText.includes("CARD_TEMPLATE"));
-assert.ok(sourceText.includes("MOWER_TEMPLATE"));
-assert.ok(sourceText.includes('document.createElementNS("http://www.w3.org/2000/svg", "g")'));
-assert.ok(!sourceText.includes('MOWER_TEMPLATE = document.createElement("template")'));
-assert.ok(sourceText.includes("this._mowerGroup = MOWER_TEMPLATE.cloneNode(true)"));
+if (runtimeRoot === "src") {
+  assert.ok(sourceText.includes("LATEST_MAP_PAYLOAD_CACHE"));
+  assert.ok(sourceText.includes("daily_trails_revision"));
+  assert.ok(sourceText.includes("recordTrail"));
+  assert.ok(sourceText.includes("MAP_PAYLOAD_CACHE"));
+  assert.ok(sourceText.includes("STATIC_MAP_CACHE"));
+  assert.ok(sourceText.includes("CARD_TEMPLATE"));
+  assert.ok(sourceText.includes("MOWER_TEMPLATE"));
+  assert.ok(sourceText.includes('document.createElementNS("http://www.w3.org/2000/svg", "g")'));
+  assert.ok(!sourceText.includes('MOWER_TEMPLATE = document.createElement("template")'));
+  assert.ok(sourceText.includes("this._mowerGroup = MOWER_TEMPLATE.cloneNode(true)"));
+}
 
-console.log("Navimower Map Card smoke tests passed");
+console.log(`Navimower Map Card ${runtimeRoot} smoke tests passed`);

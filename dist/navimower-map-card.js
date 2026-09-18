@@ -3901,12 +3901,6 @@ function patchCard2() {
     return extendConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalSetConfig = proto.setConfig;
-  if (typeof originalSetConfig === "function") {
-    proto.setConfig = function outlinedSetConfig(config) {
-      return originalSetConfig.call(this, normalizeOutlineConfig(config));
-    };
-  }
   wrapOutlineRefresh(proto, "_ensureDom");
   wrapOutlineRefresh(proto, "_renderStatic");
   wrapOutlineRefresh(proto, "_applyStaticLayers");
@@ -4052,12 +4046,6 @@ function patchCard3() {
     return extendZoneMarkerConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalSetConfig = proto.setConfig;
-  if (typeof originalSetConfig === "function") {
-    proto.setConfig = function zoneMarkerSetConfig(config) {
-      return originalSetConfig.call(this, normalizeZoneMarkerConfig(config));
-    };
-  }
   const originalStaticCacheKey = proto._staticCacheKey;
   if (typeof originalStaticCacheKey === "function") {
     proto._staticCacheKey = function zoneMarkerStaticCacheKey(...args) {
@@ -4914,12 +4902,6 @@ function patchCard7() {
     return extendNotificationConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalSetConfig = proto.setConfig;
-  if (typeof originalSetConfig === "function") {
-    proto.setConfig = function notificationActionSetConfig(config) {
-      return originalSetConfig.call(this, normalizeNotificationActionConfig(config));
-    };
-  }
   const originalEnsureDom = proto._ensureDom;
   if (typeof originalEnsureDom === "function") {
     proto._ensureDom = function notificationActionEnsureDom(...args) {
@@ -5325,12 +5307,6 @@ function patchCard8() {
     return extendCompactUiConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalSetConfig = proto.setConfig;
-  if (typeof originalSetConfig === "function") {
-    proto.setConfig = function compactUiSetConfig(config) {
-      return originalSetConfig.call(this, normalizeCompactUiConfig(config));
-    };
-  }
   const originalEnsureDom = proto._ensureDom;
   if (typeof originalEnsureDom === "function") {
     proto._ensureDom = function compactUiEnsureDom(...args) {
@@ -5710,7 +5686,14 @@ function patchCard9() {
   if (typeof originalSetConfig === "function") {
     proto.setConfig = function beta4SetConfig(config) {
       const normalized = normalizeBeta4Config(config);
-      const result = originalSetConfig.call(this, normalized);
+      const prepared = normalizeOutlineConfig(
+        normalizeZoneMarkerConfig(
+          normalizeNotificationActionConfig(
+            normalizeCompactUiConfig(normalized)
+          )
+        )
+      );
+      const result = originalSetConfig.call(this, prepared);
       if (this._config) {
         this._config.notification_count = normalized.notification_count;
         delete this._config.notification_page_size;

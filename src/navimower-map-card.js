@@ -6382,10 +6382,10 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 
 // 0.3.4-beta5: scheduler overview and configurable settings dialog.
-if (__navimowerRuntimeCard && !__navimowerRuntimeAlreadyApplied) {
-const Card=__navimowerRuntimeCard;
-{
-const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   const slots = Array.from({ length: 12 }, (_, index) => `settings_entity_${index + 1}`);
   const originalStub = Card.getStubConfig?.bind(Card);
   Card.getStubConfig = () => ({ ...(originalStub?.() || {}), ...Object.fromEntries(slots.map((key) => [key, null])) });
@@ -6491,13 +6491,12 @@ const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("
   };
   const originalHass = Object.getOwnPropertyDescriptor(proto, "hass");
   if (originalHass?.set) Object.defineProperty(proto, "hass", { configurable: true, get: originalHass.get, set(value) { originalHass.set.call(this, value); ensureUi(this); if (this._beta5ManagedScheduleOpen) renderManaged(this); if (this._beta5SettingsOpen) renderSettings(this); } });
-}
-
+})();
 
 
 // 0.3.4-beta6: schedule source selection, custom queue editing and inline settings controls.
-{
-const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+(() => {
+  const Card=globalThis.customElements?.get?.('navimower-map-card'); if (!Card || __navimowerRuntimeAlreadyApplied) return; const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
   const proto=Card.prototype; const slots=Array.from({length:12},(_,i)=>`settings_entity_${i+1}`);
   const oldStub=Card.getStubConfig?.bind(Card); Card.getStubConfig=()=>({...oldStub?.(),schedule_view_mode:'auto'});
   const oldForm=Card.getConfigForm?.bind(Card); Card.getConfigForm=()=>{const f=oldForm?.()||{schema:[]};const schema=[...(f.schema||[])];schema.push({type:'expandable',name:'schedule_view',title:'Schedule button',flatten:true,schema:[{name:'schedule_view_mode',selector:{select:{options:[{value:'auto',label:'Automatic'},{value:'navimower',label:'Navimower'},{value:'native',label:'Native'}]}}}]});const label=f.computeLabel;return{...f,schema,computeLabel:i=>i?.name==='schedule_view_mode'?'Schedule view':label?.(i)||i?.name||''};};
@@ -6514,13 +6513,14 @@ const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replac
   const oldOpen=proto._openScheduleDialog;proto._openScheduleDialog=async function(...a){const ids=await discover(this);const mode=this._config?.schedule_view_mode||'auto';const managedOn=state(this,ids.managedSwitch)?.state==='on';this._beta6SettingsOpen=false;if(mode==='navimower'||(mode==='auto'&&managedOn&&ids.status)){this._beta5ManagedScheduleOpen=false;this._scheduleDialogOpen=false;this._mowDialogOpen=false;this._beta6ManagedOpen=true;this._renderDialog();return;}this._beta6ManagedOpen=false;return oldOpen?.apply(this,a);};
   const oldHass=Object.getOwnPropertyDescriptor(proto,'hass');if(oldHass?.set)Object.defineProperty(proto,'hass',{configurable:true,get:oldHass.get,set(v){oldHass.set.call(this,v);if(this._beta6SettingsOpen)renderSettings(this);if(this._beta6ManagedOpen)renderManaged(this);}});
   const oldEnsure2=proto._ensureDom;proto._ensureDom=function(...a){const r=oldEnsure2?.apply(this,a);const gear=this.querySelector?.('.nm-settings-button');if(gear&&!gear.__beta6){gear.__beta6=true;gear.addEventListener('click',()=>{this._beta5SettingsOpen=false;this._beta6ManagedOpen=false;this._beta6SettingsOpen=true;this._renderDialog();},{capture:true});}return r;};
-}
-
+})();
 
 
 // 0.3.4-beta8: native Home Assistant Settings rows and single-dialog flow.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const slots = Array.from({ length: 12 }, (_, index) => "settings_entity_" + (index + 1));
 
   function updateNativeRows(card, root) {
@@ -6672,13 +6672,15 @@ const proto = Card.prototype;
     }
     return result;
   };
-}
 
+})();
 
 
 // 0.3.4-beta9: current-cycle live history label.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const previousRenderHistoryBar = proto._renderHistoryBar;
   proto._renderHistoryBar = function (...args) {
     const result = previousRenderHistoryBar?.apply(this, args);
@@ -6692,13 +6694,15 @@ const proto = Card.prototype;
     }
     return result;
   };
-}
 
+})();
 
 
 // 0.3.4-beta10: resilient Navimower scheduler discovery.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const CACHE_TTL_MS = 30000;
 
   const state = (card, entityId) => entityId ? card?._hass?.states?.[entityId] : null;
@@ -6945,13 +6949,15 @@ const proto = Card.prototype;
     this._beta6ManagedOpen = false;
     return previousOpenSchedule?.apply(this, args);
   };
-}
 
+})();
 
 
 // 0.3.4-beta11: responsive managed scheduler editor.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const SAVE_DEBOUNCE_MS = 750;
   const SAVED_FEEDBACK_MS = 1000;
 
@@ -7347,13 +7353,15 @@ const proto = Card.prototype;
       },
     });
   }
-}
 
+})();
 
 
 // 0.3.5-beta2: lazy persistent scheduler runtime.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const REGISTRY_FALLBACK_DELAY_MS = 250;
   const SAVE_DEBOUNCE_MS = 750;
   const SAVED_FEEDBACK_MS = 1000;
@@ -7920,13 +7928,15 @@ const proto = Card.prototype;
     return missingZones(this, attrs);
   };
   proto._beta2ScheduleSaveDraft = function () { return saveDraft(this); };
-}
 
+})();
 
 
 // 0.3.5-beta3: mobile scheduler scope and interaction fixes.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const emptySchedulerIds = () => ({
     status: null,
     managedSwitch: null,
@@ -8266,13 +8276,15 @@ const proto = Card.prototype;
     }));
     return dragTargetIndex(clientY, rows, rows[movingIndex]);
   };
-}
 
+})();
 
 
 // 0.3.5-beta4: flattened hot-path and phased visual render pipeline.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
 
   const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
 
@@ -8445,13 +8457,15 @@ const proto = Card.prototype;
 
   // Exposed only for deterministic regression tests and diagnostics.
   proto._performanceRenderPhases035 = () => PHASES.map((phase) => [...phase]);
-}
 
+})();
 
 
 // 0.3.5-beta5: resilient mower artwork visibility.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const previousRenderMower = proto._renderMower;
 
   const mowerEntityState = (card) => {
@@ -8512,14 +8526,16 @@ const proto = Card.prototype;
       resolved: this._mowerModelResolved032 === true,
     };
   };
-}
 
+})();
 
 
 // 0.3.5-beta6: polished visual editor appearance layout.
-{
-const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm === "function") {
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const previousGetConfigForm = Card.getConfigForm;
+  if (typeof previousGetConfigForm !== "function") return;
 
   const CUSTOM_FIELDS = [
     "show_custom_areas",
@@ -8651,15 +8667,16 @@ const previousGetConfigForm = Card.getConfigForm;
 
     return form;
   };
-}
-}
 
+})();
 
 
 // 0.3.5-beta7: non-overlapping color labels in the visual editor.
-{
-const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm === "function") {
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const previousGetConfigForm = Card.getConfigForm;
+  if (typeof previousGetConfigForm !== "function") return;
 
   const SWATCH_LABELS = {
     custom_area_color: "Custom area",
@@ -8711,15 +8728,16 @@ const previousGetConfigForm = Card.getConfigForm;
 
     return form;
   };
-}
-}
 
+})();
 
 
 // 0.3.5-beta8: native-only color labels in the visual editor.
-{
-const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm === "function") {
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const previousGetConfigForm = Card.getConfigForm;
+  if (typeof previousGetConfigForm !== "function") return;
 
   const LABELS = {
     custom_area_color: "Custom area color",
@@ -8769,14 +8787,15 @@ const previousGetConfigForm = Card.getConfigForm;
 
     return form;
   };
-}
-}
 
+})();
 
 
 // 0.3.5-beta9: backend-owned current-cycle mowed-area render.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
 
   const previousRenderHistory = proto._renderHistory;
   proto._renderHistory = function backendCurrentCycleHistory() {
@@ -8836,13 +8855,15 @@ const proto = Card.prototype;
     }
     return result;
   };
-}
 
+})();
 
 
 // 0.3.5-beta10: organized editor groups and configurable header buttons.
-{
-const BUTTON_FIELDS = [
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const BUTTON_FIELDS = [
     "show_history_button",
     "show_notifications_button",
     "show_schedule_button",
@@ -9082,13 +9103,15 @@ const BUTTON_FIELDS = [
     syncHeaderVisibility(this);
     return result;
   };
-}
 
+})();
 
 
 // 0.3.5-beta11: real color defaults, combined schedule state and mower error pulse.
-{
-const COLOR_DEFAULTS = {
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const COLOR_DEFAULTS = {
     zone_fill_color: "#81c784",
     zone_stroke_color: "#43a047",
     trail_color: "#43a047",
@@ -9257,13 +9280,15 @@ const COLOR_DEFAULTS = {
     syncMowerErrorPulse(this);
     return result;
   };
-}
 
+})();
 
 
 // 0.3.5-beta12: installation visual defaults and uniform stroke widths.
-{
-const VISUAL_DEFAULTS = Object.freeze({
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const VISUAL_DEFAULTS = Object.freeze({
     map_background_color: "#ffffff",
     map_legend_opacity: 0.10,
     zone_label_font_size: 20,
@@ -9474,13 +9499,15 @@ const VISUAL_DEFAULTS = Object.freeze({
       return result;
     };
   }
-}
 
+})();
 
 
 // 0.3.5-beta13: legend visibility follows map toggles and managed schedule gets an enable switch.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
 
   function hasCustomAreas(card) {
     const apiAreas = Array.isArray(card?._mapPayload?.custom_areas) ? card._mapPayload.custom_areas : [];
@@ -9609,13 +9636,15 @@ const proto = Card.prototype;
       },
     });
   }
-}
 
+})();
 
 
 // 0.3.5-beta14: consistent card-dialog backdrop closing and schedule header alignment.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
 
   function attachBackdropClose(root, closeSelector, markerName) {
     if (!root || root[markerName]) return;
@@ -9678,12 +9707,14 @@ const proto = Card.prototype;
       },
     });
   }
-}
 
+})();
 
 // 0.3.6-beta1: opt-in multi-mower site view.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const SITE_REFRESH_MS = 60_000;
   const MAP_REFRESH_ACTIVE_MS = 5_000;
@@ -11277,13 +11308,14 @@ const proto = Card.prototype;
   // 0.3.6-beta2: multi-mower field-test fixes.
   // 0.3.6-beta3: compact multi-mower metadata and labels.
   // 0.3.6-beta4: strict member schedule and clickable multi-zone labels.
-}
-
+})();
 
 
 // 0.3.6-beta5: optional OpenStreetMap underlay.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const EARTH_RADIUS_M = 6378137;
   const DEFAULT_OPACITY = 0.55;
@@ -11898,13 +11930,15 @@ const proto = Card.prototype;
       },
     });
   }
-}
 
+})();
 
 
 // 0.3.6-beta6: OSM Multi stability and editor visibility.
-{
-const previousForm = Card.getConfigForm?.bind(Card);
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const previousForm = Card.getConfigForm?.bind(Card);
   Card.getConfigForm = (...args) => {
     const form = previousForm?.(...args) || { schema: [] };
     if (!Array.isArray(form.schema)) return form;
@@ -11955,13 +11989,15 @@ const previousForm = Card.getConfigForm?.bind(Card);
       return result;
     };
   }
-}
 
+})();
 
 
 // 0.3.6-beta7: OSM Multi visibility and ready-state sync.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const previousSetConfig = proto.setConfig;
   if (typeof previousSetConfig === "function") {
     proto.setConfig = function beta7OsmSetConfig(config) {
@@ -11970,8 +12006,8 @@ const proto = Card.prototype;
       return result;
     };
   }
-}
 
+})();
 
 
 // 0.3.6-beta8: Estonia orthophoto underlay.
@@ -11981,8 +12017,10 @@ const proto = Card.prototype;
 
 
 // 0.3.6-beta10: zoom-aware Estonia orthophoto detail and WGS84 ellipsoid underlay geodesy.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const WGS84_A_M = 6378137.0;
   const WGS84_F = 1 / 298.257223563;
@@ -12311,13 +12349,15 @@ const proto = Card.prototype;
       return result;
     };
   }
-}
 
+})();
 
 
 // 0.3.6-beta11: unified map underlays, Estonia hybrid and Google Satellite.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const DEFAULT_OPACITY11 = 0.55;
   const DEFAULT_GOOGLE_ZOOM11 = 19;
   const MIN_GOOGLE_ZOOM11 = 15;
@@ -12631,8 +12671,8 @@ const proto = Card.prototype;
         : baseLabel?.(schema, data) || schema?.name || "";
     return form;
   };
-}
 
+})();
 
 
 // 0.3.6-beta12: Google Satellite sharpness and provider-frame normalization.
@@ -12642,8 +12682,10 @@ const proto = Card.prototype;
 
 
 // 0.3.6-beta14: manual underlay position and rotation calibration.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const OFFSET_MIN14 = -10;
   const OFFSET_MAX14 = 10;
   const ROTATION_MIN14 = -5;
@@ -12899,16 +12941,18 @@ const proto = Card.prototype;
           : baseLabel?.(schema, data) || schema?.name || "";
     return form;
   };
-}
 
+})();
 
 
 // 0.3.6-beta15: single-underlay metadata isolation and null-safe coordinates.
 
 
 // 0.3.6-beta16: prioritized phased loading and selective multi-mower updates.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const RETRY_MS = 30_000;
 
   const baseMapPath = (card) => {
@@ -13014,8 +13058,8 @@ const proto = Card.prototype;
     selectiveMowerUpdates: true,
     completeDaySessions: true,
   });
-}
 
+})();
 
 
 // 0.3.6-beta17: extended underlay offsets and stable multi-mower notification paging.
@@ -13025,8 +13069,10 @@ const proto = Card.prototype;
 
 
 // 0.3.6-beta19: visual gate-area polygon editor.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const MAX_POINTS = 64;
 
@@ -13841,16 +13887,18 @@ const proto = Card.prototype;
     if (this._gate19Editor) closeEditor19(this);
     return previousDisconnect19?.apply(this, args);
   };
-}
 
+})();
 
 // 0.3.6-beta20: edge-aware gate-area point insertion and geometry guard.
 
 // 0.3.6-beta21: unrestricted nearest-edge gate-area insertion.
 
 // 0.3.7-beta2: stable vendor backbone / MQTT tail and authenticated OSM tiles.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const MATCH_RADIUS_M = 1.0;
   const SPLIT_DISTANCE_SQ = 25;
   const OSM_FETCH_CONCURRENCY = 6;
@@ -14148,12 +14196,14 @@ const proto = Card.prototype;
       return result;
     };
   }
-}
 
+})();
 
 // 0.3.7-beta3: selectable LiDAR terrain overlay.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const DEFAULT_OPACITY = 0.65;
   const RETRY_MS = 15000;
@@ -14669,12 +14719,14 @@ const proto = Card.prototype;
     }
     return undefined;
   };
-}
 
+})();
 
 // 0.3.7-beta6: flicker-free incremental map refreshes.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
 
   const stableHash = (value) => {
     const text = String(value ?? "");
@@ -14887,12 +14939,14 @@ const proto = Card.prototype;
       return previousRenderTrail.apply(this, args);
     };
   }
-}
 
+})();
 
 // 0.3.7-beta7: accept deferred vendor renders by stable cycle identity.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const RETRY_MS = 10_000;
 
   const baseMapPath = (card) => {
@@ -15125,12 +15179,14 @@ const proto = Card.prototype;
     crossCycleRejected: true,
     oneDeferredRequestAtATime: true,
   });
-}
 
+})();
 
 // 0.3.7-beta8: shared, cycle-safe per-zone prepared SVG resources.
-{
-const proto = Card.prototype;
+(() => {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
+  const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const buckets = new WeakMap();
   let maskSequence = 0;
@@ -15503,9 +15559,7 @@ const proto = Card.prototype;
   proto._zoneArtifactDiagnostics = function() {
     return Array.from(this._nmBeta8Clients?.values?.() || [], (client) => ({ entry_id: client.entry, mode: client.mode, ...client.metrics, ready_zones: [...client.rows.values()].filter((row) => row.loaded).length }));
   };
-}
-}
-
+})();
 
 if (__navimowerRuntimeCard && !__navimowerRuntimeAlreadyApplied) {
   __navimowerRuntimeCard[__NAVIMOWER_RUNTIME_GUARD] = true;

@@ -14090,14 +14090,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     card?.removeAttribute?.("data-nm-vendor-trail-debug");
   };
 
-  const previousApplyMapPayload = proto._applyMapPayload;
-  if (typeof previousApplyMapPayload === "function") {
-    proto._applyMapPayload = function stableTrailApplyMapPayload(...args) {
-      const result = previousApplyMapPayload.apply(this, args);
-      clearBeta1DebugPresentation(this);
-      return result;
-    };
-  }
 
   const previousEnsureDom = proto._ensureDom;
   if (typeof previousEnsureDom === "function") {
@@ -14769,6 +14761,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     if (typeof previous !== "function") continue;
     proto[method] = function lidarTerrainRefresh(...args) {
       const result = previous.apply(this, args);
+      if (method === "_applyMapPayload") this?.removeAttribute?.("data-nm-vendor-trail-debug");
       scheduleTerrain(this, method === "_applyViewBox" ? 60 : 0);
       return result;
     };

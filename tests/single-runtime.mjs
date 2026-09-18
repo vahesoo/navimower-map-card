@@ -12,7 +12,8 @@ for (const root of ["src", "dist"]) {
 }
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
-assert.ok(Buffer.byteLength(dist) < Buffer.byteLength(source), "dist must be an optimized form of src");\nassert.ok(dist.includes(pkg.version), "optimized dist must retain the package version");
+assert.ok(Buffer.byteLength(dist) < Buffer.byteLength(source), "dist must be an optimized form of src");
+assert.ok(dist.includes(pkg.version), "optimized dist must retain the package version");
 assert.ok(source.includes(`var NAVIMOWER_MAP_CARD_VERSION2 = "${pkg.version}";`), "runtime version must match package.json");
 assert.match(source, /0\.3\.4-beta5: scheduler overview and configurable settings dialog/);
 assert.match(source, /settings_entity_/);
@@ -29,7 +30,9 @@ assert.equal(hacs.filename, "navimower-map-card.js");
 const build = readFileSync("scripts/build.mjs", "utf8");
 assert.match(build, /sourceJs\.length\s*!==\s*1/);
 assert.match(build, /await\s+rm\(distDir/);
-assert.match(build, /await\s+copyFile\(source,\s*target\)/);
+assert.match(build, /terser@\\$\\{TERSER_VERSION\\}/);
+assert.match(build, /--compress/);
+assert.match(build, /--mangle/);
 assert.doesNotMatch(build, /CHANGELOG|README|package\.json|beta\d/i, "build must not mutate metadata or depend on a beta number");
 const guard = readFileSync("scripts/check-runtime-layout.mjs", "utf8");
 assert.match(guard, /src must contain exactly one runtime JavaScript file/);

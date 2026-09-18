@@ -5993,41 +5993,6 @@ node.splice(mowerIndex, 0, iconField);
     return form;
   };
 
-  const originalSetConfig = proto.setConfig;
-  proto.setConfig = function beta032SetConfig(config) {
-    const incoming = { ...(config || {}) };
-    if (incoming.show_custom_areas === undefined) incoming.show_custom_areas = true;
-    if (incoming.custom_area_color === undefined) incoming.custom_area_color = incoming.gate_area_color || "#8e24aa";
-    if (incoming.custom_area_fill_opacity === undefined) incoming.custom_area_fill_opacity = 0.14;
-    if (incoming.custom_area_stroke_width === undefined) incoming.custom_area_stroke_width = 3;
-    incoming.history_days = historyDays032(incoming.history_days);
-    incoming.mower_icon = mowerIconConfig032(incoming.mower_icon);
-    const normalized = normalizeBeta4Config(incoming);
-    const prepared = normalizeOutlineConfig(
-      normalizeZoneMarkerConfig(
-        normalizeNotificationActionConfig(
-          normalizeCompactUiConfig(normalized)
-        )
-      )
-    );
-    const previousIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
-    const result = originalSetConfig.call(this, prepared);
-    const currentIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
-    if (!this._v030Renders || previousIdentity && previousIdentity !== currentIdentity) resetArchiveState(this);
-    if (this._config) {
-      this._config.notification_count = normalized.notification_count;
-      delete this._config.notification_page_size;
-    }
-    enforceTwoRowHeader(this);
-    if (this._historyDayOffset !== null && Number(this._historyDayOffset) >= this._config.history_days) {
-      this._historyDayOffset = null;
-      this._historyBarRenderKey = null;
-    }
-    this._mowerArtworkKey032 = null;
-    ensureMowerArtwork032(this);
-    return result;
-  };
-
   const originalEnsureDom = proto._ensureDom;
   proto._ensureDom = function beta032EnsureDom(...args) {
     const result = originalEnsureDom.apply(this, args);
@@ -8874,7 +8839,35 @@ const VISUAL_DEFAULTS = Object.freeze({
       }
       if (!this._beta5SchedulerEntities) this._beta5SchedulerEntities = {};
       if (!this._beta6SchedulerEntities) this._beta6SchedulerEntities = {};
-      const result = previousSetConfig.call(this, next);
+      if (next.show_custom_areas === undefined) next.show_custom_areas = true;
+      if (next.custom_area_color === undefined) next.custom_area_color = next.gate_area_color || "#8e24aa";
+      if (next.custom_area_fill_opacity === undefined) next.custom_area_fill_opacity = 0.14;
+      if (next.custom_area_stroke_width === undefined) next.custom_area_stroke_width = 3;
+      next.history_days = historyDays032(next.history_days);
+      next.mower_icon = mowerIconConfig032(next.mower_icon);
+      const normalized = normalizeBeta4Config(next);
+      const prepared = normalizeOutlineConfig(
+        normalizeZoneMarkerConfig(
+          normalizeNotificationActionConfig(
+            normalizeCompactUiConfig(normalized)
+          )
+        )
+      );
+      const previousIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
+      const result = previousSetConfig.call(this, prepared);
+      const currentIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
+      if (!this._v030Renders || previousIdentity && previousIdentity !== currentIdentity) resetArchiveState(this);
+      if (this._config) {
+        this._config.notification_count = normalized.notification_count;
+        delete this._config.notification_page_size;
+      }
+      enforceTwoRowHeader(this);
+      if (this._historyDayOffset !== null && Number(this._historyDayOffset) >= this._config.history_days) {
+        this._historyDayOffset = null;
+        this._historyBarRenderKey = null;
+      }
+      this._mowerArtworkKey032 = null;
+      ensureMowerArtwork032(this);
       this._beta10SchedulerEntities = null;
       this._beta10ScheduleDeviceId = null;
       this._beta6SchedulerEntities = null;

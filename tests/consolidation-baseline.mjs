@@ -10,6 +10,8 @@ const iifes = source.match(/\(\(\)\s*=>\s*\{/g) || [];
 assert.equal(infoLogs.length, 1, "production runtime must expose exactly one informational startup log");
 assert.match(source, /console\.info\("\[Navimower Map Card\] v0\.3\.7-beta9 loaded"\);/);
 assert.ok(!source.includes('NAVIMOWER_MAP_CARD_VERSION = "0.2.2"'), "legacy core version marker must stay removed");
+assert.match(source, /SCHEDULE_CLOSE_DELAY_MS = 2500/, "successful schedule save must retain the 2.5 s close delay");
+assert.match(source, /_v034sScheduleCloseTimer/, "schedule close timer cleanup must stay in the cumulative runtime");
 
 // Temporary upper bounds for the consolidation branch. Tighten these as patches
 // are folded into the canonical implementation. They prevent accidental growth

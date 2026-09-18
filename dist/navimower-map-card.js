@@ -3115,6 +3115,12 @@ if (!window.customCards.some((card) => card.type === "navimower-map-card")) {
 
 // src/navimower-map-card-v030.js
 var SESSION_INDEX_CACHE = /* @__PURE__ */ new Map();
+var SCHEDULE_CLOSE_DELAY_MS = 2500;
+function scheduleSaveSucceeded(card) {
+  const dirty = (card?._scheduleDraft || []).some((day) => day?._dirty || day?._saving);
+  const failed = Object.values(card?._scheduleStatus || {}).some((status) => status?.kind === "error");
+  return !dirty && !failed;
+}
 var SESSION_RENDER_CACHE = /* @__PURE__ */ new Map();
 var LIGHTWEIGHT_MAP_CACHE = /* @__PURE__ */ new Map();
 var LATEST_LIGHTWEIGHT_MAP_CACHE = /* @__PURE__ */ new Map();
@@ -3750,17 +3756,29 @@ function patchCard() {
   };
   const originalSaveAll = proto._saveAllScheduleChanges;
   proto._saveAllScheduleChanges = async function patchedSaveAllScheduleChanges(...args) {
+    if (this._v034sScheduleCloseTimer) {
+      clearTimeout(this._v034sScheduleCloseTimer);
+      this._v034sScheduleCloseTimer = null;
+    }
     const result = await originalSaveAll.apply(this, args);
-    const dirty = (this._scheduleDraft || []).some((day) => day?._dirty || day?._saving);
-    const failed = Object.values(this._scheduleStatus || {}).some((status) => status?.kind === "error");
-    if (!dirty && !failed) {
-      this._scheduleDialogOpen = false;
+    if (scheduleSaveSucceeded(this)) {
+      this._scheduleDialogOpen = true;
       this._renderDialog();
+      this._v034sScheduleCloseTimer = setTimeout(() => {
+        this._v034sScheduleCloseTimer = null;
+        if (!this._scheduleDialogOpen || !scheduleSaveSucceeded(this)) return;
+        this._scheduleDialogOpen = false;
+        this._renderDialog();
+      }, SCHEDULE_CLOSE_DELAY_MS);
     }
     return result;
   };
   const originalDisconnected = proto.disconnectedCallback;
   proto.disconnectedCallback = function patchedDisconnectedCallback() {
+    if (this._v034sScheduleCloseTimer) {
+      clearTimeout(this._v034sScheduleCloseTimer);
+      this._v034sScheduleCloseTimer = null;
+    }
     this._v030Generation = (this._v030Generation || 0) + 1;
     return originalDisconnected?.call(this);
   };

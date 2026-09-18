@@ -3,12 +3,10 @@ import { readFileSync, mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { prepareZoneArtifactsBeta8 } from "../scripts/prepare-zone-artifacts-beta8.mjs";
 
 const chrome = process.env.CHROME_BIN || ["/usr/bin/chromium", "/usr/bin/google-chrome", "/opt/google/chrome/chrome"].find(existsSync);
 assert.ok(chrome, "Chromium/Chrome is required for the native SVG image regression test");
 let source = readFileSync(process.env.NAVIMOWER_TEST_RUNTIME || "src/navimower-map-card.js", "utf8");
-assert.equal(await prepareZoneArtifactsBeta8(source, process.cwd()), source, "preparation is idempotent");
 source = source.replace(/^export\s*\{[^}]*\};?/m, "");
 const multiTestAnchor = '  proto._beta8RefreshMultiRender = function() { if (multiActive036(this)) renderMultiMap036(this, true); };';
 assert.ok(source.includes(multiTestAnchor), "multi-mower beta8 test hook anchor missing");

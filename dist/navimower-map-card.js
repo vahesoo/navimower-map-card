@@ -3450,14 +3450,6 @@ function patchCard() {
     this._v030BaseApiPath = stripQuery(raw);
     return withLightweightMapQuery(raw);
   };
-  const originalSetConfig = proto.setConfig;
-  proto.setConfig = function patchedSetConfig(config) {
-    const previous = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
-    const result = originalSetConfig.call(this, config);
-    const current = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
-    if (!this._v030Renders || previous && previous !== current) resetArchiveState(this);
-    return result;
-  };
   const originalEnsureDom = proto._ensureDom;
   proto._ensureDom = function patchedEnsureDom() {
     const result = originalEnsureDom.call(this);
@@ -5667,7 +5659,10 @@ function patchCard9() {
           )
         )
       );
+      const previousIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
       const result = originalSetConfig.call(this, prepared);
+      const currentIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
+      if (!this._v030Renders || previousIdentity && previousIdentity !== currentIdentity) resetArchiveState(this);
       if (this._config) {
         this._config.notification_count = normalized.notification_count;
         delete this._config.notification_page_size;

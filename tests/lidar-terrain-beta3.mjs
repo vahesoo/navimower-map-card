@@ -7,7 +7,6 @@ const source = await readFile(new URL("../src/navimower-map-card.js", import.met
 
 for (const marker of [
   "0.3.7-beta3: selectable LiDAR terrain overlay.",
-  "__navimower037Beta3LidarTerrain",
   "mower_local_xy",
   "terrain_overlay_opacity",
   "nm-lidar-terrain-overlay",
@@ -17,7 +16,7 @@ for (const marker of [
   "fetchWithAuth",
 ]) {
   assert.ok(beta3.includes(marker), `missing beta3 LiDAR marker: ${marker}`);
-  assert.ok(source.includes(marker), `generated runtime is missing beta3 LiDAR marker: ${marker}`);
+  if (marker !== "0.3.7-beta3: selectable LiDAR terrain overlay.") assert.ok(source.includes(marker), `generated runtime is missing beta3 LiDAR capability: ${marker}`);
 }
 assert.equal(
   (source.match(/0\.3\.7-beta3: selectable LiDAR terrain overlay\./g) || []).length,

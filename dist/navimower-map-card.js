@@ -6922,6 +6922,8 @@ if (globalThis.customElements) patchCustomAreas0342();
   const previousSetConfig = proto.setConfig;
   if (typeof previousSetConfig === "function") {
     proto.setConfig = function schedulerDiscoverySetConfig(config) {
+      if (!this._beta5SchedulerEntities) this._beta5SchedulerEntities = {};
+      if (!this._beta6SchedulerEntities) this._beta6SchedulerEntities = {};
       const result = previousSetConfig.call(this, config);
       clearDiscovery(this);
       return result;
@@ -7475,15 +7477,8 @@ if (globalThis.customElements) patchCustomAreas0342();
     return {};
   }
 
-  // Stop the beta5/beta6 eager entity-registry scans. Their discover functions
-  // short-circuit on a truthy cache. The new runtime resolves scheduler metadata
-  // from the Map API and falls back to registry discovery only on Schedule click.
-  const previousSetConfig = proto.setConfig;
-  proto.setConfig = function beta2SetConfig(config) {
-    if (!this._beta5SchedulerEntities) this._beta5SchedulerEntities = {};
-    if (!this._beta6SchedulerEntities) this._beta6SchedulerEntities = {};
-    return previousSetConfig.call(this, config);
-  };
+  // The scheduler discovery setConfig wrapper primes beta5/beta6 caches before
+  // older compatibility layers run, suppressing eager entity-registry scans.
 
   // Core entity registry discovery remains a compatibility fallback for renamed
   // installations, but defer it briefly. Normal Navimower cards load the map via

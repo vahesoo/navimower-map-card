@@ -3768,7 +3768,6 @@ function patchCard() {
     this._v030Generation = (this._v030Generation || 0) + 1;
     return originalDisconnected?.call(this);
   };
-  console.info("[Navimower Map Card] 0.3.0-beta1 completed-session archive support enabled");
 }
 if (typeof document !== "undefined" && globalThis.customElements) patchCard();
 
@@ -3917,7 +3916,6 @@ function patchCard2() {
   wrapOutlineRefresh(proto, "_ensureDom");
   wrapOutlineRefresh(proto, "_renderStatic");
   wrapOutlineRefresh(proto, "_applyStaticLayers");
-  console.info("[Navimower Map Card] 0.3.0-beta2 adjustable non-scaling outlines enabled");
 }
 if (globalThis.customElements) patchCard2();
 
@@ -4115,7 +4113,6 @@ function patchCard3() {
   wrapMarkerRefresh(proto, "_applyStaticLayers");
   wrapMarkerRefresh(proto, "_renderMower");
   wrapMarkerRefresh(proto, "_renderShell");
-  console.info("[Navimower Map Card] 0.3.0-beta3 fixed-size adjustable zone markers enabled");
 }
 if (globalThis.customElements) patchCard3();
 
@@ -4134,7 +4131,6 @@ function patchCard4() {
   Card.prototype.getGridOptions = function navimowerDefaultGridOptions() {
     return defaultGridOptions();
   };
-  console.info("[Navimower Map Card] 0.3.0-beta4 automatic-height full-width grid defaults enabled");
 }
 if (globalThis.customElements) patchCard4();
 
@@ -4201,7 +4197,6 @@ function patchCard5() {
     }
     return originalDisconnected?.apply(this, args);
   };
-  console.info("[Navimower Map Card] 0.3.0 cache-safe schedule refinement enabled");
 }
 if (globalThis.customElements) patchCard5();
 
@@ -4599,7 +4594,6 @@ function patchCard6() {
       }
     });
   }
-  console.info("[Navimower Map Card] 0.3.1-beta1 read-only notification panel enabled");
 }
 if (globalThis.customElements) patchCard6();
 
@@ -5000,7 +4994,6 @@ function patchCard7() {
       }
     });
   }
-  console.info("[Navimower Map Card] 0.3.1-beta2 notification read actions enabled");
 }
 if (globalThis.customElements) patchCard7();
 
@@ -5416,7 +5409,6 @@ function patchCard8() {
       }
     });
   }
-  console.info("[Navimower Map Card] 0.3.1-beta3 compact notifications and two-row header enabled");
 }
 if (globalThis.customElements) patchCard8();
 
@@ -5804,7 +5796,6 @@ function patchCard9() {
       }
     });
   }
-  console.info("[Navimower Map Card] 0.3.1-beta4 title fix and scrollable notifications enabled");
 }
 if (globalThis.customElements) patchCard9();
 
@@ -5959,7 +5950,6 @@ function patchCard10() {
   proto._resumeAvailable = function beta5ResumeAvailable() {
     return shouldOfferResume(this._hass, mowerState(this));
   };
-  console.info("[Navimower Map Card] 0.3.1-beta5 conditional Resume control enabled");
 }
 if (globalThis.customElements) patchCard10();
 
@@ -6208,12 +6198,11 @@ this._mowerModel032 = this._mowerModel032 || "";
     return "<g class=\"nm-h2-mower nm-mower-" + key.replaceAll("_", "-") + "\" transform=\"" + mowerTransform032(this, cx, cy, headingDegrees) + "\" style=\"filter:drop-shadow(0 1px 2px rgba(0,0,0,.38))\">" + spec.markup + "</g>";
   };
 
-  console.info("[Navimower Map Card] 0.3.2 model-aware mower artwork enabled");
 }
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta8";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta9";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -6410,7 +6399,6 @@ function patchCustomAreas0342() {
       }
     });
   }
-  console.info("[Navimower Map Card] 0.3.4-beta4 Map API Custom Areas enabled");
 }
 if (globalThis.customElements) patchCustomAreas0342();
 
@@ -6526,7 +6514,6 @@ if (globalThis.customElements) patchCustomAreas0342();
   };
   const originalHass = Object.getOwnPropertyDescriptor(proto, "hass");
   if (originalHass?.set) Object.defineProperty(proto, "hass", { configurable: true, get: originalHass.get, set(value) { originalHass.set.call(this, value); ensureUi(this); if (this._beta5ManagedScheduleOpen) renderManaged(this); if (this._beta5SettingsOpen) renderSettings(this); } });
-  console.info("[Navimower Map Card] 0.3.4-beta5 scheduler overview and configurable settings dialog enabled");
 })();
 
 
@@ -6550,7 +6537,6 @@ if (globalThis.customElements) patchCustomAreas0342();
   const oldOpen=proto._openScheduleDialog;proto._openScheduleDialog=async function(...a){const ids=await discover(this);const mode=this._config?.schedule_view_mode||'auto';const managedOn=state(this,ids.managedSwitch)?.state==='on';this._beta6SettingsOpen=false;if(mode==='navimower'||(mode==='auto'&&managedOn&&ids.status)){this._beta5ManagedScheduleOpen=false;this._scheduleDialogOpen=false;this._mowDialogOpen=false;this._beta6ManagedOpen=true;this._renderDialog();return;}this._beta6ManagedOpen=false;return oldOpen?.apply(this,a);};
   const oldHass=Object.getOwnPropertyDescriptor(proto,'hass');if(oldHass?.set)Object.defineProperty(proto,'hass',{configurable:true,get:oldHass.get,set(v){oldHass.set.call(this,v);if(this._beta6SettingsOpen)renderSettings(this);if(this._beta6ManagedOpen)renderManaged(this);}});
   const oldEnsure2=proto._ensureDom;proto._ensureDom=function(...a){const r=oldEnsure2?.apply(this,a);const gear=this.querySelector?.('.nm-settings-button');if(gear&&!gear.__beta6){gear.__beta6=true;gear.addEventListener('click',()=>{this._beta5SettingsOpen=false;this._beta6ManagedOpen=false;this._beta6SettingsOpen=true;this._renderDialog();},{capture:true});}return r;};
-  console.info('[Navimower Map Card] 0.3.4-beta6 schedule source, custom queue and inline settings enabled');
 })();
 
 
@@ -6713,7 +6699,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return result;
   };
 
-  console.info("[Navimower Map Card] 0.3.4-beta8 native Home Assistant Settings rows enabled");
 })();
 
 
@@ -6738,7 +6723,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return result;
   };
 
-  console.info("[Navimower Map Card] 0.3.4-beta9 current-cycle live history label enabled");
 })();
 
 
@@ -6996,7 +6980,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return previousOpenSchedule?.apply(this, args);
   };
 
-  console.info("[Navimower Map Card] 0.3.4-beta10 resilient scheduler discovery enabled");
 })();
 
 
@@ -7403,7 +7386,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     });
   }
 
-  console.info("[Navimower Map Card] 0.3.4-beta11 responsive managed scheduler editor enabled");
 })();
 
 
@@ -7981,7 +7963,6 @@ if (globalThis.customElements) patchCustomAreas0342();
   };
   proto._beta2ScheduleSaveDraft = function () { return saveDraft(this); };
 
-  console.info("[Navimower Map Card] 0.3.5-beta2 lazy persistent scheduler runtime enabled");
 })();
 
 
@@ -8332,7 +8313,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return dragTargetIndex(clientY, rows, rows[movingIndex]);
   };
 
-  console.info("[Navimower Map Card] 0.3.5-beta3 mobile scheduler scope and interaction fixes enabled");
 })();
 
 
@@ -8515,7 +8495,6 @@ if (globalThis.customElements) patchCustomAreas0342();
   // Exposed only for deterministic regression tests and diagnostics.
   proto._performanceRenderPhases035 = () => PHASES.map((phase) => [...phase]);
 
-  console.info("[Navimower Map Card] 0.3.5-beta4 phased performance pipeline enabled");
 })();
 
 
@@ -8586,7 +8565,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     };
   };
 
-  console.info("[Navimower Map Card] 0.3.5-beta5 resilient mower artwork visibility enabled");
 })();
 
 
@@ -8730,7 +8708,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return form;
   };
 
-  console.info("[Navimower Map Card] 0.3.5-beta6 polished visual editor appearance layout enabled");
 })();
 
 
@@ -8794,7 +8771,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return form;
   };
 
-  console.info("[Navimower Map Card] 0.3.5-beta7 non-overlapping visual editor color labels enabled");
 })();
 
 
@@ -8856,7 +8832,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return form;
   };
 
-  console.info("[Navimower Map Card] 0.3.5-beta8 native-only visual editor color labels enabled");
 })();
 
 
@@ -8926,7 +8901,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return result;
   };
 
-  console.info("[Navimower Map Card] 0.3.5-beta9 backend current-cycle render enabled");
 })();
 
 
@@ -9177,7 +9151,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return result;
   };
 
-  console.info("[Navimower Map Card] 0.3.5-beta10 organized editor controls and header visibility enabled");
 })();
 
 
@@ -9357,7 +9330,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return result;
   };
 
-  console.info("[Navimower Map Card] 0.3.5-beta11 color defaults, combined schedule state and mower error pulse enabled");
 })();
 
 
@@ -9579,7 +9551,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     };
   }
 
-  console.info("[Navimower Map Card] 0.3.5-beta12 installation defaults and uniform stroke widths enabled");
 })();
 
 
@@ -9718,7 +9689,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     });
   }
 
-  console.info("[Navimower Map Card] 0.3.5-beta13 legend visibility and managed schedule toggle enabled");
 })();
 
 
@@ -9791,7 +9761,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     });
   }
 
-  console.info("[Navimower Map Card] 0.3.5-beta14 dialog backdrop closing and schedule header alignment enabled");
 })();
 
 // 0.3.6-beta1: opt-in multi-mower site view.
@@ -11391,12 +11360,9 @@ if (globalThis.customElements) patchCustomAreas0342();
   }
 
   proto._beta8RefreshMultiRender = function() { if (multiActive036(this)) renderMultiMap036(this, true); };
-  console.info("[Navimower Map Card] 0.3.6-beta1 opt-in multi-mower site view enabled");
   // 0.3.6-beta2: multi-mower field-test fixes.
-  console.info("[Navimower Map Card] 0.3.6-beta2 multi-mower field-test fixes enabled");
   // 0.3.6-beta3: compact multi-mower metadata and labels.
   // 0.3.6-beta4: strict member schedule and clickable multi-zone labels.
-  console.info("[Navimower Map Card] 0.3.6-beta3 compact multi-mower metadata and labels enabled");
 })();
 
 
@@ -12022,7 +11988,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     });
   }
 
-  console.info("[Navimower Map Card] 0.3.6-beta5 optional OpenStreetMap underlay enabled");
 })();
 
 
@@ -12084,7 +12049,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     };
   }
 
-  console.info("[Navimower Map Card] 0.3.6-beta6 OSM Multi stability and editor visibility enabled");
 })();
 
 
@@ -12104,16 +12068,13 @@ if (globalThis.customElements) patchCustomAreas0342();
     };
   }
 
-  console.info("[Navimower Map Card] 0.3.6-beta7 OSM Multi visibility and ready-state sync enabled");
 })();
 
 
 // 0.3.6-beta8: Estonia orthophoto underlay.
-console.info("[Navimower Map Card] 0.3.6-beta8 Estonia orthophoto underlay enabled");
 
 
 // 0.3.6-beta9: Estonia orthophoto editor availability and zoom fix.
-console.info("[Navimower Map Card] 0.3.6-beta9 Estonia orthophoto editor availability and zoom fixes enabled");
 
 
 // 0.3.6-beta10: zoom-aware Estonia orthophoto detail and WGS84 ellipsoid underlay geodesy.
@@ -12452,7 +12413,6 @@ console.info("[Navimower Map Card] 0.3.6-beta9 Estonia orthophoto editor availab
     };
   }
 
-  console.info("[Navimower Map Card] 0.3.6-beta10 zoom-aware Maa- ja Ruumiamet WMS detail enabled");
 })();
 
 
@@ -12777,16 +12737,13 @@ console.info("[Navimower Map Card] 0.3.6-beta9 Estonia orthophoto editor availab
     return form;
   };
 
-  console.info("[Navimower Map Card] 0.3.6-beta11 unified map underlays enabled");
 })();
 
 
 // 0.3.6-beta12: Google Satellite sharpness and provider-frame normalization.
-console.info("[Navimower Map Card] 0.3.6-beta12 Google Satellite sharpness and provider-frame normalization enabled");
 
 
 // 0.3.6-beta13: integration-owned provider reference frames.
-console.info("[Navimower Map Card] 0.3.6-beta13 integration-owned provider reference frames enabled");
 
 
 // 0.3.6-beta14: manual underlay position and rotation calibration.
@@ -13052,12 +13009,10 @@ console.info("[Navimower Map Card] 0.3.6-beta13 integration-owned provider refer
     return form;
   };
 
-  console.info("[Navimower Map Card] 0.3.6-beta14 manual underlay calibration enabled");
 })();
 
 
 // 0.3.6-beta15: single-underlay metadata isolation and null-safe coordinates.
-console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and null-safe coordinate handling enabled");
 
 
 // 0.3.6-beta16: prioritized phased loading and selective multi-mower updates.
@@ -13172,7 +13127,6 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
     completeDaySessions: true,
   });
 
-  console.info("[Navimower Map Card] 0.3.6-beta16 prioritized phased loading enabled");
 })();
 
 
@@ -14004,14 +13958,11 @@ console.info("[Navimower Map Card] 0.3.6-beta15 underlay metadata isolation and 
     return previousDisconnect19?.apply(this, args);
   };
 
-  console.info("[Navimower Map Card] 0.3.6-beta19 visual gate-area editor enabled");
 })();
 
 // 0.3.6-beta20: edge-aware gate-area point insertion and geometry guard.
-console.info("[Navimower Map Card] 0.3.6-beta20 edge-aware gate-area editing enabled");
 
 // 0.3.6-beta21: unrestricted nearest-edge gate-area insertion.
-console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-area insertion enabled");
 
 // 0.3.7-beta1: vendor retained trail / MQTT tail source debug.
 (() => {
@@ -14458,9 +14409,6 @@ console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-a
     };
   }
 
-  console.info(
-    "[Navimower Map Card] 0.3.7-beta2 stable vendor/MQTT trail and authenticated OSM tiles enabled",
-  );
 })();
 
 // 0.3.7-beta3: selectable LiDAR terrain overlay.
@@ -14986,9 +14934,6 @@ console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-a
     return undefined;
   };
 
-  console.info(
-    "[Navimower Map Card] 0.3.7-beta3 selectable LiDAR terrain overlay enabled",
-  );
 })();
 
 // 0.3.7-beta6: flicker-free incremental map refreshes.
@@ -15211,7 +15156,6 @@ console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-a
     };
   }
 
-  console.info("[Navimower Map Card] 0.3.7-beta6 flicker-free incremental refresh enabled");
 })();
 
 // 0.3.7-beta7: accept deferred vendor renders by stable cycle identity.
@@ -15454,7 +15398,6 @@ console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-a
     oneDeferredRequestAtATime: true,
   });
 
-  console.info("[Navimower Map Card] 0.3.7-beta7 stable-cycle deferred vendor rendering enabled");
 })();
 
 // 0.3.7-beta8: shared, cycle-safe per-zone prepared SVG resources.
@@ -15835,5 +15778,6 @@ console.info("[Navimower Map Card] 0.3.6-beta21 unrestricted nearest-edge gate-a
   proto._zoneArtifactDiagnostics = function() {
     return Array.from(this._nmBeta8Clients?.values?.() || [], (client) => ({ entry_id: client.entry, mode: client.mode, ...client.metrics, ready_zones: [...client.rows.values()].filter((row) => row.loaded).length }));
   };
-  console.info("[Navimower Map Card] 0.3.7-beta8 per-zone prepared resources enabled");
 })();
+
+console.info("[Navimower Map Card] v0.3.7-beta9 loaded");

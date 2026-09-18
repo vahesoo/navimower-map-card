@@ -10,7 +10,18 @@ const overrides = new Map();
 for (const match of prototypeAssignments) overrides.set(match[1], (overrides.get(match[1]) || 0) + 1);
 
 assert.ok(Buffer.byteLength(source) <= 840_000, "runtime must not grow beyond the beta9 consolidation baseline");
-assert.ok(patchMarkers.size <= 45, "historical patch-marker count must only move downward during consolidation");
+const allowedMarkers = new Set([
+  "__navimowerConsolidatedRuntime",
+  "__navimowerRuntimeCard",
+  "__navimowerBeta14SettingsBackdrop",
+  "__navimowerBeta14ScheduleBackdrop",
+  "__navimower036EstoniaSite",
+]);
+assert.deepEqual(
+  [...patchMarkers].filter((marker) => !allowedMarkers.has(marker)),
+  [],
+  "historical per-patch runtime guards must not return",
+);
 assert.ok(patchIifes <= 54, "historical patch-IIFE count must only move downward during consolidation");
 assert.ok(prototypeAssignments.length <= 200, "prototype wrapper count must only move downward during consolidation");
 assert.ok((overrides.get("setConfig") || 0) <= 22, "setConfig wrapper depth must not increase");

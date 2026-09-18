@@ -13,6 +13,7 @@ assert.ok(Buffer.byteLength(source) <= 840_000, "runtime must not grow beyond th
 const allowedMarkers = new Set([
   "__navimowerConsolidatedRuntime",
   "__navimowerRuntimeCard",
+  "__navimowerRuntimeAlreadyApplied",
   "__navimowerBeta14SettingsBackdrop",
   "__navimowerBeta14ScheduleBackdrop",
   "__navimower036EstoniaSite",

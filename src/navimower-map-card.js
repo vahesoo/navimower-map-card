@@ -5648,20 +5648,6 @@ function patchCard9() {
     return extendBeta4ConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function beta4EnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      ensureNotificationDom(this);
-      renderNotificationBell(this);
-      ensureBeta2NotificationDom(this);
-      ensureHeaderLayout(this);
-      ensureCompactNotificationStyles(this);
-      enforceTwoRowHeader(this);
-      ensureBeta4Styles(this);
-      return result;
-    };
-  }
   const originalRenderShell = proto._renderShell;
   if (typeof originalRenderShell === "function") {
     proto._renderShell = function beta4RenderShell(...args) {
@@ -6045,6 +6031,13 @@ node.splice(mowerIndex, 0, iconField);
   const originalEnsureDom = proto._ensureDom;
   proto._ensureDom = function beta032EnsureDom(...args) {
     const result = originalEnsureDom.apply(this, args);
+    ensureNotificationDom(this);
+    renderNotificationBell(this);
+    ensureBeta2NotificationDom(this);
+    ensureHeaderLayout(this);
+    ensureCompactNotificationStyles(this);
+    enforceTwoRowHeader(this);
+    ensureBeta4Styles(this);
     ensureStyles(this);
     updateResumeButton(this);
     ensureMowerArtwork032(this);

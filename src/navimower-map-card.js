@@ -4479,15 +4479,6 @@ function patchCard6() {
   if (!Card || Card.__navimowerV035NPatched) return;
   Card.__navimowerV035NPatched = true;
   const proto = Card.prototype;
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function notificationEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      ensureNotificationDom(this);
-      renderNotificationBell(this);
-      return result;
-    };
-  }
   const originalResolveByName = proto._resolveEntitiesByName;
   if (typeof originalResolveByName === "function") {
     proto._resolveEntitiesByName = function notificationResolveByName(base) {
@@ -4902,14 +4893,6 @@ function patchCard7() {
     return extendNotificationConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function notificationActionEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      ensureBeta2NotificationDom(this);
-      return result;
-    };
-  }
   const originalRenderShell = proto._renderShell;
   if (typeof originalRenderShell === "function") {
     proto._renderShell = function notificationActionRenderShell(...args) {
@@ -5307,15 +5290,6 @@ function patchCard8() {
     return extendCompactUiConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function compactUiEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      ensureHeaderLayout(this);
-      ensureCompactNotificationStyles(this);
-      return result;
-    };
-  }
   const originalRenderShell = proto._renderShell;
   if (typeof originalRenderShell === "function") {
     proto._renderShell = function compactUiRenderShell(...args) {
@@ -5706,6 +5680,11 @@ function patchCard9() {
   if (typeof originalEnsureDom === "function") {
     proto._ensureDom = function beta4EnsureDom(...args) {
       const result = originalEnsureDom.apply(this, args);
+      ensureNotificationDom(this);
+      renderNotificationBell(this);
+      ensureBeta2NotificationDom(this);
+      ensureHeaderLayout(this);
+      ensureCompactNotificationStyles(this);
       enforceTwoRowHeader(this);
       ensureBeta4Styles(this);
       return result;

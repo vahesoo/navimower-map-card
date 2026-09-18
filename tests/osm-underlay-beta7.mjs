@@ -5,7 +5,7 @@ const source = await readFile(new URL("../src/navimower-map-card.js", import.met
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
 assert.match(packageJson.scripts.test, /osm-underlay-beta7\.mjs/);
-assert.match(source, /0\.3\.6-beta7: OSM Multi visibility and ready-state sync/);
+assert.match(source, /queueMicrotask\(\(\) => this\._syncOsmUnderlay036\?\.\(\)\)/);
 assert.match(source, /(osmUnderlayActive036|mapUnderlayActive036)/);
 assert.match(source, /\? "transparent" : esc\(background\)/);
 assert.match(source, /_syncOsmUnderlay036/);

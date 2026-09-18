@@ -3114,7 +3114,8 @@ if (!window.customCards.some((card) => card.type === "navimower-map-card")) {
 var NAVIMOWER_MAP_CARD_VERSION2 = "0.3.7-beta9";
 const __NAVIMOWER_RUNTIME_GUARD = "__navimowerConsolidatedRuntime";
 const __navimowerRuntimeCard = globalThis.customElements?.get?.("navimower-map-card");
-if (__navimowerRuntimeCard && !__navimowerRuntimeCard[__NAVIMOWER_RUNTIME_GUARD]) {
+const __navimowerRuntimeAlreadyApplied = Boolean(__navimowerRuntimeCard?.[__NAVIMOWER_RUNTIME_GUARD]);
+
 // src/navimower-map-card-v030.js
 var SESSION_INDEX_CACHE = /* @__PURE__ */ new Map();
 var SESSION_RENDER_CACHE = /* @__PURE__ */ new Map();
@@ -3444,7 +3445,7 @@ function injectV030Styles(card) {
 }
 function patchCard() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const originalApiPath = proto._apiPath;
   proto._apiPath = function patchedApiPath() {
@@ -3893,7 +3894,7 @@ function wrapOutlineRefresh(proto, methodName) {
 }
 function patchCard2() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const originalStubConfig = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
   Card.getStubConfig = function outlinedStubConfig() {
     return normalizeOutlineConfig(originalStubConfig?.() || {});
@@ -4043,7 +4044,7 @@ function wrapMarkerRefresh(proto, methodName) {
 }
 function patchCard3() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const originalStubConfig = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
   Card.getStubConfig = function zoneMarkerStubConfig() {
     return normalizeZoneMarkerConfig(originalStubConfig?.() || {});
@@ -4121,7 +4122,7 @@ function defaultGridOptions() {
 }
 function patchCard4() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   Card.prototype.getGridOptions = function navimowerDefaultGridOptions() {
     return defaultGridOptions();
   };
@@ -4179,7 +4180,7 @@ function patchScheduleCloseDelay(proto) {
 }
 function patchCard5() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   patchScheduleCloseDelay(proto);
   const originalDisconnected = proto.disconnectedCallback;
@@ -4487,7 +4488,7 @@ function renderNotificationDialog(card) {
 }
 function patchCard6() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const originalEnsureDom = proto._ensureDom;
   if (typeof originalEnsureDom === "function") {
@@ -4901,7 +4902,7 @@ function maybeAutoMarkReadOnOpen(card) {
 }
 function patchCard7() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const originalStubConfig = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
   Card.getStubConfig = function notificationActionStubConfig() {
     return normalizeNotificationActionConfig(originalStubConfig?.() || {});
@@ -5311,7 +5312,7 @@ function maybeAutoMarkReadOnOpen2(card) {
 }
 function patchCard8() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const originalStubConfig = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
   Card.getStubConfig = function compactUiStubConfig() {
     return normalizeCompactUiConfig(originalStubConfig?.() || {});
@@ -5691,7 +5692,7 @@ function maybeAutoMarkReadOnOpen3(card) {
 }
 function patchCard9() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const originalStubConfig = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
   Card.getStubConfig = function beta4StubConfig() {
     return normalizeBeta4Config(originalStubConfig?.() || {});
@@ -5903,7 +5904,7 @@ function openNewMowDialog(card) {
 }
 function patchCard10() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const originalEnsureDom = proto._ensureDom;
   if (typeof originalEnsureDom === "function") {
@@ -6383,7 +6384,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.4-beta5: scheduler overview and configurable settings dialog.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   const slots = Array.from({ length: 12 }, (_, index) => `settings_entity_${index + 1}`);
   const originalStub = Card.getStubConfig?.bind(Card);
@@ -6495,7 +6496,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 // 0.3.4-beta6: schedule source selection, custom queue editing and inline settings controls.
 (() => {
-  const Card=globalThis.customElements?.get?.('navimower-map-card'); if(!Card)return; const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+  const Card=globalThis.customElements?.get?.('navimower-map-card'); if (!Card || __navimowerRuntimeAlreadyApplied) return; const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
   const proto=Card.prototype; const slots=Array.from({length:12},(_,i)=>`settings_entity_${i+1}`);
   const oldStub=Card.getStubConfig?.bind(Card); Card.getStubConfig=()=>({...oldStub?.(),schedule_view_mode:'auto'});
   const oldForm=Card.getConfigForm?.bind(Card); Card.getConfigForm=()=>{const f=oldForm?.()||{schema:[]};const schema=[...(f.schema||[])];schema.push({type:'expandable',name:'schedule_view',title:'Schedule button',flatten:true,schema:[{name:'schedule_view_mode',selector:{select:{options:[{value:'auto',label:'Automatic'},{value:'navimower',label:'Navimower'},{value:'native',label:'Native'}]}}}]});const label=f.computeLabel;return{...f,schema,computeLabel:i=>i?.name==='schedule_view_mode'?'Schedule view':label?.(i)||i?.name||''};};
@@ -6518,7 +6519,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.4-beta8: native Home Assistant Settings rows and single-dialog flow.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const slots = Array.from({ length: 12 }, (_, index) => "settings_entity_" + (index + 1));
 
@@ -6678,7 +6679,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.4-beta9: current-cycle live history label.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const previousRenderHistoryBar = proto._renderHistoryBar;
   proto._renderHistoryBar = function (...args) {
@@ -6700,7 +6701,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.4-beta10: resilient Navimower scheduler discovery.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const CACHE_TTL_MS = 30000;
 
@@ -6955,7 +6956,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.4-beta11: responsive managed scheduler editor.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const SAVE_DEBOUNCE_MS = 750;
   const SAVED_FEEDBACK_MS = 1000;
@@ -7359,7 +7360,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta2: lazy persistent scheduler runtime.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const REGISTRY_FALLBACK_DELAY_MS = 250;
   const SAVE_DEBOUNCE_MS = 750;
@@ -7934,7 +7935,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta3: mobile scheduler scope and interaction fixes.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const emptySchedulerIds = () => ({
     status: null,
@@ -8282,7 +8283,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta4: flattened hot-path and phased visual render pipeline.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
 
   const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
@@ -8463,7 +8464,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta5: resilient mower artwork visibility.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const previousRenderMower = proto._renderMower;
 
@@ -8532,7 +8533,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta6: polished visual editor appearance layout.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const previousGetConfigForm = Card.getConfigForm;
   if (typeof previousGetConfigForm !== "function") return;
 
@@ -8673,7 +8674,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta7: non-overlapping color labels in the visual editor.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const previousGetConfigForm = Card.getConfigForm;
   if (typeof previousGetConfigForm !== "function") return;
 
@@ -8734,7 +8735,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta8: native-only color labels in the visual editor.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const previousGetConfigForm = Card.getConfigForm;
   if (typeof previousGetConfigForm !== "function") return;
 
@@ -8793,7 +8794,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta9: backend-owned current-cycle mowed-area render.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
 
   const previousRenderHistory = proto._renderHistory;
@@ -8861,7 +8862,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta10: organized editor groups and configurable header buttons.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const BUTTON_FIELDS = [
     "show_history_button",
     "show_notifications_button",
@@ -9109,7 +9110,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta11: real color defaults, combined schedule state and mower error pulse.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const COLOR_DEFAULTS = {
     zone_fill_color: "#81c784",
     zone_stroke_color: "#43a047",
@@ -9286,7 +9287,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta12: installation visual defaults and uniform stroke widths.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const VISUAL_DEFAULTS = Object.freeze({
     map_background_color: "#ffffff",
     map_legend_opacity: 0.10,
@@ -9505,7 +9506,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta13: legend visibility follows map toggles and managed schedule gets an enable switch.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
 
   function hasCustomAreas(card) {
@@ -9642,7 +9643,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.5-beta14: consistent card-dialog backdrop closing and schedule header alignment.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
 
   function attachBackdropClose(root, closeSelector, markerName) {
@@ -9712,7 +9713,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.6-beta1: opt-in multi-mower site view.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const SITE_REFRESH_MS = 60_000;
@@ -11313,7 +11314,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.6-beta5: optional OpenStreetMap underlay.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const EARTH_RADIUS_M = 6378137;
@@ -11936,7 +11937,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.6-beta6: OSM Multi stability and editor visibility.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const previousForm = Card.getConfigForm?.bind(Card);
   Card.getConfigForm = (...args) => {
     const form = previousForm?.(...args) || { schema: [] };
@@ -11995,7 +11996,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.6-beta7: OSM Multi visibility and ready-state sync.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const previousSetConfig = proto.setConfig;
   if (typeof previousSetConfig === "function") {
@@ -12018,7 +12019,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.6-beta10: zoom-aware Estonia orthophoto detail and WGS84 ellipsoid underlay geodesy.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const WGS84_A_M = 6378137.0;
@@ -12355,7 +12356,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.6-beta11: unified map underlays, Estonia hybrid and Google Satellite.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const DEFAULT_OPACITY11 = 0.55;
   const DEFAULT_GOOGLE_ZOOM11 = 19;
@@ -12683,7 +12684,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.6-beta14: manual underlay position and rotation calibration.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const OFFSET_MIN14 = -10;
   const OFFSET_MAX14 = 10;
@@ -12950,7 +12951,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.6-beta16: prioritized phased loading and selective multi-mower updates.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const RETRY_MS = 30_000;
 
@@ -13070,7 +13071,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.6-beta19: visual gate-area polygon editor.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const MAX_POINTS = 64;
@@ -13896,7 +13897,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.7-beta1: vendor retained trail / MQTT tail source debug.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const MATCH_RADIUS_M = 0.5;
 
@@ -14011,7 +14012,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.7-beta2: stable vendor backbone / MQTT tail and authenticated OSM tiles.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const MATCH_RADIUS_M = 1.0;
   const SPLIT_DISTANCE_SQ = 25;
@@ -14339,7 +14340,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.7-beta3: selectable LiDAR terrain overlay.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const DEFAULT_OPACITY = 0.65;
@@ -14862,7 +14863,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.7-beta6: flicker-free incremental map refreshes.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
 
   const stableHash = (value) => {
@@ -15082,7 +15083,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.7-beta7: accept deferred vendor renders by stable cycle identity.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const RETRY_MS = 10_000;
 
@@ -15322,7 +15323,7 @@ if (globalThis.customElements) patchCustomAreas0342();
 // 0.3.7-beta8: shared, cycle-safe per-zone prepared SVG resources.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card) return;
+  if (!Card || __navimowerRuntimeAlreadyApplied) return;
   const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const buckets = new WeakMap();
@@ -15698,11 +15699,12 @@ if (globalThis.customElements) patchCustomAreas0342();
   };
 })();
 
-console.info("[Navimower Map Card] v0.3.7-beta9 loaded");
-
-__navimowerRuntimeCard[__NAVIMOWER_RUNTIME_GUARD] = true;
+if (__navimowerRuntimeCard && !__navimowerRuntimeAlreadyApplied) {
+  __navimowerRuntimeCard[__NAVIMOWER_RUNTIME_GUARD] = true;
 }
 
 export {
   NAVIMOWER_MAP_CARD_VERSION2 as NAVIMOWER_MAP_CARD_VERSION
 };
+
+console.info("[Navimower Map Card] v0.3.7-beta9 loaded");

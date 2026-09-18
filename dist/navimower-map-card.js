@@ -4265,110 +4265,7 @@ function renderNotificationDialog(card) {
     });
   });
 }
-function patchCard6() {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || Card.__navimowerV035NPatched) return;
-  Card.__navimowerV035NPatched = true;
-  const proto = Card.prototype;
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function notificationEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      ensureNotificationDom(this);
-      renderNotificationBell(this);
-      return result;
-    };
-  }
-  const originalResolveByName = proto._resolveEntitiesByName;
-  if (typeof originalResolveByName === "function") {
-    proto._resolveEntitiesByName = function notificationResolveByName(base) {
-      const resolved = originalResolveByName.call(this, base);
-      const explicit = this._config?.notification_entity;
-      if (explicit && this._hass?.states?.[explicit]) resolved.notification_entity = explicit;
-      if (!resolved.notification_entity) {
-        const mowerEntity = resolved.mower_entity || this._config?.entity;
-        resolved.notification_entity = notificationEntityCandidates(mowerEntity).find((entityId) => this._hass?.states?.[entityId]) || null;
-      }
-      return resolved;
-    };
-  }
-  const originalRegistryResolve = proto._resolveEntitiesFromRegistry;
-  if (typeof originalRegistryResolve === "function") {
-    proto._resolveEntitiesFromRegistry = async function notificationRegistryResolve(...args) {
-      const result = await originalRegistryResolve.apply(this, args);
-      resolveNotificationEntity(this);
-      renderNotificationBell(this);
-      if (this._notificationDialogOpen) renderNotificationDialog(this);
-      return result;
-    };
-  }
-  proto._openNotificationDialog = function openNotificationDialog() {
-    this._mowDialogOpen = false;
-    this._scheduleDialogOpen = false;
-    this._notificationDialogOpen = true;
-    this._notificationPage = 0;
-    this._notificationDialogRenderKey = null;
-    renderNotificationBell(this);
-    renderNotificationDialog(this);
-  };
-  proto._closeNotificationDialog = function closeNotificationDialog() {
-    this._notificationDialogOpen = false;
-    this._notificationDialogRenderKey = null;
-    renderNotificationBell(this);
-    this._renderDialog?.();
-  };
-  proto._renderNotificationDialog = function cardRenderNotificationDialog() {
-    renderNotificationDialog(this);
-  };
-  const originalRenderShell = proto._renderShell;
-  if (typeof originalRenderShell === "function") {
-    proto._renderShell = function notificationRenderShell(...args) {
-      const result = originalRenderShell.apply(this, args);
-      renderNotificationBell(this);
-      return result;
-    };
-  }
-  const originalRenderDialog = proto._renderDialog;
-  if (typeof originalRenderDialog === "function") {
-    proto._renderDialog = function notificationRenderDialog(...args) {
-      if (this._notificationDialogOpen) {
-        renderNotificationDialog(this);
-        return void 0;
-      }
-      return originalRenderDialog.apply(this, args);
-    };
-  }
-  const originalOpenSchedule = proto._openScheduleDialog;
-  if (typeof originalOpenSchedule === "function") {
-    proto._openScheduleDialog = function notificationCloseForSchedule(...args) {
-      this._notificationDialogOpen = false;
-      this._notificationDialogRenderKey = null;
-      renderNotificationBell(this);
-      return originalOpenSchedule.apply(this, args);
-    };
-  }
-  const originalMowPressed = proto._onMowPressed;
-  if (typeof originalMowPressed === "function") {
-    proto._onMowPressed = function notificationCloseForMow(...args) {
-      this._notificationDialogOpen = false;
-      this._notificationDialogRenderKey = null;
-      renderNotificationBell(this);
-      return originalMowPressed.apply(this, args);
-    };
-  }
-  const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (hassDescriptor?.set) {
-    Object.defineProperty(proto, "hass", {
-      ...hassDescriptor,
-      set(hass) {
-        hassDescriptor.set.call(this, hass);
-        renderNotificationBell(this);
-        if (this._notificationDialogOpen) renderNotificationDialog(this);
-      }
-    });
-  }
-}
-if (globalThis.customElements) patchCard6();
+
 
 // src/navimower-map-card-v036n.js
 var NOTIFICATION_PAGE_SIZE_DEFAULT = 3;
@@ -4677,95 +4574,7 @@ function maybeAutoMarkReadOnOpen(card) {
   card._notificationAutoReadRun = true;
   void markAllNotificationsRead(card);
 }
-function patchCard7() {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || Card.__navimowerV036NPatched) return;
-  Card.__navimowerV036NPatched = true;
-  const originalStubConfig = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
-  Card.getStubConfig = function notificationActionStubConfig() {
-    return normalizeNotificationActionConfig(originalStubConfig?.() || {});
-  };
-  const originalConfigForm = typeof Card.getConfigForm === "function" ? Card.getConfigForm.bind(Card) : null;
-  Card.getConfigForm = function notificationActionConfigForm() {
-    return extendNotificationConfigForm(originalConfigForm?.() || { schema: [] });
-  };
-  const proto = Card.prototype;
-  const originalSetConfig = proto.setConfig;
-  if (typeof originalSetConfig === "function") {
-    proto.setConfig = function notificationActionSetConfig(config) {
-      return originalSetConfig.call(this, normalizeNotificationActionConfig(config));
-    };
-  }
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function notificationActionEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      ensureBeta2NotificationDom(this);
-      return result;
-    };
-  }
-  const originalRenderShell = proto._renderShell;
-  if (typeof originalRenderShell === "function") {
-    proto._renderShell = function notificationActionRenderShell(...args) {
-      const result = originalRenderShell.apply(this, args);
-      ensureBeta2NotificationDom(this);
-      return result;
-    };
-  }
-  const originalOpenNotification = proto._openNotificationDialog;
-  if (typeof originalOpenNotification === "function") {
-    proto._openNotificationDialog = function notificationActionOpen(...args) {
-      this._notificationAutoReadRun = false;
-      this._notificationActionError = null;
-      const result = originalOpenNotification.apply(this, args);
-      ensureBeta2NotificationDom(this);
-      this._notificationDialogRenderKeyBeta2 = null;
-      renderNotificationDialog2(this);
-      maybeAutoMarkReadOnOpen(this);
-      return result;
-    };
-  }
-  const originalCloseNotification = proto._closeNotificationDialog;
-  if (typeof originalCloseNotification === "function") {
-    proto._closeNotificationDialog = function notificationActionClose(...args) {
-      this._notificationAutoReadRun = false;
-      this._notificationActionError = null;
-      this._notificationDialogRenderKeyBeta2 = null;
-      return originalCloseNotification.apply(this, args);
-    };
-  }
-  const originalRenderDialog = proto._renderDialog;
-  if (typeof originalRenderDialog === "function") {
-    proto._renderDialog = function notificationActionRenderDialog(...args) {
-      if (this._notificationDialogOpen) {
-        renderNotificationDialog2(this);
-        return void 0;
-      }
-      return originalRenderDialog.apply(this, args);
-    };
-  }
-  proto._renderNotificationDialog = function notificationActionExplicitRender() {
-    renderNotificationDialog2(this);
-  };
-  proto._markNotificationRead = function notificationActionOne(messageId) {
-    return markNotificationRead(this, messageId);
-  };
-  proto._markAllNotificationsRead = function notificationActionAll() {
-    return markAllNotificationsRead(this);
-  };
-  const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (hassDescriptor?.set) {
-    Object.defineProperty(proto, "hass", {
-      ...hassDescriptor,
-      set(hass) {
-        hassDescriptor.set.call(this, hass);
-        ensureBeta2NotificationDom(this);
-        if (this._notificationDialogOpen) renderNotificationDialog2(this);
-      }
-    });
-  }
-}
-if (globalThis.customElements) patchCard7();
+
 
 // src/navimower-map-card-v038u.js
 var NOTIFICATION_COUNT_DEFAULT = 5;
@@ -5029,46 +4838,87 @@ function patchCard9() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
   if (!Card || Card.__navimowerV038UPatched) return;
   Card.__navimowerV038UPatched = true;
+
   const originalStubConfig = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
-  Card.getStubConfig = function beta4StubConfig() {
-    return normalizeBeta4Config(originalStubConfig?.() || {});
+  Card.getStubConfig = function notificationStubConfig() {
+    return normalizeBeta4Config(normalizeNotificationActionConfig(originalStubConfig?.() || {}));
   };
+
   const originalConfigForm = typeof Card.getConfigForm === "function" ? Card.getConfigForm.bind(Card) : null;
-  Card.getConfigForm = function beta4ConfigForm() {
-    return extendBeta4ConfigForm(originalConfigForm?.() || { schema: [] });
+  Card.getConfigForm = function notificationConfigForm() {
+    return extendBeta4ConfigForm(extendNotificationConfigForm(originalConfigForm?.() || { schema: [] }));
   };
+
   const proto = Card.prototype;
   const originalSetConfig = proto.setConfig;
   if (typeof originalSetConfig === "function") {
-    proto.setConfig = function beta4SetConfig(config) {
-      const normalized = normalizeBeta4Config(config);
+    proto.setConfig = function notificationSetConfig(config) {
+      const normalized = normalizeBeta4Config(normalizeNotificationActionConfig(config));
       const result = originalSetConfig.call(this, normalized);
       if (this._config) {
         this._config.notification_count = normalized.notification_count;
+        this._config.notification_mark_read_on_open = normalized.notification_mark_read_on_open;
         delete this._config.notification_page_size;
       }
       enforceTwoRowHeader(this);
       return result;
     };
   }
+
   const originalEnsureDom = proto._ensureDom;
   if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function beta4EnsureDom(...args) {
+    proto._ensureDom = function notificationEnsureDom(...args) {
       const result = originalEnsureDom.apply(this, args);
+      ensureNotificationDom(this);
+      ensureBeta2NotificationDom(this);
       enforceTwoRowHeader(this);
       ensureBeta4Styles(this);
+      renderNotificationBell(this);
       return result;
     };
   }
+
+  const originalResolveByName = proto._resolveEntitiesByName;
+  if (typeof originalResolveByName === "function") {
+    proto._resolveEntitiesByName = function notificationResolveByName(base) {
+      const resolved = originalResolveByName.call(this, base);
+      const explicit = this._config?.notification_entity;
+      if (explicit && this._hass?.states?.[explicit]) resolved.notification_entity = explicit;
+      if (!resolved.notification_entity) {
+        const mowerEntity = resolved.mower_entity || this._config?.entity;
+        resolved.notification_entity = notificationEntityCandidates(mowerEntity).find((entityId) => this._hass?.states?.[entityId]) || null;
+      }
+      return resolved;
+    };
+  }
+
+  const originalRegistryResolve = proto._resolveEntitiesFromRegistry;
+  if (typeof originalRegistryResolve === "function") {
+    proto._resolveEntitiesFromRegistry = async function notificationRegistryResolve(...args) {
+      const result = await originalRegistryResolve.apply(this, args);
+      resolveNotificationEntity(this);
+      renderNotificationBell(this);
+      if (this._notificationDialogOpen) {
+        this._notificationDialogRenderKeyBeta4 = null;
+        renderNotificationDialog4(this);
+      }
+      return result;
+    };
+  }
+
   const originalRenderShell = proto._renderShell;
   if (typeof originalRenderShell === "function") {
-    proto._renderShell = function beta4RenderShell(...args) {
+    proto._renderShell = function notificationRenderShell(...args) {
       const result = originalRenderShell.apply(this, args);
+      ensureNotificationDom(this);
+      ensureBeta2NotificationDom(this);
       enforceTwoRowHeader(this);
+      renderNotificationBell(this);
       return result;
     };
   }
-  proto._openNotificationDialog = function beta4OpenNotifications() {
+
+  proto._openNotificationDialog = function notificationOpen() {
     this._mowDialogOpen = false;
     this._scheduleDialogOpen = false;
     this._notificationDialogOpen = true;
@@ -5077,21 +4927,27 @@ function patchCard9() {
     this._notificationBeta4MarkAllPending = false;
     this._notificationBeta4ActionError = null;
     this._notificationDialogRenderKeyBeta4 = null;
+    this._notificationAutoReadRun = false;
     this._renderShell?.();
+    renderNotificationBell(this);
     renderNotificationDialog4(this);
     maybeAutoMarkReadOnOpen3(this);
   };
-  proto._closeNotificationDialog = function beta4CloseNotifications() {
+
+  proto._closeNotificationDialog = function notificationClose() {
     this._notificationDialogOpen = false;
     this._notificationExpandedMessageIds = /* @__PURE__ */ new Set();
     this._notificationBeta4ActionError = null;
     this._notificationDialogRenderKeyBeta4 = null;
+    this._notificationAutoReadRun = false;
+    renderNotificationBell(this);
     this._renderShell?.();
     this._renderDialog?.();
   };
+
   const originalRenderDialog = proto._renderDialog;
   if (typeof originalRenderDialog === "function") {
-    proto._renderDialog = function beta4RenderDialog(...args) {
+    proto._renderDialog = function notificationRenderDialog(...args) {
       if (this._notificationDialogOpen) {
         renderNotificationDialog4(this);
         return void 0;
@@ -5099,22 +4955,47 @@ function patchCard9() {
       return originalRenderDialog.apply(this, args);
     };
   }
-  proto._renderNotificationDialog = function beta4ExplicitNotificationRender() {
+
+  proto._renderNotificationDialog = function notificationExplicitRender() {
     renderNotificationDialog4(this);
   };
-  proto._markNotificationRead = function beta4MarkOne(messageId) {
+  proto._markNotificationRead = function notificationMarkOne(messageId) {
     return markNotificationRead3(this, messageId);
   };
-  proto._markAllNotificationsRead = function beta4MarkAll() {
+  proto._markAllNotificationsRead = function notificationMarkAll() {
     return markAllNotificationsRead3(this);
   };
+
+  const originalOpenSchedule = proto._openScheduleDialog;
+  if (typeof originalOpenSchedule === "function") {
+    proto._openScheduleDialog = function notificationCloseForSchedule(...args) {
+      this._notificationDialogOpen = false;
+      this._notificationDialogRenderKeyBeta4 = null;
+      renderNotificationBell(this);
+      return originalOpenSchedule.apply(this, args);
+    };
+  }
+
+  const originalMowPressed = proto._onMowPressed;
+  if (typeof originalMowPressed === "function") {
+    proto._onMowPressed = function notificationCloseForMow(...args) {
+      this._notificationDialogOpen = false;
+      this._notificationDialogRenderKeyBeta4 = null;
+      renderNotificationBell(this);
+      return originalMowPressed.apply(this, args);
+    };
+  }
+
   const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
   if (hassDescriptor?.set) {
     Object.defineProperty(proto, "hass", {
       ...hassDescriptor,
       set(hass) {
         hassDescriptor.set.call(this, hass);
+        ensureNotificationDom(this);
+        ensureBeta2NotificationDom(this);
         enforceTwoRowHeader(this);
+        renderNotificationBell(this);
         if (this._notificationDialogOpen) {
           this._notificationDialogRenderKeyBeta4 = null;
           renderNotificationDialog4(this);

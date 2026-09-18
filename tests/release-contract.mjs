@@ -28,6 +28,14 @@ const dist = readFileSync("dist/navimower-map-card.js", "utf8");
 assert.ok(source.includes(`var NAVIMOWER_MAP_CARD_VERSION2 = "${pkg.version}";`), "runtime version must match package.json");
 assert.equal(dist, source, "dist must be the committed build copy of src");
 
+const startupVersionLogs = [...source.matchAll(/console\.info\(\s*["'`]\[Navimower Map Card\]\s+v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?[^"'\`\r\n]*["'`]\s*,?\s*\);/g)];
+assert.equal(startupVersionLogs.length, 1, "runtime must expose exactly one informational version startup log");
+assert.equal(
+  startupVersionLogs[0][0],
+  `console.info("[Navimower Map Card] v${pkg.version} loaded");`,
+  "startup log must report only the current package version",
+);
+
 const betaVersionScripts = readdirSync("scripts").filter((name) => /^beta\d+-version\.mjs$/.test(name));
 assert.deepEqual(betaVersionScripts, [], "beta-specific version scripts must not return");
 assert.ok(existsSync(".github/workflows/publish.yml"), "generic publish workflow is required");

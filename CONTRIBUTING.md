@@ -31,7 +31,7 @@ The active release preparation is intentionally limited to:
 node scripts/sync-version.mjs && node scripts/build.mjs
 ```
 
-This synchronizes the runtime version marker from `package.json` and copies the committed cumulative source to `dist/` deterministically.
+This synchronizes the runtime version marker from `package.json` and builds the single production file in `dist/` with the pinned Terser version declared in `scripts/build.mjs`.
 
 Do not add an old or new beta upgrade script back into `prepare-release`. If an implementation change is needed, land the actual cumulative runtime change in `src/`, add/update permanent regressions, and keep release preparation independent from the path used to develop that feature.
 
@@ -62,7 +62,7 @@ When a frontend feature depends on a Navimower integration capability, document 
 
 ## Local checks
 
-The project has no runtime dependencies.
+The browser runtime has no external dependencies. The build step uses a pinned Terser version through `npx`; it is a build-time tool only and is not shipped to Home Assistant.
 
 For a normal source/documentation change run:
 
@@ -78,7 +78,7 @@ npm run prepare-release
 npm test
 ```
 
-`npm test` must be read-only. `dist/navimower-map-card.js` must remain byte-for-byte identical to `src/navimower-map-card.js` after the build/preparation step.
+`npm test` must be read-only. After build/preparation, `dist/navimower-map-card.js` must be the smaller optimized form of the readable `src/navimower-map-card.js` and must remain a single self-contained module.
 
 Please test UI changes in at least:
 

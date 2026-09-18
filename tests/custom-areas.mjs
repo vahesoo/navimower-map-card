@@ -16,7 +16,7 @@ const required = [
 for (const needle of required) {
   if (!runtime.includes(needle)) throw new Error(`Missing Custom Area runtime guard: ${needle}`);
 }
-if (!runtime.includes('custom_area_color = next.gate_area_color || "#8e24aa"')) {
+if (!/custom_area_color\s*=\s*\w+\.gate_area_color\s*\|\|\s*"#8e24aa"/.test(runtime)) {
   throw new Error("Custom Area default must follow Gate Area color when configured");
 }
 console.log("Custom Area overlay regression checks passed");

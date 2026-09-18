@@ -6383,7 +6383,8 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 // 0.3.4-beta5: scheduler overview and configurable settings dialog.
 if (__navimowerRuntimeCard && !__navimowerRuntimeAlreadyApplied) {
-nmRuntimePatch1:{const Card=__navimowerRuntimeCard;
+const Card=__navimowerRuntimeCard;
+{
 const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   const slots = Array.from({ length: 12 }, (_, index) => `settings_entity_${index + 1}`);
   const originalStub = Card.getStubConfig?.bind(Card);
@@ -6495,7 +6496,7 @@ const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("
 
 
 // 0.3.4-beta6: schedule source selection, custom queue editing and inline settings controls.
-nmRuntimePatch2:{const Card=__navimowerRuntimeCard;
+{
 const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
   const proto=Card.prototype; const slots=Array.from({length:12},(_,i)=>`settings_entity_${i+1}`);
   const oldStub=Card.getStubConfig?.bind(Card); Card.getStubConfig=()=>({...oldStub?.(),schedule_view_mode:'auto'});
@@ -6518,7 +6519,7 @@ const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replac
 
 
 // 0.3.4-beta8: native Home Assistant Settings rows and single-dialog flow.
-nmRuntimePatch3:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const slots = Array.from({ length: 12 }, (_, index) => "settings_entity_" + (index + 1));
 
@@ -6676,7 +6677,7 @@ const proto = Card.prototype;
 
 
 // 0.3.4-beta9: current-cycle live history label.
-nmRuntimePatch4:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const previousRenderHistoryBar = proto._renderHistoryBar;
   proto._renderHistoryBar = function (...args) {
@@ -6696,7 +6697,7 @@ const proto = Card.prototype;
 
 
 // 0.3.4-beta10: resilient Navimower scheduler discovery.
-nmRuntimePatch5:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const CACHE_TTL_MS = 30000;
 
@@ -6949,7 +6950,7 @@ const proto = Card.prototype;
 
 
 // 0.3.4-beta11: responsive managed scheduler editor.
-nmRuntimePatch6:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const SAVE_DEBOUNCE_MS = 750;
   const SAVED_FEEDBACK_MS = 1000;
@@ -7351,7 +7352,7 @@ const proto = Card.prototype;
 
 
 // 0.3.5-beta2: lazy persistent scheduler runtime.
-nmRuntimePatch7:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const REGISTRY_FALLBACK_DELAY_MS = 250;
   const SAVE_DEBOUNCE_MS = 750;
@@ -7924,7 +7925,7 @@ const proto = Card.prototype;
 
 
 // 0.3.5-beta3: mobile scheduler scope and interaction fixes.
-nmRuntimePatch8:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const emptySchedulerIds = () => ({
     status: null,
@@ -8270,7 +8271,7 @@ const proto = Card.prototype;
 
 
 // 0.3.5-beta4: flattened hot-path and phased visual render pipeline.
-nmRuntimePatch9:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
 
   const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
@@ -8449,7 +8450,7 @@ const proto = Card.prototype;
 
 
 // 0.3.5-beta5: resilient mower artwork visibility.
-nmRuntimePatch10:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const previousRenderMower = proto._renderMower;
 
@@ -8516,9 +8517,9 @@ const proto = Card.prototype;
 
 
 // 0.3.5-beta6: polished visual editor appearance layout.
-nmRuntimePatch11:{const Card=__navimowerRuntimeCard;
+{
 const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm !== "function") break nmRuntimePatch11;
+  if (typeof previousGetConfigForm === "function") {
 
   const CUSTOM_FIELDS = [
     "show_custom_areas",
@@ -8651,13 +8652,14 @@ const previousGetConfigForm = Card.getConfigForm;
     return form;
   };
 }
+}
 
 
 
 // 0.3.5-beta7: non-overlapping color labels in the visual editor.
-nmRuntimePatch12:{const Card=__navimowerRuntimeCard;
+{
 const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm !== "function") break nmRuntimePatch12;
+  if (typeof previousGetConfigForm === "function") {
 
   const SWATCH_LABELS = {
     custom_area_color: "Custom area",
@@ -8710,13 +8712,14 @@ const previousGetConfigForm = Card.getConfigForm;
     return form;
   };
 }
+}
 
 
 
 // 0.3.5-beta8: native-only color labels in the visual editor.
-nmRuntimePatch13:{const Card=__navimowerRuntimeCard;
+{
 const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm !== "function") break nmRuntimePatch13;
+  if (typeof previousGetConfigForm === "function") {
 
   const LABELS = {
     custom_area_color: "Custom area color",
@@ -8767,11 +8770,12 @@ const previousGetConfigForm = Card.getConfigForm;
     return form;
   };
 }
+}
 
 
 
 // 0.3.5-beta9: backend-owned current-cycle mowed-area render.
-nmRuntimePatch14:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
 
   const previousRenderHistory = proto._renderHistory;
@@ -8837,7 +8841,7 @@ const proto = Card.prototype;
 
 
 // 0.3.5-beta10: organized editor groups and configurable header buttons.
-nmRuntimePatch15:{const Card=__navimowerRuntimeCard;
+{
 const BUTTON_FIELDS = [
     "show_history_button",
     "show_notifications_button",
@@ -9083,7 +9087,7 @@ const BUTTON_FIELDS = [
 
 
 // 0.3.5-beta11: real color defaults, combined schedule state and mower error pulse.
-nmRuntimePatch16:{const Card=__navimowerRuntimeCard;
+{
 const COLOR_DEFAULTS = {
     zone_fill_color: "#81c784",
     zone_stroke_color: "#43a047",
@@ -9258,7 +9262,7 @@ const COLOR_DEFAULTS = {
 
 
 // 0.3.5-beta12: installation visual defaults and uniform stroke widths.
-nmRuntimePatch17:{const Card=__navimowerRuntimeCard;
+{
 const VISUAL_DEFAULTS = Object.freeze({
     map_background_color: "#ffffff",
     map_legend_opacity: 0.10,
@@ -9475,7 +9479,7 @@ const VISUAL_DEFAULTS = Object.freeze({
 
 
 // 0.3.5-beta13: legend visibility follows map toggles and managed schedule gets an enable switch.
-nmRuntimePatch18:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
 
   function hasCustomAreas(card) {
@@ -9610,7 +9614,7 @@ const proto = Card.prototype;
 
 
 // 0.3.5-beta14: consistent card-dialog backdrop closing and schedule header alignment.
-nmRuntimePatch19:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
 
   function attachBackdropClose(root, closeSelector, markerName) {
@@ -9678,7 +9682,7 @@ const proto = Card.prototype;
 
 
 // 0.3.6-beta1: opt-in multi-mower site view.
-nmRuntimePatch20:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const SITE_REFRESH_MS = 60_000;
@@ -11278,7 +11282,7 @@ const proto = Card.prototype;
 
 
 // 0.3.6-beta5: optional OpenStreetMap underlay.
-nmRuntimePatch21:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const EARTH_RADIUS_M = 6378137;
@@ -11899,7 +11903,7 @@ const proto = Card.prototype;
 
 
 // 0.3.6-beta6: OSM Multi stability and editor visibility.
-nmRuntimePatch22:{const Card=__navimowerRuntimeCard;
+{
 const previousForm = Card.getConfigForm?.bind(Card);
   Card.getConfigForm = (...args) => {
     const form = previousForm?.(...args) || { schema: [] };
@@ -11956,7 +11960,7 @@ const previousForm = Card.getConfigForm?.bind(Card);
 
 
 // 0.3.6-beta7: OSM Multi visibility and ready-state sync.
-nmRuntimePatch23:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const previousSetConfig = proto.setConfig;
   if (typeof previousSetConfig === "function") {
@@ -11977,7 +11981,7 @@ const proto = Card.prototype;
 
 
 // 0.3.6-beta10: zoom-aware Estonia orthophoto detail and WGS84 ellipsoid underlay geodesy.
-nmRuntimePatch24:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const WGS84_A_M = 6378137.0;
@@ -12312,7 +12316,7 @@ const proto = Card.prototype;
 
 
 // 0.3.6-beta11: unified map underlays, Estonia hybrid and Google Satellite.
-nmRuntimePatch25:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const DEFAULT_OPACITY11 = 0.55;
   const DEFAULT_GOOGLE_ZOOM11 = 19;
@@ -12638,7 +12642,7 @@ const proto = Card.prototype;
 
 
 // 0.3.6-beta14: manual underlay position and rotation calibration.
-nmRuntimePatch26:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const OFFSET_MIN14 = -10;
   const OFFSET_MAX14 = 10;
@@ -12903,7 +12907,7 @@ const proto = Card.prototype;
 
 
 // 0.3.6-beta16: prioritized phased loading and selective multi-mower updates.
-nmRuntimePatch27:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const RETRY_MS = 30_000;
 
@@ -13021,7 +13025,7 @@ const proto = Card.prototype;
 
 
 // 0.3.6-beta19: visual gate-area polygon editor.
-nmRuntimePatch28:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const MAX_POINTS = 64;
@@ -13845,7 +13849,7 @@ const proto = Card.prototype;
 // 0.3.6-beta21: unrestricted nearest-edge gate-area insertion.
 
 // 0.3.7-beta2: stable vendor backbone / MQTT tail and authenticated OSM tiles.
-nmRuntimePatch29:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const MATCH_RADIUS_M = 1.0;
   const SPLIT_DISTANCE_SQ = 25;
@@ -14148,7 +14152,7 @@ const proto = Card.prototype;
 
 
 // 0.3.7-beta3: selectable LiDAR terrain overlay.
-nmRuntimePatch30:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const DEFAULT_OPACITY = 0.65;
@@ -14669,7 +14673,7 @@ const proto = Card.prototype;
 
 
 // 0.3.7-beta6: flicker-free incremental map refreshes.
-nmRuntimePatch31:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
 
   const stableHash = (value) => {
@@ -14887,7 +14891,7 @@ const proto = Card.prototype;
 
 
 // 0.3.7-beta7: accept deferred vendor renders by stable cycle identity.
-nmRuntimePatch32:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const RETRY_MS = 10_000;
 
@@ -15125,7 +15129,7 @@ const proto = Card.prototype;
 
 
 // 0.3.7-beta8: shared, cycle-safe per-zone prepared SVG resources.
-nmRuntimePatch33:{const Card=__navimowerRuntimeCard;
+{
 const proto = Card.prototype;
   const SVG_NS = "http://www.w3.org/2000/svg";
   const buckets = new WeakMap();

@@ -226,13 +226,6 @@ var LABELS = Object.freeze({
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-function defaultGridOptions() {
-  return {
-    columns: "full",
-    min_columns: 3,
-    min_rows: 5
-  };
-}
 function finiteNumber(value, fallback = null) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -564,7 +557,12 @@ var NavimowerMapCard = class extends HTMLElement {
     return this._config?.show_session_legend === false ? 7 : 8;
   }
   getGridOptions() {
-    return defaultGridOptions();
+    return {
+      rows: 8,
+      columns: 6,
+      min_rows: 5,
+      min_columns: 3
+    };
   }
   connectedCallback() {
     this._connected = true;
@@ -3115,12 +3113,6 @@ if (!window.customCards.some((card) => card.type === "navimower-map-card")) {
 
 // src/navimower-map-card-v030.js
 var SESSION_INDEX_CACHE = /* @__PURE__ */ new Map();
-var SCHEDULE_CLOSE_DELAY_MS = 2500;
-function scheduleSaveSucceeded(card) {
-  const dirty = (card?._scheduleDraft || []).some((day) => day?._dirty || day?._saving);
-  const failed = Object.values(card?._scheduleStatus || {}).some((status) => status?.kind === "error");
-  return !dirty && !failed;
-}
 var SESSION_RENDER_CACHE = /* @__PURE__ */ new Map();
 var LIGHTWEIGHT_MAP_CACHE = /* @__PURE__ */ new Map();
 var LATEST_LIGHTWEIGHT_MAP_CACHE = /* @__PURE__ */ new Map();
@@ -3140,6 +3132,9 @@ function cacheSet2(cache, key, value, limit = MAP_CACHE_LIMIT2) {
   cache.delete(key);
   cache.set(key, value);
   while (cache.size > limit) cache.delete(cache.keys().next().value);
+}
+function escapeHtml2(value) {
+  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 function asDate(value) {
   if (!value) return null;
@@ -3234,18 +3229,18 @@ function archiveSvg(render, layout, color, opacity, id) {
   if (!validArchive(render)) return "";
   const matrix = layoutMatrix(layout);
   if (!matrix) return "";
-  const safeColor = escapeHtml(color || "#43a047");
-  const safeId = escapeHtml(id);
+  const safeColor = escapeHtml2(color || "#43a047");
+  const safeId = escapeHtml2(id);
   const safeOpacity = clamp2(finite(opacity, 0.55), 0, 1).toFixed(2);
   const areaPath = String(render?.mowed_area?.path_d || "").trim();
   const travelPath = String(render?.travel?.path_d || "").trim();
   const travelWidth = Math.max(0.02, finite(render?.travel?.stroke_width_m, 0.08));
   const parts = [];
   if (areaPath) {
-    parts.push(`<path class="nm-session-area" d="${escapeHtml(areaPath)}" fill="${safeColor}" fill-rule="evenodd" clip-rule="evenodd"/>`);
+    parts.push(`<path class="nm-session-area" d="${escapeHtml2(areaPath)}" fill="${safeColor}" fill-rule="evenodd" clip-rule="evenodd"/>`);
   }
   if (travelPath) {
-    parts.push(`<path class="nm-session-travel" d="${escapeHtml(travelPath)}" fill="none" stroke="${safeColor}" stroke-width="${travelWidth}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    parts.push(`<path class="nm-session-travel" d="${escapeHtml2(travelPath)}" fill="none" stroke="${safeColor}" stroke-width="${travelWidth}" stroke-linecap="round" stroke-linejoin="round"/>`);
   }
   return `<g class="nm-session-archive" data-session-id="${safeId}" opacity="${safeOpacity}" transform="${matrix.value}">${parts.join("")}</g>`;
 }
@@ -3686,7 +3681,7 @@ function patchCard() {
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
     this._highlightEl.innerHTML = "";
     this._sessionsEl?.querySelectorAll(".nm-session-pulsing").forEach((item) => item.classList.remove("nm-session-pulsing"));
-    const color = escapeHtml(this._config.trail_color);
+    const color = escapeHtml2(this._config.trail_color);
     const svg = archiveSvg(render, this._layout, this._config.trail_color, 1, session.id);
     this._highlightEl.innerHTML = svg;
     const button = [...this._sessionsEl?.querySelectorAll(".nm-session[data-session-id]") || []].find((item) => String(item.dataset.sessionId) === String(requestedId));
@@ -3717,7 +3712,7 @@ function patchCard() {
       const value = offset === 0 ? "today" : String(offset);
       const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
       const active = offset === 0 ? selected === null : Number(selected) === offset;
-      return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${value}">${escapeHtml(label)}</button>`;
+      return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${value}">${escapeHtml2(label)}</button>`;
     }).join("");
   };
   proto._renderSessions = function patchedRenderSessions() {
@@ -3747,40 +3742,176 @@ function patchCard() {
       const loading = !session.active && this._v030RenderLoading.has(String(session.id));
       const disabled = session.drawable ? "" : " disabled";
       const title = session.drawable ? session.active ? "Pulse this active session route on the map" : "Pulse this completed mowed area on the map" : loading ? "Preparing completed mowed area…" : "Completed mowed area is not available yet";
-      return `<button type="button" class="nm-session" data-session-id="${escapeHtml(String(session.id))}" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}. ${escapeHtml(title)}."${disabled}><span class="nm-session-dot" style="background:${escapeHtml(this._config.trail_color)};opacity:${opacity.toFixed(2)}"></span><span>${escapeHtml(label)}</span></button>`;
+      return `<button type="button" class="nm-session" data-session-id="${escapeHtml2(String(session.id))}" title="${escapeHtml2(title)}" aria-label="${escapeHtml2(label)}. ${escapeHtml2(title)}."${disabled}><span class="nm-session-dot" style="background:${escapeHtml2(this._config.trail_color)};opacity:${opacity.toFixed(2)}"></span><span>${escapeHtml2(label)}</span></button>`;
     }).join("");
     this._sessionsEl.style.display = "flex";
   };
   const originalSaveAll = proto._saveAllScheduleChanges;
   proto._saveAllScheduleChanges = async function patchedSaveAllScheduleChanges(...args) {
-    if (this._v034sScheduleCloseTimer) {
-      clearTimeout(this._v034sScheduleCloseTimer);
-      this._v034sScheduleCloseTimer = null;
-    }
     const result = await originalSaveAll.apply(this, args);
-    if (scheduleSaveSucceeded(this)) {
-      this._scheduleDialogOpen = true;
+    const dirty = (this._scheduleDraft || []).some((day) => day?._dirty || day?._saving);
+    const failed = Object.values(this._scheduleStatus || {}).some((status) => status?.kind === "error");
+    if (!dirty && !failed) {
+      this._scheduleDialogOpen = false;
       this._renderDialog();
-      this._v034sScheduleCloseTimer = setTimeout(() => {
-        this._v034sScheduleCloseTimer = null;
-        if (!this._scheduleDialogOpen || !scheduleSaveSucceeded(this)) return;
-        this._scheduleDialogOpen = false;
-        this._renderDialog();
-      }, SCHEDULE_CLOSE_DELAY_MS);
     }
     return result;
   };
   const originalDisconnected = proto.disconnectedCallback;
   proto.disconnectedCallback = function patchedDisconnectedCallback() {
-    if (this._v034sScheduleCloseTimer) {
-      clearTimeout(this._v034sScheduleCloseTimer);
-      this._v034sScheduleCloseTimer = null;
-    }
     this._v030Generation = (this._v030Generation || 0) + 1;
     return originalDisconnected?.call(this);
   };
 }
 if (typeof document !== "undefined" && globalThis.customElements) patchCard();
+
+// src/navimower-map-card-v031.js
+var OUTLINE_DEFAULTS = Object.freeze({
+  zone_stroke_width: 2.5,
+  off_limit_stroke_width: 5,
+  vf_off_stroke_width: 5,
+  channel_stroke_width: 5,
+  gate_area_stroke_width: 3,
+  dock_stroke_width: 3
+});
+var OUTLINE_LIMITS = Object.freeze({ minimum: 0.5, maximum: 12 });
+var OUTLINE_LABELS = Object.freeze({
+  zone_stroke_width: "Zone border width",
+  off_limit_stroke_width: "Off-limit border width",
+  vf_off_stroke_width: "VF-off border width",
+  channel_stroke_width: "Channel line width",
+  gate_area_stroke_width: "Gate area border width",
+  dock_stroke_width: "Dock border width"
+});
+var OUTLINE_FIELDS = Object.freeze([
+  "zone_stroke_width",
+  "off_limit_stroke_width",
+  "vf_off_stroke_width",
+  "channel_stroke_width",
+  "gate_area_stroke_width",
+  "dock_stroke_width"
+]);
+function finiteNumber2(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+function clamp3(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+function outlineWidth(value, fallback) {
+  return clamp3(
+    finiteNumber2(value, fallback),
+    OUTLINE_LIMITS.minimum,
+    OUTLINE_LIMITS.maximum
+  );
+}
+function normalizeOutlineConfig(config = {}) {
+  const normalized = { ...config || {} };
+  for (const field of OUTLINE_FIELDS) {
+    normalized[field] = outlineWidth(normalized[field], OUTLINE_DEFAULTS[field]);
+  }
+  return normalized;
+}
+function findSchema(node, name) {
+  if (!node || typeof node !== "object") return null;
+  if (node.name === name) return node;
+  const children = Array.isArray(node.schema) ? node.schema : [];
+  for (const child of children) {
+    const match = findSchema(child, name);
+    if (match) return match;
+  }
+  return null;
+}
+function outlineField(name) {
+  return {
+    name,
+    selector: {
+      number: {
+        min: OUTLINE_LIMITS.minimum,
+        max: OUTLINE_LIMITS.maximum,
+        step: 0.5,
+        mode: "slider",
+        unit_of_measurement: "px"
+      }
+    }
+  };
+}
+function extendConfigForm(form) {
+  const next = form && typeof form === "object" ? form : { schema: [] };
+  const appearanceGrid = findSchema(next, "appearance_grid");
+  if (appearanceGrid && Array.isArray(appearanceGrid.schema)) {
+    const existing = new Set(appearanceGrid.schema.map((field) => field?.name));
+    const fields = OUTLINE_FIELDS.filter((name) => !existing.has(name)).map(outlineField);
+    if (fields.length) {
+      const colorIndex = appearanceGrid.schema.findIndex(
+        (field) => field?.name === "map_background_color"
+      );
+      appearanceGrid.schema.splice(
+        colorIndex >= 0 ? colorIndex : appearanceGrid.schema.length,
+        0,
+        ...fields
+      );
+    }
+  }
+  const originalComputeLabel = typeof next.computeLabel === "function" ? next.computeLabel : null;
+  next.computeLabel = (schema) => OUTLINE_LABELS[schema?.name] || originalComputeLabel?.(schema) || schema?.name || "";
+  return next;
+}
+function setNonScalingStroke(element, width) {
+  if (!element?.setAttribute) return;
+  element.setAttribute("vector-effect", "non-scaling-stroke");
+  element.setAttribute("stroke-width", String(width));
+}
+function applyToSelector(root, selector, width) {
+  if (!root?.querySelectorAll) return;
+  root.querySelectorAll(selector).forEach((element) => {
+    setNonScalingStroke(element, width);
+  });
+}
+function applyOutlineSettings(card) {
+  const root = card?._detailsEl;
+  if (!root?.querySelectorAll) return;
+  const config = normalizeOutlineConfig(card?._config || {});
+  applyToSelector(root, "line", config.zone_stroke_width);
+  applyToSelector(root, 'polygon[fill-opacity=".08"]', config.off_limit_stroke_width);
+  applyToSelector(root, 'polygon[fill-opacity=".06"]', config.vf_off_stroke_width);
+  applyToSelector(root, 'polyline[stroke-dasharray="12 8"]', config.channel_stroke_width);
+  applyToSelector(root, 'rect[stroke-dasharray="10 6"]', config.gate_area_stroke_width);
+  applyToSelector(root, ".nm-dock-marker rect", config.dock_stroke_width);
+}
+function wrapOutlineRefresh(proto, methodName) {
+  const original = proto?.[methodName];
+  if (typeof original !== "function") return;
+  proto[methodName] = function outlinedRefresh(...args) {
+    const result = original.apply(this, args);
+    applyOutlineSettings(this);
+    return result;
+  };
+}
+function patchCard2() {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimowerV031Patched) return;
+  Card.__navimowerV031Patched = true;
+  const originalStubConfig = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
+  Card.getStubConfig = function outlinedStubConfig() {
+    return normalizeOutlineConfig(originalStubConfig?.() || {});
+  };
+  const originalConfigForm = typeof Card.getConfigForm === "function" ? Card.getConfigForm.bind(Card) : null;
+  Card.getConfigForm = function outlinedConfigForm() {
+    return extendConfigForm(originalConfigForm?.() || { schema: [] });
+  };
+  const proto = Card.prototype;
+  const originalSetConfig = proto.setConfig;
+  if (typeof originalSetConfig === "function") {
+    proto.setConfig = function outlinedSetConfig(config) {
+      return originalSetConfig.call(this, normalizeOutlineConfig(config));
+    };
+  }
+  wrapOutlineRefresh(proto, "_ensureDom");
+  wrapOutlineRefresh(proto, "_renderStatic");
+  wrapOutlineRefresh(proto, "_applyStaticLayers");
+}
+if (globalThis.customElements) patchCard2();
 
 // src/navimower-map-card-v032.js
 var ZONE_MARKER_SCALE_DEFAULT = 1;
@@ -3789,8 +3920,14 @@ function finiteNumber3(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
 }
+function clamp4(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+function escapeHtml3(value) {
+  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
 function zoneMarkerScale(config = {}) {
-  return clamp2(
+  return clamp4(
     finiteNumber3(config?.zone_marker_scale, ZONE_MARKER_SCALE_DEFAULT),
     ZONE_MARKER_SCALE_LIMITS.minimum,
     ZONE_MARKER_SCALE_LIMITS.maximum
@@ -3941,12 +4078,12 @@ function patchCard3() {
   }
   proto._pill = function fixedSizeZoneMarker(cx, cy, value, zoneId = null) {
     const { fontSize, width, height } = this._pillMetrics(value);
-    const text = escapeHtml(value);
+    const text = escapeHtml3(value);
     const interactive = zoneId !== null && zoneId !== void 0;
-    const opacity = clamp2(finiteNumber3(this._config?.zone_label_opacity, 1), 0, 1);
+    const opacity = clamp4(finiteNumber3(this._config?.zone_label_opacity, 1), 0, 1);
     const markerCx = Number(cx).toFixed(1);
     const markerCy = Number(cy).toFixed(1);
-    const attrs = interactive ? ` class="nm-zone-label nm-zone-marker" data-zone-id="${escapeHtml(zoneId)}" role="button" tabindex="0" aria-label="Open details for ${text}"` : ` class="nm-zone-marker"`;
+    const attrs = interactive ? ` class="nm-zone-label nm-zone-marker" data-zone-id="${escapeHtml3(zoneId)}" role="button" tabindex="0" aria-label="Open details for ${text}"` : ` class="nm-zone-marker"`;
     const title = interactive ? "<title>Open zone details</title>" : "";
     const transform = markerTransform(cx, cy, this._view?.scale);
     return `<g${attrs} data-marker-cx="${markerCx}" data-marker-cy="${markerCy}" opacity="${opacity.toFixed(2)}">${title}<g class="nm-zone-marker-body" transform="${transform}"><rect x="${(cx - width / 2).toFixed(1)}" y="${(cy - height / 2).toFixed(1)}" width="${width.toFixed(1)}" height="${height.toFixed(1)}" rx="${(height / 2).toFixed(1)}" fill="#eceff1" fill-opacity=".94" stroke="#b0bec5" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
@@ -3972,6 +4109,90 @@ function patchCard3() {
   wrapMarkerRefresh(proto, "_renderShell");
 }
 if (globalThis.customElements) patchCard3();
+
+// src/navimower-map-card-v033.js
+function defaultGridOptions() {
+  return {
+    columns: "full",
+    min_columns: 3,
+    min_rows: 5
+  };
+}
+function patchCard4() {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimowerV033Patched) return;
+  Card.__navimowerV033Patched = true;
+  Card.prototype.getGridOptions = function navimowerDefaultGridOptions() {
+    return defaultGridOptions();
+  };
+}
+if (globalThis.customElements) patchCard4();
+
+// src/navimower-map-card-v034s.js
+var SCHEDULE_CLOSE_DELAY_MS = 2500;
+function scheduleSaveSucceeded(card) {
+  const dirty = (card?._scheduleDraft || []).some(
+    (day) => day?._dirty || day?._saving
+  );
+  const failed = Object.values(card?._scheduleStatus || {}).some(
+    (status) => status?.kind === "error"
+  );
+  return !dirty && !failed;
+}
+function patchScheduleCloseDelay(proto) {
+  const currentSaveAll = proto?._saveAllScheduleChanges;
+  if (typeof currentSaveAll !== "function") return;
+  proto._saveAllScheduleChanges = async function delayedScheduleDialogClose(...args) {
+    if (this._v034sScheduleCloseTimer) {
+      clearTimeout(this._v034sScheduleCloseTimer);
+      this._v034sScheduleCloseTimer = null;
+    }
+    const renderDialog = this._renderDialog;
+    let suppressedSuccessfulClose = false;
+    if (typeof renderDialog === "function") {
+      this._renderDialog = (...renderArgs) => {
+        if (this._scheduleDialogOpen === false) {
+          suppressedSuccessfulClose = true;
+          return void 0;
+        }
+        return renderDialog.apply(this, renderArgs);
+      };
+    }
+    let result;
+    try {
+      result = await currentSaveAll.apply(this, args);
+    } finally {
+      if (typeof renderDialog === "function") this._renderDialog = renderDialog;
+    }
+    if (suppressedSuccessfulClose && scheduleSaveSucceeded(this)) {
+      this._scheduleDialogOpen = true;
+      renderDialog?.call(this);
+      this._v034sScheduleCloseTimer = setTimeout(() => {
+        this._v034sScheduleCloseTimer = null;
+        if (!this._scheduleDialogOpen || !scheduleSaveSucceeded(this)) return;
+        this._scheduleDialogOpen = false;
+        renderDialog?.call(this);
+      }, SCHEDULE_CLOSE_DELAY_MS);
+    }
+    return result;
+  };
+}
+function patchCard5() {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimowerV034SPatched) return;
+  Card.__navimowerV034SPatched = true;
+  const proto = Card.prototype;
+  patchScheduleCloseDelay(proto);
+  const originalDisconnected = proto.disconnectedCallback;
+  proto.disconnectedCallback = function scheduleDisconnectedCallback(...args) {
+    if (this._v034sScheduleCloseTimer) {
+      clearTimeout(this._v034sScheduleCloseTimer);
+      this._v034sScheduleCloseTimer = null;
+    }
+    return originalDisconnected?.apply(this, args);
+  };
+}
+if (globalThis.customElements) patchCard5();
 
 // src/navimower-map-card-v035n.js
 var NOTIFICATION_PAGE_SIZE = 3;
@@ -4265,12 +4486,118 @@ function renderNotificationDialog(card) {
     });
   });
 }
-
+function patchCard6() {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimowerV035NPatched) return;
+  Card.__navimowerV035NPatched = true;
+  const proto = Card.prototype;
+  const originalEnsureDom = proto._ensureDom;
+  if (typeof originalEnsureDom === "function") {
+    proto._ensureDom = function notificationEnsureDom(...args) {
+      const result = originalEnsureDom.apply(this, args);
+      ensureNotificationDom(this);
+      renderNotificationBell(this);
+      return result;
+    };
+  }
+  const originalResolveByName = proto._resolveEntitiesByName;
+  if (typeof originalResolveByName === "function") {
+    proto._resolveEntitiesByName = function notificationResolveByName(base) {
+      const resolved = originalResolveByName.call(this, base);
+      const explicit = this._config?.notification_entity;
+      if (explicit && this._hass?.states?.[explicit]) resolved.notification_entity = explicit;
+      if (!resolved.notification_entity) {
+        const mowerEntity = resolved.mower_entity || this._config?.entity;
+        resolved.notification_entity = notificationEntityCandidates(mowerEntity).find((entityId) => this._hass?.states?.[entityId]) || null;
+      }
+      return resolved;
+    };
+  }
+  const originalRegistryResolve = proto._resolveEntitiesFromRegistry;
+  if (typeof originalRegistryResolve === "function") {
+    proto._resolveEntitiesFromRegistry = async function notificationRegistryResolve(...args) {
+      const result = await originalRegistryResolve.apply(this, args);
+      resolveNotificationEntity(this);
+      renderNotificationBell(this);
+      if (this._notificationDialogOpen) renderNotificationDialog(this);
+      return result;
+    };
+  }
+  proto._openNotificationDialog = function openNotificationDialog() {
+    this._mowDialogOpen = false;
+    this._scheduleDialogOpen = false;
+    this._notificationDialogOpen = true;
+    this._notificationPage = 0;
+    this._notificationDialogRenderKey = null;
+    renderNotificationBell(this);
+    renderNotificationDialog(this);
+  };
+  proto._closeNotificationDialog = function closeNotificationDialog() {
+    this._notificationDialogOpen = false;
+    this._notificationDialogRenderKey = null;
+    renderNotificationBell(this);
+    this._renderDialog?.();
+  };
+  proto._renderNotificationDialog = function cardRenderNotificationDialog() {
+    renderNotificationDialog(this);
+  };
+  const originalRenderShell = proto._renderShell;
+  if (typeof originalRenderShell === "function") {
+    proto._renderShell = function notificationRenderShell(...args) {
+      const result = originalRenderShell.apply(this, args);
+      renderNotificationBell(this);
+      return result;
+    };
+  }
+  const originalRenderDialog = proto._renderDialog;
+  if (typeof originalRenderDialog === "function") {
+    proto._renderDialog = function notificationRenderDialog(...args) {
+      if (this._notificationDialogOpen) {
+        renderNotificationDialog(this);
+        return void 0;
+      }
+      return originalRenderDialog.apply(this, args);
+    };
+  }
+  const originalOpenSchedule = proto._openScheduleDialog;
+  if (typeof originalOpenSchedule === "function") {
+    proto._openScheduleDialog = function notificationCloseForSchedule(...args) {
+      this._notificationDialogOpen = false;
+      this._notificationDialogRenderKey = null;
+      renderNotificationBell(this);
+      return originalOpenSchedule.apply(this, args);
+    };
+  }
+  const originalMowPressed = proto._onMowPressed;
+  if (typeof originalMowPressed === "function") {
+    proto._onMowPressed = function notificationCloseForMow(...args) {
+      this._notificationDialogOpen = false;
+      this._notificationDialogRenderKey = null;
+      renderNotificationBell(this);
+      return originalMowPressed.apply(this, args);
+    };
+  }
+  const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
+  if (hassDescriptor?.set) {
+    Object.defineProperty(proto, "hass", {
+      ...hassDescriptor,
+      set(hass) {
+        hassDescriptor.set.call(this, hass);
+        renderNotificationBell(this);
+        if (this._notificationDialogOpen) renderNotificationDialog(this);
+      }
+    });
+  }
+}
+if (globalThis.customElements) patchCard6();
 
 // src/navimower-map-card-v036n.js
 var NOTIFICATION_PAGE_SIZE_DEFAULT = 3;
 var NOTIFICATION_PAGE_SIZE_LIMITS = Object.freeze({ minimum: 1, maximum: 5 });
 var NOTIFICATION_MARK_READ_ON_OPEN_DEFAULT = false;
+function escapeHtml5(value) {
+  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+}
 function booleanValue(value, fallback = false) {
   if (value === void 0 || value === null || value === "") return fallback;
   if (value === true || value === false) return value;
@@ -4508,16 +4835,16 @@ function renderNotificationDialog2(card) {
       const timestamp = formatNotificationTimestamp(item.created_at, card._hass);
       const messageId = item.message_id;
       const isPending = Boolean(messageId && pending.has(messageId));
-      const action = isUnread && messageId ? `<button type="button" class="nm-notification-mark-read" data-notification-message-id="${escapeHtml4(messageId)}"${isPending || card._notificationMarkAllPending ? " disabled" : ""}>${isPending ? "Marking…" : "Mark as read"}</button>` : "";
+      const action = isUnread && messageId ? `<button type="button" class="nm-notification-mark-read" data-notification-message-id="${escapeHtml5(messageId)}"${isPending || card._notificationMarkAllPending ? " disabled" : ""}>${isPending ? "Marking…" : "Mark as read"}</button>` : "";
       const title = item.title || "Notification";
-      const content = item.content ? `<div class="nm-notification-content">${escapeHtml4(item.content)}</div>` : "";
+      const content = item.content ? `<div class="nm-notification-content">${escapeHtml5(item.content)}</div>` : "";
       return `<article class="nm-notification-item${isUnread ? " unread" : ""}">
         <div class="nm-notification-meta">
           <span class="nm-notification-dot" aria-hidden="true"></span>
-          <span class="nm-notification-time">${escapeHtml4(timestamp)}</span>
+          <span class="nm-notification-time">${escapeHtml5(timestamp)}</span>
           ${action}
         </div>
-        <div class="nm-notification-item-title">${escapeHtml4(title)}</div>
+        <div class="nm-notification-item-title">${escapeHtml5(title)}</div>
         ${content}
       </article>`;
     }).join("");
@@ -4528,7 +4855,7 @@ function renderNotificationDialog2(card) {
         <button type="button" data-notification-page="next"${page.page >= page.pageCount - 1 ? " disabled" : ""}>Next</button>
       </div>` : "";
   const markAll = unread ? `<button type="button" class="nm-notification-mark-all"${card._notificationMarkAllPending ? " disabled" : ""}>${card._notificationMarkAllPending ? "Marking…" : "Mark all as read"}</button>` : "<span></span>";
-  const error = card._notificationActionError ? `<div class="nm-notification-action-error" role="alert">${escapeHtml4(card._notificationActionError)}</div>` : "";
+  const error = card._notificationActionError ? `<div class="nm-notification-action-error" role="alert">${escapeHtml5(card._notificationActionError)}</div>` : "";
   host.innerHTML = `<div class="nm-backdrop nm-notification-backdrop">
     <div class="nm-dialog nm-notification-dialog" role="dialog" aria-modal="true" aria-label="Notifications">
       <div class="nm-notification-head">
@@ -4574,16 +4901,530 @@ function maybeAutoMarkReadOnOpen(card) {
   card._notificationAutoReadRun = true;
   void markAllNotificationsRead(card);
 }
+function patchCard7() {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimowerV036NPatched) return;
+  Card.__navimowerV036NPatched = true;
+  const originalStubConfig = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
+  Card.getStubConfig = function notificationActionStubConfig() {
+    return normalizeNotificationActionConfig(originalStubConfig?.() || {});
+  };
+  const originalConfigForm = typeof Card.getConfigForm === "function" ? Card.getConfigForm.bind(Card) : null;
+  Card.getConfigForm = function notificationActionConfigForm() {
+    return extendNotificationConfigForm(originalConfigForm?.() || { schema: [] });
+  };
+  const proto = Card.prototype;
+  const originalSetConfig = proto.setConfig;
+  if (typeof originalSetConfig === "function") {
+    proto.setConfig = function notificationActionSetConfig(config) {
+      return originalSetConfig.call(this, normalizeNotificationActionConfig(config));
+    };
+  }
+  const originalEnsureDom = proto._ensureDom;
+  if (typeof originalEnsureDom === "function") {
+    proto._ensureDom = function notificationActionEnsureDom(...args) {
+      const result = originalEnsureDom.apply(this, args);
+      ensureBeta2NotificationDom(this);
+      return result;
+    };
+  }
+  const originalRenderShell = proto._renderShell;
+  if (typeof originalRenderShell === "function") {
+    proto._renderShell = function notificationActionRenderShell(...args) {
+      const result = originalRenderShell.apply(this, args);
+      ensureBeta2NotificationDom(this);
+      return result;
+    };
+  }
+  const originalOpenNotification = proto._openNotificationDialog;
+  if (typeof originalOpenNotification === "function") {
+    proto._openNotificationDialog = function notificationActionOpen(...args) {
+      this._notificationAutoReadRun = false;
+      this._notificationActionError = null;
+      const result = originalOpenNotification.apply(this, args);
+      ensureBeta2NotificationDom(this);
+      this._notificationDialogRenderKeyBeta2 = null;
+      renderNotificationDialog2(this);
+      maybeAutoMarkReadOnOpen(this);
+      return result;
+    };
+  }
+  const originalCloseNotification = proto._closeNotificationDialog;
+  if (typeof originalCloseNotification === "function") {
+    proto._closeNotificationDialog = function notificationActionClose(...args) {
+      this._notificationAutoReadRun = false;
+      this._notificationActionError = null;
+      this._notificationDialogRenderKeyBeta2 = null;
+      return originalCloseNotification.apply(this, args);
+    };
+  }
+  const originalRenderDialog = proto._renderDialog;
+  if (typeof originalRenderDialog === "function") {
+    proto._renderDialog = function notificationActionRenderDialog(...args) {
+      if (this._notificationDialogOpen) {
+        renderNotificationDialog2(this);
+        return void 0;
+      }
+      return originalRenderDialog.apply(this, args);
+    };
+  }
+  proto._renderNotificationDialog = function notificationActionExplicitRender() {
+    renderNotificationDialog2(this);
+  };
+  proto._markNotificationRead = function notificationActionOne(messageId) {
+    return markNotificationRead(this, messageId);
+  };
+  proto._markAllNotificationsRead = function notificationActionAll() {
+    return markAllNotificationsRead(this);
+  };
+  const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
+  if (hassDescriptor?.set) {
+    Object.defineProperty(proto, "hass", {
+      ...hassDescriptor,
+      set(hass) {
+        hassDescriptor.set.call(this, hass);
+        ensureBeta2NotificationDom(this);
+        if (this._notificationDialogOpen) renderNotificationDialog2(this);
+      }
+    });
+  }
+}
+if (globalThis.customElements) patchCard7();
 
+// src/navimower-map-card-v037u.js
+var SHOW_TITLE_DEFAULT = true;
+function escapeHtml6(value) {
+  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+}
+function booleanValue2(value, fallback = false) {
+  if (value === void 0 || value === null || value === "") return fallback;
+  if (value === true || value === false) return value;
+  const text = String(value).trim().toLowerCase();
+  if (["true", "1", "yes", "on"].includes(text)) return true;
+  if (["false", "0", "no", "off"].includes(text)) return false;
+  return Boolean(value);
+}
+function normalizeCompactUiConfig(config = {}) {
+  return {
+    ...config || {},
+    show_title: booleanValue2(config?.show_title, SHOW_TITLE_DEFAULT)
+  };
+}
+function findSchema4(node, name) {
+  if (!node || typeof node !== "object") return null;
+  if (node.name === name) return node;
+  const children = Array.isArray(node.schema) ? node.schema : [];
+  for (const child of children) {
+    const match = findSchema4(child, name);
+    if (match) return match;
+  }
+  return null;
+}
+function extendCompactUiConfigForm(form) {
+  const next = form && typeof form === "object" ? form : { schema: [] };
+  if (!Array.isArray(next.schema)) next.schema = [];
+  const general = findSchema4(next, "general");
+  if (general && Array.isArray(general.schema)) {
+    const entity = findSchema4(general, "entity") || { name: "entity", required: true, selector: { entity: { domain: "lawn_mower" } } };
+    const title = findSchema4(general, "title") || { name: "title", selector: { text: {} } };
+    const autoEntities = findSchema4(general, "auto_entities") || { name: "auto_entities", selector: { boolean: {} } };
+    const showTitle = findSchema4(general, "show_title") || { name: "show_title", default: SHOW_TITLE_DEFAULT, selector: { boolean: {} } };
+    general.schema = [
+      {
+        type: "grid",
+        name: "mower_settings_column",
+        flatten: true,
+        column_min_width: "100%",
+        schema: [entity, autoEntities]
+      },
+      {
+        type: "grid",
+        name: "title_settings_column",
+        flatten: true,
+        column_min_width: "100%",
+        schema: [
+          { type: "constant", name: "title_caption" },
+          title,
+          showTitle
+        ]
+      }
+    ];
+  }
+  const originalComputeLabel = typeof next.computeLabel === "function" ? next.computeLabel : null;
+  const originalComputeHelper = typeof next.computeHelper === "function" ? next.computeHelper : null;
+  next.computeLabel = (schema) => {
+    if (schema?.name === "title_caption") return "Title";
+    if (schema?.name === "title") return "";
+    if (schema?.name === "show_title") return "Show title";
+    if (schema?.name === "trail_length") return "Live trail point cap";
+    return originalComputeLabel?.(schema) || schema?.name || "";
+  };
+  next.computeHelper = (schema) => {
+    if (schema?.name === "trail_length") {
+      return "Limits the browser-side active/fallback trail only. Completed mowed-area history is unaffected.";
+    }
+    return originalComputeHelper?.(schema) || "";
+  };
+  return next;
+}
+function notificationExpansionKey(item = {}, index = 0) {
+  const value = item.message_id ?? item.id ?? item.created_at ?? `row-${index}`;
+  return String(value);
+}
+function notificationState3(card) {
+  const entityId = card?._resolved?.notification_entity || card?._config?.notification_entity || null;
+  return {
+    entityId,
+    state: entityId ? card?._hass?.states?.[entityId] || null : null
+  };
+}
+function expandedMessages(card) {
+  if (!(card._notificationExpandedMessageIds instanceof Set)) {
+    card._notificationExpandedMessageIds = /* @__PURE__ */ new Set();
+  }
+  return card._notificationExpandedMessageIds;
+}
+function pendingMessages2(card) {
+  if (!(card._notificationCompactPendingMessageIds instanceof Set)) {
+    card._notificationCompactPendingMessageIds = /* @__PURE__ */ new Set();
+  }
+  return card._notificationCompactPendingMessageIds;
+}
+function notificationTarget2(card) {
+  const deviceId = typeof card?._mowerDeviceId === "function" ? card._mowerDeviceId() : card?._deviceId || null;
+  if (!deviceId) throw new Error("Navimower mower device_id is not available");
+  return { device_id: deviceId };
+}
+async function markNotificationRead2(card, messageId) {
+  const id = String(messageId || "").trim();
+  if (!id || !card?._hass?.callService) return;
+  const pending = pendingMessages2(card);
+  if (pending.has(id) || card._notificationCompactMarkAllPending) return;
+  pending.add(id);
+  card._notificationCompactActionError = null;
+  card._notificationDialogRenderKeyBeta3 = null;
+  renderNotificationDialog3(card);
+  try {
+    await card._hass.callService("navimower", "mark_notification_read", {
+      ...notificationTarget2(card),
+      message_id: id
+    });
+  } catch (error) {
+    card._notificationCompactActionError = "Mark as read failed";
+    console.error("[Navimower Map Card] navimower.mark_notification_read failed", error);
+  } finally {
+    pending.delete(id);
+    card._notificationDialogRenderKeyBeta3 = null;
+    renderNotificationDialog3(card);
+  }
+}
+async function markAllNotificationsRead2(card) {
+  if (!card?._hass?.callService || card._notificationCompactMarkAllPending) return;
+  card._notificationCompactMarkAllPending = true;
+  card._notificationCompactActionError = null;
+  card._notificationDialogRenderKeyBeta3 = null;
+  renderNotificationDialog3(card);
+  try {
+    await card._hass.callService("navimower", "mark_all_notifications_read", {
+      ...notificationTarget2(card)
+    });
+  } catch (error) {
+    card._notificationCompactActionError = "Mark all as read failed";
+    console.error("[Navimower Map Card] navimower.mark_all_notifications_read failed", error);
+  } finally {
+    card._notificationCompactMarkAllPending = false;
+    card._notificationDialogRenderKeyBeta3 = null;
+    renderNotificationDialog3(card);
+  }
+}
+function ensureHeaderLayout(card) {
+  if (!card?._domReady) return;
+  const header = card.querySelector?.(".nm-header");
+  const title = card.querySelector?.(".nm-title");
+  if (!header || !title) return;
+  let actions = header.querySelector?.(".nm-header-actions");
+  if (!actions) {
+    actions = document.createElement("div");
+    actions.className = "nm-header-actions";
+    header.appendChild(actions);
+  }
+  for (const selector of [".nm-history-button", ".nm-notification-button", ".nm-schedule-button"]) {
+    const button = card.querySelector?.(selector);
+    if (button && button.parentElement !== actions) actions.appendChild(button);
+  }
+  const showTitle = booleanValue2(card?._config?.show_title, SHOW_TITLE_DEFAULT) && Boolean(String(card?._config?.title || "").trim());
+  title.hidden = !showTitle;
+  header.classList.toggle("nm-header-without-title", !showTitle);
+  if (card._compactHeaderStylesApplied) return;
+  const style = card.querySelector?.("style");
+  if (!style) return;
+  card._compactHeaderStylesApplied = true;
+  style.textContent += `
+    .nm-header { display: block; min-height: 0; }
+    .nm-title { width: 100%; box-sizing: border-box; margin: 0 0 5px; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }
+    .nm-title[hidden] { display: none; }
+    .nm-header-actions { width: 100%; min-width: 0; display: flex; flex-wrap: wrap; align-items: center;
+      justify-content: flex-end; gap: 4px 8px; }
+    .nm-header-without-title .nm-header-actions { margin-top: 0; }
+    @media (max-width: 480px) {
+      .nm-header-actions { gap: 3px 5px; }
+      .nm-history-button, .nm-notification-button, .nm-schedule-button { font-size: .82rem; }
+    }
+  `;
+}
+function ensureCompactNotificationStyles(card) {
+  if (!card?._domReady || card._compactNotificationStylesApplied) return;
+  const style = card.querySelector?.("style");
+  if (!style) return;
+  card._compactNotificationStylesApplied = true;
+  style.textContent += `
+    .nm-notification-body { padding-top: 2px; padding-bottom: 2px; }
+    .nm-notification-item { padding: 10px 2px 11px; }
+    .nm-notification-meta { gap: 8px; }
+    .nm-notification-dot { display: none; }
+    .nm-notification-item-title { margin-top: 3px; }
+    .nm-notification-title-button { width: 100%; display: block; padding: 2px 0; border: 0;
+      color: var(--primary-text-color); background: transparent; cursor: pointer; text-align: left;
+      font: inherit; font-weight: 650; line-height: 1.3; }
+    .nm-notification-title-button:hover, .nm-notification-title-button:focus-visible {
+      color: var(--primary-color); outline: none; }
+    .nm-notification-content.nm-notification-content-expanded { margin-top: 6px; padding: 8px 10px;
+      border-radius: 8px; background: var(--secondary-background-color); }
+  `;
+}
+function renderNotificationDialog3(card) {
+  const host = card?._modalHostEl;
+  if (!host || !card?._notificationDialogOpen) return;
+  ensureHeaderLayout(card);
+  ensureCompactNotificationStyles(card);
+  const { entityId, state } = notificationState3(card);
+  const items = notificationItemsWithMessageIds(state);
+  const pageSize = notificationPageSize(card?._config);
+  const page = notificationPage(items, card._notificationPage, pageSize);
+  card._notificationPage = page.page;
+  const unread = hasUnreadNotifications(items);
+  const expanded = expandedMessages(card);
+  const pending = pendingMessages2(card);
+  const signature = JSON.stringify(items.map((item) => [
+    item.id,
+    item.message_id,
+    item.title,
+    item.content,
+    item.created_at,
+    item.read
+  ]));
+  const key = `${entityId || ""}|${state?.state || ""}|${page.page}|${pageSize}|${signature}|${[...expanded].join(",")}|${[...pending].join(",")}|${card._notificationCompactMarkAllPending ? 1 : 0}|${card._notificationCompactActionError || ""}`;
+  if (key === card._notificationDialogRenderKeyBeta3 && host.querySelector?.(".nm-notification-dialog")) return;
+  card._notificationDialogRenderKeyBeta3 = key;
+  let body;
+  if (!entityId || !state) {
+    body = '<div class="nm-notification-empty">Latest notification entity is not available. Navimower 0.4.2-beta2 or later is required for read actions.</div>';
+  } else if (!items.length) {
+    body = '<div class="nm-notification-empty">No notifications available.</div>';
+  } else {
+    body = page.items.map((item, pageIndex) => {
+      const isUnread = item.read === false;
+      const timestamp = formatNotificationTimestamp(item.created_at, card._hass);
+      const messageId = item.message_id;
+      const isPending = Boolean(messageId && pending.has(messageId));
+      const expansionKey = notificationExpansionKey(item, page.page * page.pageSize + pageIndex);
+      const isExpanded = expanded.has(expansionKey);
+      const action = isUnread && messageId ? `<button type="button" class="nm-notification-mark-read" data-notification-mark-id="${escapeHtml6(messageId)}"${isPending || card._notificationCompactMarkAllPending ? " disabled" : ""}>${isPending ? "Marking…" : "Mark as read"}</button>` : "";
+      const title = item.title || "Notification";
+      const content = isExpanded && item.content ? `<div class="nm-notification-content nm-notification-content-expanded">${escapeHtml6(item.content)}</div>` : "";
+      return `<article class="nm-notification-item${isUnread ? " unread" : ""}">
+        <div class="nm-notification-meta">
+          <span class="nm-notification-time">${escapeHtml6(timestamp)}</span>
+          ${action}
+        </div>
+        <div class="nm-notification-item-title">
+          <button type="button" class="nm-notification-title-button"
+            data-notification-expand-key="${escapeHtml6(expansionKey)}"
+            data-notification-title-message-id="${escapeHtml6(messageId || "")}"
+            data-notification-title-unread="${isUnread ? "true" : "false"}"
+            aria-expanded="${isExpanded ? "true" : "false"}">${escapeHtml6(title)}</button>
+        </div>
+        ${content}
+      </article>`;
+    }).join("");
+  }
+  const pager = page.pageCount > 1 ? `<div class="nm-notification-pager">
+        <button type="button" data-notification-page="previous"${page.page <= 0 ? " disabled" : ""}>Previous</button>
+        <span class="nm-notification-page-label">${page.page + 1} / ${page.pageCount}</span>
+        <button type="button" data-notification-page="next"${page.page >= page.pageCount - 1 ? " disabled" : ""}>Next</button>
+      </div>` : "";
+  const markAll = unread ? `<button type="button" class="nm-notification-mark-all"${card._notificationCompactMarkAllPending ? " disabled" : ""}>${card._notificationCompactMarkAllPending ? "Marking…" : "Mark all as read"}</button>` : "<span></span>";
+  const error = card._notificationCompactActionError ? `<div class="nm-notification-action-error" role="alert">${escapeHtml6(card._notificationCompactActionError)}</div>` : "";
+  host.innerHTML = `<div class="nm-backdrop nm-notification-backdrop">
+    <div class="nm-dialog nm-notification-dialog" role="dialog" aria-modal="true" aria-label="Notifications">
+      <div class="nm-notification-head">
+        <div class="nm-notification-title">Notifications</div>
+        ${markAll}
+        <button type="button" class="nm-notification-close" aria-label="Close notifications" title="Close">
+          <ha-icon icon="mdi:close"></ha-icon>
+        </button>
+      </div>
+      <div class="nm-notification-body">${error}${body}</div>
+      ${pager}
+    </div>
+  </div>`;
+  const backdrop = host.querySelector(".nm-notification-backdrop");
+  backdrop?.addEventListener("click", (event) => {
+    if (event.target === backdrop) card._closeNotificationDialog?.();
+  });
+  host.querySelector(".nm-notification-close")?.addEventListener("click", () => card._closeNotificationDialog?.());
+  host.querySelector(".nm-notification-mark-all")?.addEventListener("click", () => {
+    void markAllNotificationsRead2(card);
+  });
+  host.querySelectorAll("[data-notification-mark-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.disabled) return;
+      void markNotificationRead2(card, button.dataset.notificationMarkId);
+    });
+  });
+  host.querySelectorAll("[data-notification-expand-key]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const set = expandedMessages(card);
+      const expansionKey = button.dataset.notificationExpandKey;
+      if (set.has(expansionKey)) set.delete(expansionKey);
+      else set.add(expansionKey);
+      card._notificationDialogRenderKeyBeta3 = null;
+      renderNotificationDialog3(card);
+      if (button.dataset.notificationTitleUnread === "true" && button.dataset.notificationTitleMessageId) {
+        void markNotificationRead2(card, button.dataset.notificationTitleMessageId);
+      }
+    });
+  });
+  host.querySelectorAll("[data-notification-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.disabled) return;
+      card._notificationPage += button.dataset.notificationPage === "next" ? 1 : -1;
+      card._notificationDialogRenderKeyBeta3 = null;
+      renderNotificationDialog3(card);
+    });
+  });
+}
+function maybeAutoMarkReadOnOpen2(card) {
+  if (!booleanValue2(card?._config?.notification_mark_read_on_open, false)) return;
+  const { state } = notificationState3(card);
+  const items = notificationItemsWithMessageIds(state);
+  if (!hasUnreadNotifications(items)) return;
+  void markAllNotificationsRead2(card);
+}
+function patchCard8() {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card.__navimowerV037UPatched) return;
+  Card.__navimowerV037UPatched = true;
+  const originalStubConfig = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
+  Card.getStubConfig = function compactUiStubConfig() {
+    return normalizeCompactUiConfig(originalStubConfig?.() || {});
+  };
+  const originalConfigForm = typeof Card.getConfigForm === "function" ? Card.getConfigForm.bind(Card) : null;
+  Card.getConfigForm = function compactUiConfigForm() {
+    return extendCompactUiConfigForm(originalConfigForm?.() || { schema: [] });
+  };
+  const proto = Card.prototype;
+  const originalSetConfig = proto.setConfig;
+  if (typeof originalSetConfig === "function") {
+    proto.setConfig = function compactUiSetConfig(config) {
+      return originalSetConfig.call(this, normalizeCompactUiConfig(config));
+    };
+  }
+  const originalEnsureDom = proto._ensureDom;
+  if (typeof originalEnsureDom === "function") {
+    proto._ensureDom = function compactUiEnsureDom(...args) {
+      const result = originalEnsureDom.apply(this, args);
+      ensureHeaderLayout(this);
+      ensureCompactNotificationStyles(this);
+      return result;
+    };
+  }
+  const originalRenderShell = proto._renderShell;
+  if (typeof originalRenderShell === "function") {
+    proto._renderShell = function compactUiRenderShell(...args) {
+      const result = originalRenderShell.apply(this, args);
+      ensureHeaderLayout(this);
+      return result;
+    };
+  }
+  proto._openNotificationDialog = function compactUiOpenNotifications() {
+    this._mowDialogOpen = false;
+    this._scheduleDialogOpen = false;
+    this._notificationDialogOpen = true;
+    this._notificationPage = 0;
+    this._notificationExpandedMessageIds = /* @__PURE__ */ new Set();
+    this._notificationCompactPendingMessageIds = /* @__PURE__ */ new Set();
+    this._notificationCompactMarkAllPending = false;
+    this._notificationCompactActionError = null;
+    this._notificationDialogRenderKeyBeta3 = null;
+    this._renderShell?.();
+    renderNotificationDialog3(this);
+    maybeAutoMarkReadOnOpen2(this);
+  };
+  proto._closeNotificationDialog = function compactUiCloseNotifications() {
+    this._notificationDialogOpen = false;
+    this._notificationExpandedMessageIds = /* @__PURE__ */ new Set();
+    this._notificationCompactActionError = null;
+    this._notificationDialogRenderKeyBeta3 = null;
+    this._renderShell?.();
+    this._renderDialog?.();
+  };
+  const originalRenderDialog = proto._renderDialog;
+  if (typeof originalRenderDialog === "function") {
+    proto._renderDialog = function compactUiRenderDialog(...args) {
+      if (this._notificationDialogOpen) {
+        renderNotificationDialog3(this);
+        return void 0;
+      }
+      return originalRenderDialog.apply(this, args);
+    };
+  }
+  proto._renderNotificationDialog = function compactUiExplicitNotificationRender() {
+    renderNotificationDialog3(this);
+  };
+  proto._markNotificationRead = function compactUiMarkOne(messageId) {
+    return markNotificationRead2(this, messageId);
+  };
+  proto._markAllNotificationsRead = function compactUiMarkAll() {
+    return markAllNotificationsRead2(this);
+  };
+  const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
+  if (hassDescriptor?.set) {
+    Object.defineProperty(proto, "hass", {
+      ...hassDescriptor,
+      set(hass) {
+        hassDescriptor.set.call(this, hass);
+        ensureHeaderLayout(this);
+        if (this._notificationDialogOpen) {
+          this._notificationDialogRenderKeyBeta3 = null;
+          renderNotificationDialog3(this);
+        }
+      }
+    });
+  }
+}
+if (globalThis.customElements) patchCard8();
 
 // src/navimower-map-card-v038u.js
 var NOTIFICATION_COUNT_DEFAULT = 5;
 var NOTIFICATION_COUNT_LIMITS = Object.freeze({ minimum: 1, maximum: 10 });
+function escapeHtml7(value) {
+  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+}
+function booleanValue3(value, fallback = false) {
+  if (value === void 0 || value === null || value === "") return fallback;
+  if (value === true || value === false) return value;
+  const text = String(value).trim().toLowerCase();
+  if (["true", "1", "yes", "on"].includes(text)) return true;
+  if (["false", "0", "no", "off"].includes(text)) return false;
+  return Boolean(value);
+}
 function titleHeaderState(config = {}) {
   const title = String(config?.title ?? "").trim();
   return {
     title,
-    show: booleanValue(config?.show_title, true) && Boolean(title)
+    show: booleanValue3(config?.show_title, true) && Boolean(title)
   };
 }
 function notificationCount(config = {}) {
@@ -4656,8 +5497,21 @@ function extendBeta4ConfigForm(form) {
   };
   return next;
 }
+function resolveNotificationEntity3(card) {
+  const hass = card?._hass;
+  const explicit = card?._config?.notification_entity;
+  if (explicit && hass?.states?.[explicit]) return explicit;
+  const resolved = card?._resolved?.notification_entity;
+  if (resolved && hass?.states?.[resolved]) return resolved;
+  const mowerEntity = card?._resolved?.mower_entity || card?._config?.entity || card?._config?.mower_entity || card?._config?.status_entity;
+  const candidate = notificationEntityCandidates(mowerEntity).find((entityId) => hass?.states?.[entityId]);
+  if (candidate && card?._resolved) {
+    card._resolved = { ...card._resolved, notification_entity: candidate };
+  }
+  return candidate || resolved || explicit || null;
+}
 function notificationState4(card) {
-  const entityId = resolveNotificationEntity2(card);
+  const entityId = resolveNotificationEntity3(card);
   return {
     entityId,
     state: entityId ? card?._hass?.states?.[entityId] || null : null
@@ -4675,6 +5529,11 @@ function pendingMessages3(card) {
   }
   return card._notificationBeta4PendingMessageIds;
 }
+function notificationTarget3(card) {
+  const deviceId = typeof card?._mowerDeviceId === "function" ? card._mowerDeviceId() : card?._deviceId || null;
+  if (!deviceId) throw new Error("Navimower mower device_id is not available");
+  return { device_id: deviceId };
+}
 async function markNotificationRead3(card, messageId) {
   const id = String(messageId || "").trim();
   if (!id || !card?._hass?.callService) return;
@@ -4686,7 +5545,7 @@ async function markNotificationRead3(card, messageId) {
   renderNotificationDialog4(card);
   try {
     await card._hass.callService("navimower", "mark_notification_read", {
-      ...notificationTarget(card),
+      ...notificationTarget3(card),
       message_id: id
     });
   } catch (error) {
@@ -4706,7 +5565,7 @@ async function markAllNotificationsRead3(card) {
   renderNotificationDialog4(card);
   try {
     await card._hass.callService("navimower", "mark_all_notifications_read", {
-      ...notificationTarget(card)
+      ...notificationTarget3(card)
     });
   } catch (error) {
     card._notificationBeta4ActionError = "Mark all as read failed";
@@ -4767,27 +5626,27 @@ function renderNotificationDialog4(card) {
       const isPending = Boolean(messageId && pending.has(messageId));
       const expansionKey = notificationExpansionKey2(item, index);
       const isExpanded = expanded.has(expansionKey);
-      const action = isUnread && messageId ? `<button type="button" class="nm-notification-mark-read" data-notification-mark-id="${escapeHtml4(messageId)}"${isPending || card._notificationBeta4MarkAllPending ? " disabled" : ""}>${isPending ? "Marking…" : "Mark as read"}</button>` : "";
+      const action = isUnread && messageId ? `<button type="button" class="nm-notification-mark-read" data-notification-mark-id="${escapeHtml7(messageId)}"${isPending || card._notificationBeta4MarkAllPending ? " disabled" : ""}>${isPending ? "Marking…" : "Mark as read"}</button>` : "";
       const title = item.title || "Notification";
-      const content = isExpanded && item.content ? `<div class="nm-notification-content nm-notification-content-expanded">${escapeHtml4(item.content)}</div>` : "";
+      const content = isExpanded && item.content ? `<div class="nm-notification-content nm-notification-content-expanded">${escapeHtml7(item.content)}</div>` : "";
       return `<article class="nm-notification-item${isUnread ? " unread" : ""}">
         <div class="nm-notification-meta">
-          <span class="nm-notification-time">${escapeHtml4(timestamp)}</span>
+          <span class="nm-notification-time">${escapeHtml7(timestamp)}</span>
           ${action}
         </div>
         <div class="nm-notification-item-title">
           <button type="button" class="nm-notification-title-button"
-            data-notification-expand-key="${escapeHtml4(expansionKey)}"
-            data-notification-title-message-id="${escapeHtml4(messageId || "")}"
+            data-notification-expand-key="${escapeHtml7(expansionKey)}"
+            data-notification-title-message-id="${escapeHtml7(messageId || "")}"
             data-notification-title-unread="${isUnread ? "true" : "false"}"
-            aria-expanded="${isExpanded ? "true" : "false"}">${escapeHtml4(title)}</button>
+            aria-expanded="${isExpanded ? "true" : "false"}">${escapeHtml7(title)}</button>
         </div>
         ${content}
       </article>`;
     }).join("");
   }
   const markAll = unread ? `<button type="button" class="nm-notification-mark-all"${card._notificationBeta4MarkAllPending ? " disabled" : ""}>${card._notificationBeta4MarkAllPending ? "Marking…" : "Mark all as read"}</button>` : "<span></span>";
-  const error = card._notificationBeta4ActionError ? `<div class="nm-notification-action-error" role="alert">${escapeHtml4(card._notificationBeta4ActionError)}</div>` : "";
+  const error = card._notificationBeta4ActionError ? `<div class="nm-notification-action-error" role="alert">${escapeHtml7(card._notificationBeta4ActionError)}</div>` : "";
   host.innerHTML = `<div class="nm-backdrop nm-notification-backdrop">
     <div class="nm-dialog nm-notification-dialog" role="dialog" aria-modal="true" aria-label="Notifications">
       <div class="nm-notification-head">
@@ -4829,7 +5688,7 @@ function renderNotificationDialog4(card) {
   });
 }
 function maybeAutoMarkReadOnOpen3(card) {
-  if (!booleanValue(card?._config?.notification_mark_read_on_open, false)) return;
+  if (!booleanValue3(card?._config?.notification_mark_read_on_open, false)) return;
   const { state } = notificationState4(card);
   if (!hasUnreadNotifications(notificationItemsWithMessageIds(state))) return;
   void markAllNotificationsRead3(card);
@@ -4838,87 +5697,46 @@ function patchCard9() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
   if (!Card || Card.__navimowerV038UPatched) return;
   Card.__navimowerV038UPatched = true;
-
   const originalStubConfig = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
-  Card.getStubConfig = function notificationStubConfig() {
-    return normalizeBeta4Config(normalizeNotificationActionConfig(originalStubConfig?.() || {}));
+  Card.getStubConfig = function beta4StubConfig() {
+    return normalizeBeta4Config(originalStubConfig?.() || {});
   };
-
   const originalConfigForm = typeof Card.getConfigForm === "function" ? Card.getConfigForm.bind(Card) : null;
-  Card.getConfigForm = function notificationConfigForm() {
-    return extendBeta4ConfigForm(extendNotificationConfigForm(originalConfigForm?.() || { schema: [] }));
+  Card.getConfigForm = function beta4ConfigForm() {
+    return extendBeta4ConfigForm(originalConfigForm?.() || { schema: [] });
   };
-
   const proto = Card.prototype;
   const originalSetConfig = proto.setConfig;
   if (typeof originalSetConfig === "function") {
-    proto.setConfig = function notificationSetConfig(config) {
-      const normalized = normalizeBeta4Config(normalizeNotificationActionConfig(config));
+    proto.setConfig = function beta4SetConfig(config) {
+      const normalized = normalizeBeta4Config(config);
       const result = originalSetConfig.call(this, normalized);
       if (this._config) {
         this._config.notification_count = normalized.notification_count;
-        this._config.notification_mark_read_on_open = normalized.notification_mark_read_on_open;
         delete this._config.notification_page_size;
       }
       enforceTwoRowHeader(this);
       return result;
     };
   }
-
   const originalEnsureDom = proto._ensureDom;
   if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function notificationEnsureDom(...args) {
+    proto._ensureDom = function beta4EnsureDom(...args) {
       const result = originalEnsureDom.apply(this, args);
-      ensureNotificationDom(this);
-      ensureBeta2NotificationDom(this);
       enforceTwoRowHeader(this);
       ensureBeta4Styles(this);
-      renderNotificationBell(this);
       return result;
     };
   }
-
-  const originalResolveByName = proto._resolveEntitiesByName;
-  if (typeof originalResolveByName === "function") {
-    proto._resolveEntitiesByName = function notificationResolveByName(base) {
-      const resolved = originalResolveByName.call(this, base);
-      const explicit = this._config?.notification_entity;
-      if (explicit && this._hass?.states?.[explicit]) resolved.notification_entity = explicit;
-      if (!resolved.notification_entity) {
-        const mowerEntity = resolved.mower_entity || this._config?.entity;
-        resolved.notification_entity = notificationEntityCandidates(mowerEntity).find((entityId) => this._hass?.states?.[entityId]) || null;
-      }
-      return resolved;
-    };
-  }
-
-  const originalRegistryResolve = proto._resolveEntitiesFromRegistry;
-  if (typeof originalRegistryResolve === "function") {
-    proto._resolveEntitiesFromRegistry = async function notificationRegistryResolve(...args) {
-      const result = await originalRegistryResolve.apply(this, args);
-      resolveNotificationEntity(this);
-      renderNotificationBell(this);
-      if (this._notificationDialogOpen) {
-        this._notificationDialogRenderKeyBeta4 = null;
-        renderNotificationDialog4(this);
-      }
-      return result;
-    };
-  }
-
   const originalRenderShell = proto._renderShell;
   if (typeof originalRenderShell === "function") {
-    proto._renderShell = function notificationRenderShell(...args) {
+    proto._renderShell = function beta4RenderShell(...args) {
       const result = originalRenderShell.apply(this, args);
-      ensureNotificationDom(this);
-      ensureBeta2NotificationDom(this);
       enforceTwoRowHeader(this);
-      renderNotificationBell(this);
       return result;
     };
   }
-
-  proto._openNotificationDialog = function notificationOpen() {
+  proto._openNotificationDialog = function beta4OpenNotifications() {
     this._mowDialogOpen = false;
     this._scheduleDialogOpen = false;
     this._notificationDialogOpen = true;
@@ -4927,27 +5745,21 @@ function patchCard9() {
     this._notificationBeta4MarkAllPending = false;
     this._notificationBeta4ActionError = null;
     this._notificationDialogRenderKeyBeta4 = null;
-    this._notificationAutoReadRun = false;
     this._renderShell?.();
-    renderNotificationBell(this);
     renderNotificationDialog4(this);
     maybeAutoMarkReadOnOpen3(this);
   };
-
-  proto._closeNotificationDialog = function notificationClose() {
+  proto._closeNotificationDialog = function beta4CloseNotifications() {
     this._notificationDialogOpen = false;
     this._notificationExpandedMessageIds = /* @__PURE__ */ new Set();
     this._notificationBeta4ActionError = null;
     this._notificationDialogRenderKeyBeta4 = null;
-    this._notificationAutoReadRun = false;
-    renderNotificationBell(this);
     this._renderShell?.();
     this._renderDialog?.();
   };
-
   const originalRenderDialog = proto._renderDialog;
   if (typeof originalRenderDialog === "function") {
-    proto._renderDialog = function notificationRenderDialog(...args) {
+    proto._renderDialog = function beta4RenderDialog(...args) {
       if (this._notificationDialogOpen) {
         renderNotificationDialog4(this);
         return void 0;
@@ -4955,47 +5767,22 @@ function patchCard9() {
       return originalRenderDialog.apply(this, args);
     };
   }
-
-  proto._renderNotificationDialog = function notificationExplicitRender() {
+  proto._renderNotificationDialog = function beta4ExplicitNotificationRender() {
     renderNotificationDialog4(this);
   };
-  proto._markNotificationRead = function notificationMarkOne(messageId) {
+  proto._markNotificationRead = function beta4MarkOne(messageId) {
     return markNotificationRead3(this, messageId);
   };
-  proto._markAllNotificationsRead = function notificationMarkAll() {
+  proto._markAllNotificationsRead = function beta4MarkAll() {
     return markAllNotificationsRead3(this);
   };
-
-  const originalOpenSchedule = proto._openScheduleDialog;
-  if (typeof originalOpenSchedule === "function") {
-    proto._openScheduleDialog = function notificationCloseForSchedule(...args) {
-      this._notificationDialogOpen = false;
-      this._notificationDialogRenderKeyBeta4 = null;
-      renderNotificationBell(this);
-      return originalOpenSchedule.apply(this, args);
-    };
-  }
-
-  const originalMowPressed = proto._onMowPressed;
-  if (typeof originalMowPressed === "function") {
-    proto._onMowPressed = function notificationCloseForMow(...args) {
-      this._notificationDialogOpen = false;
-      this._notificationDialogRenderKeyBeta4 = null;
-      renderNotificationBell(this);
-      return originalMowPressed.apply(this, args);
-    };
-  }
-
   const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
   if (hassDescriptor?.set) {
     Object.defineProperty(proto, "hass", {
       ...hassDescriptor,
       set(hass) {
         hassDescriptor.set.call(this, hass);
-        ensureNotificationDom(this);
-        ensureBeta2NotificationDom(this);
         enforceTwoRowHeader(this);
-        renderNotificationBell(this);
         if (this._notificationDialogOpen) {
           this._notificationDialogRenderKeyBeta4 = null;
           renderNotificationDialog4(this);
@@ -5343,7 +6130,7 @@ node.splice(mowerIndex, 0, iconField);
       const value = offset === 0 ? "today" : String(offset);
       const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
       const active = offset === 0 ? selected === null : Number(selected) === offset;
-      return "<button type=\"button\" class=\"nm-history-choice" + (active ? " active" : "") + "\" data-history-offset=\"" + value + "\">" + escapeHtml(label) + "</button>";
+      return "<button type=\"button\" class=\"nm-history-choice" + (active ? " active" : "") + "\" data-history-offset=\"" + value + "\">" + escapeHtml2(label) + "</button>";
     }).join("");
   };
 

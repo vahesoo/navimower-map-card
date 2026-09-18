@@ -8851,10 +8851,7 @@ if (globalThis.customElements) patchCustomAreas0342();
   const previousRenderHistoryBar = proto._renderHistoryBar;
   proto._renderHistoryBar = function backendCurrentCycleHistoryBar(...args) {
     const result = previousRenderHistoryBar?.apply(this, args);
-    if (
-      this._mapPayload?.daily_trails?.scope === "current_cycle"
-      || this._mapPayload?.current_cycle_render?.scope === "current_cycle"
-    ) {
+    if (this._mapPayload?.current_cycle_render?.scope === "current_cycle") {
       this._historyBarEl
         ?.querySelectorAll?.('[data-history-offset="today"]')
         ?.forEach?.((button) => {
@@ -9111,6 +9108,14 @@ if (globalThis.customElements) patchCustomAreas0342();
       return;
     }
     const result = previousRenderHistoryBar?.apply(this, args);
+    if (this._mapPayload?.daily_trails?.scope === "current_cycle") {
+      this._historyBarEl
+        ?.querySelectorAll?.('[data-history-offset="today"]')
+        ?.forEach?.((button) => {
+          button.textContent = "Current cycle";
+          button.title = "Current mowing cycle since the latest confirmed reset";
+        });
+    }
     syncHeaderVisibility(this);
     return result;
   };

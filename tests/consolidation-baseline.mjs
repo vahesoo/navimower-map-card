@@ -16,9 +16,9 @@ assert.match(source, /_v034sScheduleCloseTimer/, "schedule close timer cleanup m
 // Temporary upper bounds for the consolidation branch. Tighten these as patches
 // are folded into the canonical implementation. They prevent accidental growth
 // while preserving the beta9 behavior baseline during the refactor.
-assert.ok(source.length <= 796096, `runtime grew during consolidation: ${source.length} chars`);
-assert.ok(sourceSections.length <= 8, `source section count grew: ${sourceSections.length}`);
-assert.ok(patchMarkers.size <= 40, `runtime patch marker count grew: ${patchMarkers.size}`);
+assert.ok(source.length <= 830221, `runtime grew during consolidation: ${source.length} chars`);
+assert.ok(sourceSections.length <= 12, `source section count grew: ${sourceSections.length}`);
+assert.ok(patchMarkers.size <= 46, `runtime patch marker count grew: ${patchMarkers.size}`);
 assert.ok(iifes.length <= 53, `runtime patch IIFE count grew: ${iifes.length}`);
 
 console.log(

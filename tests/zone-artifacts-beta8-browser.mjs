@@ -10,8 +10,12 @@ assert.ok(chrome, "Chromium/Chrome is required for the native SVG image regressi
 let source = readFileSync(process.env.NAVIMOWER_TEST_RUNTIME || "src/navimower-map-card.js", "utf8");
 assert.equal(await prepareZoneArtifactsBeta8(source, process.cwd()), source, "preparation is idempotent");
 source = source.replace(/^export\s*\{[^}]*\};?/m, "");
-source = source.replace('  console.info("[Navimower Map Card] 0.3.6-beta1 opt-in multi-mower site view enabled");',
-  '  globalThis.multiTest = {renderMultiMap036, memberState036, refreshMemberMap036, refreshMemberCurrentCycle036};');
+const multiTestAnchor = '  proto._beta8RefreshMultiRender = function() { if (multiActive036(this)) renderMultiMap036(this, true); };';
+assert.ok(source.includes(multiTestAnchor), "multi-mower beta8 test hook anchor missing");
+source = source.replace(
+  multiTestAnchor,
+  multiTestAnchor + '\n  globalThis.multiTest = {renderMultiMap036, memberState036, refreshMemberMap036, refreshMemberCurrentCycle036};',
+);
 const checks = async () => {
   const ok = (condition, message) => { if (!condition) throw new Error(message); };
   const wait = async (predicate, label) => {

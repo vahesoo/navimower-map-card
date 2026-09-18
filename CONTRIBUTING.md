@@ -31,7 +31,7 @@ The active release preparation is intentionally limited to:
 node scripts/sync-version.mjs && node scripts/build.mjs
 ```
 
-This synchronizes the runtime version marker from `package.json` and copies the committed cumulative source to `dist/` deterministically.
+This synchronizes the runtime version marker from `package.json` and builds the committed cumulative source into a deterministic minified `dist/` runtime with pinned esbuild.
 
 Do not add an old or new beta upgrade script back into `prepare-release`. If an implementation change is needed, land the actual cumulative runtime change in `src/`, add/update permanent regressions, and keep release preparation independent from the path used to develop that feature.
 
@@ -62,7 +62,7 @@ When a frontend feature depends on a Navimower integration capability, document 
 
 ## Local checks
 
-The project has no runtime dependencies.
+The project has no browser runtime dependencies. The build downloads the pinned `esbuild@0.25.10` tool through `npx` when needed.
 
 For a normal source/documentation change run:
 
@@ -78,7 +78,7 @@ npm run prepare-release
 npm test
 ```
 
-`npm test` must be read-only. `dist/navimower-map-card.js` must remain byte-for-byte identical to `src/navimower-map-card.js` after the build/preparation step.
+`npm test` must be read-only. After the build/preparation step, `dist/navimower-map-card.js` must remain the deterministic minified build of `src/navimower-map-card.js`; CI smoke-tests both source and production runtimes.
 
 Please test UI changes in at least:
 

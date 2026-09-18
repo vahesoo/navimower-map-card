@@ -1,5 +1,4 @@
 // src/navimower-map-card-core.js
-var NAVIMOWER_MAP_CARD_VERSION = "0.2.2";
 var VIEW_SIZE = 1e3;
 var MAP_CACHE_LIMIT = 10;
 var MAP_CACHE_FRESH_MS = 45e3;
@@ -3111,12 +3110,6 @@ if (!window.customCards.some((card) => card.type === "navimower-map-card")) {
     }
   });
 }
-console.info(
-  `%c NAVIMOWER-MAP-CARD %c v${NAVIMOWER_MAP_CARD_VERSION} `,
-  "color: white; background: #43a047; font-weight: 700; padding: 2px 6px; border-radius: 3px 0 0 3px;",
-  "color: #263238; background: #eceff1; font-weight: 700; padding: 2px 6px; border-radius: 0 3px 3px 0;"
-);
-
 // src/navimower-map-card-v030.js
 var SESSION_INDEX_CACHE = /* @__PURE__ */ new Map();
 var SESSION_RENDER_CACHE = /* @__PURE__ */ new Map();
@@ -6209,11 +6202,6 @@ var registration = globalThis.window?.customCards?.find?.(
 if (registration) {
   registration.description = "Navimower map with completed mowed areas, conditional retained-task Resume, compact scrollable account-scoped notifications, schedule editing, controls, and zoom.";
 }
-console.info(
-  `%c NAVIMOWER-MAP-CARD %c v${NAVIMOWER_MAP_CARD_VERSION2} `,
-  "color: white; background: #43a047; font-weight: 700; padding: 2px 6px; border-radius: 3px 0 0 3px;",
-  "color: #263238; background: #eceff1; font-weight: 700; padding: 2px 6px; border-radius: 0 3px 3px 0;"
-);
 export {
   NAVIMOWER_MAP_CARD_VERSION2 as NAVIMOWER_MAP_CARD_VERSION
 };

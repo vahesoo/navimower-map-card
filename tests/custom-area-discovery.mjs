@@ -5,6 +5,6 @@ assert.match(source, /_mapPayload\?\.custom_areas/);
 assert.match(source, /normalizedApiAreas/);
 assert.match(source, /unique_id \|\| ""\)\.includes\("_custom_area_"\)/);
 assert.doesNotMatch(source, /attrs\?\.source === "navimow_off_limit_import"/);
-assert.match(source, /Map API Custom Areas enabled/);
+assert.match(source, /function renderCustomAreas|const renderCustomAreas|renderCustomAreas =/);
 assert.match(source, /renderCustomAreas\(this\)/);
 console.log("Custom Area discovery regression checks passed");

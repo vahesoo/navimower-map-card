@@ -6843,16 +6843,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return discover(this, options);
   };
 
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function schedulerDiscoverySetConfig(config) {
-      if (!this._beta5SchedulerEntities) this._beta5SchedulerEntities = {};
-      if (!this._beta6SchedulerEntities) this._beta6SchedulerEntities = {};
-      const result = previousSetConfig.call(this, config);
-      clearDiscovery(this);
-      return result;
-    };
-  }
 
   const previousMowerDeviceId = proto._mowerDeviceId;
   if (typeof previousMowerDeviceId === "function") {
@@ -7401,8 +7391,8 @@ if (globalThis.customElements) patchCustomAreas0342();
     return {};
   }
 
-  // The scheduler discovery setConfig wrapper primes beta5/beta6 caches before
-  // older compatibility layers run, suppressing eager entity-registry scans.
+  // The later beta10 setConfig path primes beta5/beta6 caches before older
+  // compatibility layers run, suppressing eager entity-registry scans.
 
   // Core entity registry discovery remains a compatibility fallback for renamed
   // installations, but defer it briefly. Normal Navimower cards load the map via
@@ -8868,7 +8858,13 @@ if (globalThis.customElements) patchCustomAreas0342();
       for (const key of BUTTON_FIELDS) {
         if (next[key] === undefined) next[key] = true;
       }
+      if (!this._beta5SchedulerEntities) this._beta5SchedulerEntities = {};
+      if (!this._beta6SchedulerEntities) this._beta6SchedulerEntities = {};
       const result = previousSetConfig.call(this, next);
+      this._beta10SchedulerEntities = null;
+      this._beta10ScheduleDeviceId = null;
+      this._beta6SchedulerEntities = null;
+      this._beta5SchedulerEntities = null;
       if (next.show_history_button === false && this._historyDayOffset !== null) {
         this._historyDayOffset = null;
         this._historyMenuOpen = false;

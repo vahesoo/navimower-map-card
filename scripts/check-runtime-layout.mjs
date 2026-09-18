@@ -9,8 +9,10 @@ assert.deepEqual(await jsFiles("dist"), expected, "dist must contain exactly one
 
 const source = await readFile("src/navimower-map-card.js", "utf8");
 const dist = await readFile("dist/navimower-map-card.js", "utf8");
-assert.equal(dist, source, "dist/navimower-map-card.js must be an exact build copy of src/navimower-map-card.js");
+assert.ok(dist.length < source.length * 0.9, "dist runtime must be a meaningfully smaller minified build");
 assert.doesNotMatch(source, /(?:from\s+|import\s*)["']\.\/navimower-map-card-/,
   "runtime must not reintroduce version-specific local loader imports");
+assert.doesNotMatch(dist, /(?:from\s+|import\s*)["']\.\/navimower-map-card-/,
+  "minified runtime must stay self-contained");
 
-console.log("Single-runtime layout checks passed");
+console.log(`Single-runtime layout checks passed (source ${source.length}, dist ${dist.length})`);

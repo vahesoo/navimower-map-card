@@ -5873,15 +5873,6 @@ function patchCard10() {
   if (!Card || Card.__navimowerV039RPatched) return;
   Card.__navimowerV039RPatched = true;
   const proto = Card.prototype;
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function beta5ResumeEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      ensureStyles(this);
-      updateResumeButton(this);
-      return result;
-    };
-  }
   const originalRenderControls = proto._renderControls;
   if (typeof originalRenderControls === "function") {
     proto._renderControls = function beta5ResumeRenderControls(...args) {
@@ -6066,6 +6057,8 @@ node.splice(mowerIndex, 0, iconField);
   const originalEnsureDom = proto._ensureDom;
   proto._ensureDom = function beta032EnsureDom(...args) {
     const result = originalEnsureDom.apply(this, args);
+    ensureStyles(this);
+    updateResumeButton(this);
     ensureMowerArtwork032(this);
     return result;
   };

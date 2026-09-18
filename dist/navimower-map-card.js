@@ -5648,29 +5648,6 @@ function patchCard9() {
     return extendBeta4ConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalSetConfig = proto.setConfig;
-  if (typeof originalSetConfig === "function") {
-    proto.setConfig = function beta4SetConfig(config) {
-      const normalized = normalizeBeta4Config(config);
-      const prepared = normalizeOutlineConfig(
-        normalizeZoneMarkerConfig(
-          normalizeNotificationActionConfig(
-            normalizeCompactUiConfig(normalized)
-          )
-        )
-      );
-      const previousIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
-      const result = originalSetConfig.call(this, prepared);
-      const currentIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
-      if (!this._v030Renders || previousIdentity && previousIdentity !== currentIdentity) resetArchiveState(this);
-      if (this._config) {
-        this._config.notification_count = normalized.notification_count;
-        delete this._config.notification_page_size;
-      }
-      enforceTwoRowHeader(this);
-      return result;
-    };
-  }
   const originalEnsureDom = proto._ensureDom;
   if (typeof originalEnsureDom === "function") {
     proto._ensureDom = function beta4EnsureDom(...args) {
@@ -6039,7 +6016,23 @@ node.splice(mowerIndex, 0, iconField);
     if (incoming.custom_area_stroke_width === undefined) incoming.custom_area_stroke_width = 3;
     incoming.history_days = historyDays032(incoming.history_days);
     incoming.mower_icon = mowerIconConfig032(incoming.mower_icon);
-    const result = originalSetConfig.call(this, incoming);
+    const normalized = normalizeBeta4Config(incoming);
+    const prepared = normalizeOutlineConfig(
+      normalizeZoneMarkerConfig(
+        normalizeNotificationActionConfig(
+          normalizeCompactUiConfig(normalized)
+        )
+      )
+    );
+    const previousIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
+    const result = originalSetConfig.call(this, prepared);
+    const currentIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
+    if (!this._v030Renders || previousIdentity && previousIdentity !== currentIdentity) resetArchiveState(this);
+    if (this._config) {
+      this._config.notification_count = normalized.notification_count;
+      delete this._config.notification_page_size;
+    }
+    enforceTwoRowHeader(this);
     if (this._historyDayOffset !== null && Number(this._historyDayOffset) >= this._config.history_days) {
       this._historyDayOffset = null;
       this._historyBarRenderKey = null;

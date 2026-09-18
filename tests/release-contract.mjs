@@ -26,7 +26,9 @@ assert.ok(notesText.includes(pkg.version), "release notes must name the package 
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
 assert.ok(source.includes(`var NAVIMOWER_MAP_CARD_VERSION2 = "${pkg.version}";`), "runtime version must match package.json");
-assert.equal(dist, source, "dist must be the committed build copy of src");
+assert.ok(dist.length < source.length * 0.9, "dist must be the minified production build");
+assert.ok(dist.includes(pkg.version), "minified dist must contain the current package version");
+assert.ok(dist.includes("[Navimower Map Card]"), "minified dist must retain the startup log");
 
 const startupVersionLogs = [...source.matchAll(/console\.info\(\s*["'`]\[Navimower Map Card\]\s+v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?[^"'\`\r\n]*["'`]\s*,?\s*\);/g)];
 assert.equal(startupVersionLogs.length, 1, "runtime must expose exactly one informational version startup log");

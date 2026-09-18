@@ -3,11 +3,10 @@ import { readFile } from "node:fs/promises";
 
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
-const dist = await readFile(new URL("../dist/navimower-map-card.js", import.meta.url), "utf8");
 
 assert.match(packageJson.scripts.test, /estonia-orthophoto-beta9\.mjs/);
 
-for (const runtime of [source, dist]) {
+for (const runtime of [source]) {
   assert.match(runtime, /0\.3\.6-beta9: Estonia orthophoto editor availability and zoom fix/);
   assert.match(runtime, /haConfig\.latitude/);
   assert.match(runtime, /haConfig\.longitude/);

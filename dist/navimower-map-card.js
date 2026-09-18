@@ -3141,9 +3141,6 @@ function cacheSet2(cache, key, value, limit = MAP_CACHE_LIMIT2) {
   cache.set(key, value);
   while (cache.size > limit) cache.delete(cache.keys().next().value);
 }
-function escapeHtml2(value) {
-  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-}
 function asDate(value) {
   if (!value) return null;
   const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
@@ -3237,18 +3234,18 @@ function archiveSvg(render, layout, color, opacity, id) {
   if (!validArchive(render)) return "";
   const matrix = layoutMatrix(layout);
   if (!matrix) return "";
-  const safeColor = escapeHtml2(color || "#43a047");
-  const safeId = escapeHtml2(id);
+  const safeColor = escapeHtml(color || "#43a047");
+  const safeId = escapeHtml(id);
   const safeOpacity = clamp2(finite(opacity, 0.55), 0, 1).toFixed(2);
   const areaPath = String(render?.mowed_area?.path_d || "").trim();
   const travelPath = String(render?.travel?.path_d || "").trim();
   const travelWidth = Math.max(0.02, finite(render?.travel?.stroke_width_m, 0.08));
   const parts = [];
   if (areaPath) {
-    parts.push(`<path class="nm-session-area" d="${escapeHtml2(areaPath)}" fill="${safeColor}" fill-rule="evenodd" clip-rule="evenodd"/>`);
+    parts.push(`<path class="nm-session-area" d="${escapeHtml(areaPath)}" fill="${safeColor}" fill-rule="evenodd" clip-rule="evenodd"/>`);
   }
   if (travelPath) {
-    parts.push(`<path class="nm-session-travel" d="${escapeHtml2(travelPath)}" fill="none" stroke="${safeColor}" stroke-width="${travelWidth}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    parts.push(`<path class="nm-session-travel" d="${escapeHtml(travelPath)}" fill="none" stroke="${safeColor}" stroke-width="${travelWidth}" stroke-linecap="round" stroke-linejoin="round"/>`);
   }
   return `<g class="nm-session-archive" data-session-id="${safeId}" opacity="${safeOpacity}" transform="${matrix.value}">${parts.join("")}</g>`;
 }
@@ -3689,7 +3686,7 @@ function patchCard() {
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
     this._highlightEl.innerHTML = "";
     this._sessionsEl?.querySelectorAll(".nm-session-pulsing").forEach((item) => item.classList.remove("nm-session-pulsing"));
-    const color = escapeHtml2(this._config.trail_color);
+    const color = escapeHtml(this._config.trail_color);
     const svg = archiveSvg(render, this._layout, this._config.trail_color, 1, session.id);
     this._highlightEl.innerHTML = svg;
     const button = [...this._sessionsEl?.querySelectorAll(".nm-session[data-session-id]") || []].find((item) => String(item.dataset.sessionId) === String(requestedId));
@@ -3720,7 +3717,7 @@ function patchCard() {
       const value = offset === 0 ? "today" : String(offset);
       const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
       const active = offset === 0 ? selected === null : Number(selected) === offset;
-      return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${value}">${escapeHtml2(label)}</button>`;
+      return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${value}">${escapeHtml(label)}</button>`;
     }).join("");
   };
   proto._renderSessions = function patchedRenderSessions() {
@@ -3750,7 +3747,7 @@ function patchCard() {
       const loading = !session.active && this._v030RenderLoading.has(String(session.id));
       const disabled = session.drawable ? "" : " disabled";
       const title = session.drawable ? session.active ? "Pulse this active session route on the map" : "Pulse this completed mowed area on the map" : loading ? "Preparing completed mowed area…" : "Completed mowed area is not available yet";
-      return `<button type="button" class="nm-session" data-session-id="${escapeHtml2(String(session.id))}" title="${escapeHtml2(title)}" aria-label="${escapeHtml2(label)}. ${escapeHtml2(title)}."${disabled}><span class="nm-session-dot" style="background:${escapeHtml2(this._config.trail_color)};opacity:${opacity.toFixed(2)}"></span><span>${escapeHtml2(label)}</span></button>`;
+      return `<button type="button" class="nm-session" data-session-id="${escapeHtml(String(session.id))}" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}. ${escapeHtml(title)}."${disabled}><span class="nm-session-dot" style="background:${escapeHtml(this._config.trail_color)};opacity:${opacity.toFixed(2)}"></span><span>${escapeHtml(label)}</span></button>`;
     }).join("");
     this._sessionsEl.style.display = "flex";
   };
@@ -3792,14 +3789,8 @@ function finiteNumber3(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
 }
-function clamp4(value, minimum, maximum) {
-  return Math.min(maximum, Math.max(minimum, value));
-}
-function escapeHtml3(value) {
-  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-}
 function zoneMarkerScale(config = {}) {
-  return clamp4(
+  return clamp2(
     finiteNumber3(config?.zone_marker_scale, ZONE_MARKER_SCALE_DEFAULT),
     ZONE_MARKER_SCALE_LIMITS.minimum,
     ZONE_MARKER_SCALE_LIMITS.maximum
@@ -3950,12 +3941,12 @@ function patchCard3() {
   }
   proto._pill = function fixedSizeZoneMarker(cx, cy, value, zoneId = null) {
     const { fontSize, width, height } = this._pillMetrics(value);
-    const text = escapeHtml3(value);
+    const text = escapeHtml(value);
     const interactive = zoneId !== null && zoneId !== void 0;
-    const opacity = clamp4(finiteNumber3(this._config?.zone_label_opacity, 1), 0, 1);
+    const opacity = clamp2(finiteNumber3(this._config?.zone_label_opacity, 1), 0, 1);
     const markerCx = Number(cx).toFixed(1);
     const markerCy = Number(cy).toFixed(1);
-    const attrs = interactive ? ` class="nm-zone-label nm-zone-marker" data-zone-id="${escapeHtml3(zoneId)}" role="button" tabindex="0" aria-label="Open details for ${text}"` : ` class="nm-zone-marker"`;
+    const attrs = interactive ? ` class="nm-zone-label nm-zone-marker" data-zone-id="${escapeHtml(zoneId)}" role="button" tabindex="0" aria-label="Open details for ${text}"` : ` class="nm-zone-marker"`;
     const title = interactive ? "<title>Open zone details</title>" : "";
     const transform = markerTransform(cx, cy, this._view?.scale);
     return `<g${attrs} data-marker-cx="${markerCx}" data-marker-cy="${markerCy}" opacity="${opacity.toFixed(2)}">${title}<g class="nm-zone-marker-body" transform="${transform}"><rect x="${(cx - width / 2).toFixed(1)}" y="${(cy - height / 2).toFixed(1)}" width="${width.toFixed(1)}" height="${height.toFixed(1)}" rx="${(height / 2).toFixed(1)}" fill="#eceff1" fill-opacity=".94" stroke="#b0bec5" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
@@ -4383,9 +4374,6 @@ if (globalThis.customElements) patchCard6();
 var NOTIFICATION_PAGE_SIZE_DEFAULT = 3;
 var NOTIFICATION_PAGE_SIZE_LIMITS = Object.freeze({ minimum: 1, maximum: 5 });
 var NOTIFICATION_MARK_READ_ON_OPEN_DEFAULT = false;
-function escapeHtml5(value) {
-  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
-}
 function booleanValue(value, fallback = false) {
   if (value === void 0 || value === null || value === "") return fallback;
   if (value === true || value === false) return value;
@@ -4623,16 +4611,16 @@ function renderNotificationDialog2(card) {
       const timestamp = formatNotificationTimestamp(item.created_at, card._hass);
       const messageId = item.message_id;
       const isPending = Boolean(messageId && pending.has(messageId));
-      const action = isUnread && messageId ? `<button type="button" class="nm-notification-mark-read" data-notification-message-id="${escapeHtml5(messageId)}"${isPending || card._notificationMarkAllPending ? " disabled" : ""}>${isPending ? "Marking…" : "Mark as read"}</button>` : "";
+      const action = isUnread && messageId ? `<button type="button" class="nm-notification-mark-read" data-notification-message-id="${escapeHtml4(messageId)}"${isPending || card._notificationMarkAllPending ? " disabled" : ""}>${isPending ? "Marking…" : "Mark as read"}</button>` : "";
       const title = item.title || "Notification";
-      const content = item.content ? `<div class="nm-notification-content">${escapeHtml5(item.content)}</div>` : "";
+      const content = item.content ? `<div class="nm-notification-content">${escapeHtml4(item.content)}</div>` : "";
       return `<article class="nm-notification-item${isUnread ? " unread" : ""}">
         <div class="nm-notification-meta">
           <span class="nm-notification-dot" aria-hidden="true"></span>
-          <span class="nm-notification-time">${escapeHtml5(timestamp)}</span>
+          <span class="nm-notification-time">${escapeHtml4(timestamp)}</span>
           ${action}
         </div>
-        <div class="nm-notification-item-title">${escapeHtml5(title)}</div>
+        <div class="nm-notification-item-title">${escapeHtml4(title)}</div>
         ${content}
       </article>`;
     }).join("");
@@ -4643,7 +4631,7 @@ function renderNotificationDialog2(card) {
         <button type="button" data-notification-page="next"${page.page >= page.pageCount - 1 ? " disabled" : ""}>Next</button>
       </div>` : "";
   const markAll = unread ? `<button type="button" class="nm-notification-mark-all"${card._notificationMarkAllPending ? " disabled" : ""}>${card._notificationMarkAllPending ? "Marking…" : "Mark all as read"}</button>` : "<span></span>";
-  const error = card._notificationActionError ? `<div class="nm-notification-action-error" role="alert">${escapeHtml5(card._notificationActionError)}</div>` : "";
+  const error = card._notificationActionError ? `<div class="nm-notification-action-error" role="alert">${escapeHtml4(card._notificationActionError)}</div>` : "";
   host.innerHTML = `<div class="nm-backdrop nm-notification-backdrop">
     <div class="nm-dialog nm-notification-dialog" role="dialog" aria-modal="true" aria-label="Notifications">
       <div class="nm-notification-head">
@@ -4782,22 +4770,11 @@ if (globalThis.customElements) patchCard7();
 // src/navimower-map-card-v038u.js
 var NOTIFICATION_COUNT_DEFAULT = 5;
 var NOTIFICATION_COUNT_LIMITS = Object.freeze({ minimum: 1, maximum: 10 });
-function escapeHtml7(value) {
-  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
-}
-function booleanValue3(value, fallback = false) {
-  if (value === void 0 || value === null || value === "") return fallback;
-  if (value === true || value === false) return value;
-  const text = String(value).trim().toLowerCase();
-  if (["true", "1", "yes", "on"].includes(text)) return true;
-  if (["false", "0", "no", "off"].includes(text)) return false;
-  return Boolean(value);
-}
 function titleHeaderState(config = {}) {
   const title = String(config?.title ?? "").trim();
   return {
     title,
-    show: booleanValue3(config?.show_title, true) && Boolean(title)
+    show: booleanValue(config?.show_title, true) && Boolean(title)
   };
 }
 function notificationCount(config = {}) {
@@ -4870,21 +4847,8 @@ function extendBeta4ConfigForm(form) {
   };
   return next;
 }
-function resolveNotificationEntity3(card) {
-  const hass = card?._hass;
-  const explicit = card?._config?.notification_entity;
-  if (explicit && hass?.states?.[explicit]) return explicit;
-  const resolved = card?._resolved?.notification_entity;
-  if (resolved && hass?.states?.[resolved]) return resolved;
-  const mowerEntity = card?._resolved?.mower_entity || card?._config?.entity || card?._config?.mower_entity || card?._config?.status_entity;
-  const candidate = notificationEntityCandidates(mowerEntity).find((entityId) => hass?.states?.[entityId]);
-  if (candidate && card?._resolved) {
-    card._resolved = { ...card._resolved, notification_entity: candidate };
-  }
-  return candidate || resolved || explicit || null;
-}
 function notificationState4(card) {
-  const entityId = resolveNotificationEntity3(card);
+  const entityId = resolveNotificationEntity2(card);
   return {
     entityId,
     state: entityId ? card?._hass?.states?.[entityId] || null : null
@@ -4902,11 +4866,6 @@ function pendingMessages3(card) {
   }
   return card._notificationBeta4PendingMessageIds;
 }
-function notificationTarget3(card) {
-  const deviceId = typeof card?._mowerDeviceId === "function" ? card._mowerDeviceId() : card?._deviceId || null;
-  if (!deviceId) throw new Error("Navimower mower device_id is not available");
-  return { device_id: deviceId };
-}
 async function markNotificationRead3(card, messageId) {
   const id = String(messageId || "").trim();
   if (!id || !card?._hass?.callService) return;
@@ -4918,7 +4877,7 @@ async function markNotificationRead3(card, messageId) {
   renderNotificationDialog4(card);
   try {
     await card._hass.callService("navimower", "mark_notification_read", {
-      ...notificationTarget3(card),
+      ...notificationTarget(card),
       message_id: id
     });
   } catch (error) {
@@ -4938,7 +4897,7 @@ async function markAllNotificationsRead3(card) {
   renderNotificationDialog4(card);
   try {
     await card._hass.callService("navimower", "mark_all_notifications_read", {
-      ...notificationTarget3(card)
+      ...notificationTarget(card)
     });
   } catch (error) {
     card._notificationBeta4ActionError = "Mark all as read failed";
@@ -4999,27 +4958,27 @@ function renderNotificationDialog4(card) {
       const isPending = Boolean(messageId && pending.has(messageId));
       const expansionKey = notificationExpansionKey2(item, index);
       const isExpanded = expanded.has(expansionKey);
-      const action = isUnread && messageId ? `<button type="button" class="nm-notification-mark-read" data-notification-mark-id="${escapeHtml7(messageId)}"${isPending || card._notificationBeta4MarkAllPending ? " disabled" : ""}>${isPending ? "Marking…" : "Mark as read"}</button>` : "";
+      const action = isUnread && messageId ? `<button type="button" class="nm-notification-mark-read" data-notification-mark-id="${escapeHtml4(messageId)}"${isPending || card._notificationBeta4MarkAllPending ? " disabled" : ""}>${isPending ? "Marking…" : "Mark as read"}</button>` : "";
       const title = item.title || "Notification";
-      const content = isExpanded && item.content ? `<div class="nm-notification-content nm-notification-content-expanded">${escapeHtml7(item.content)}</div>` : "";
+      const content = isExpanded && item.content ? `<div class="nm-notification-content nm-notification-content-expanded">${escapeHtml4(item.content)}</div>` : "";
       return `<article class="nm-notification-item${isUnread ? " unread" : ""}">
         <div class="nm-notification-meta">
-          <span class="nm-notification-time">${escapeHtml7(timestamp)}</span>
+          <span class="nm-notification-time">${escapeHtml4(timestamp)}</span>
           ${action}
         </div>
         <div class="nm-notification-item-title">
           <button type="button" class="nm-notification-title-button"
-            data-notification-expand-key="${escapeHtml7(expansionKey)}"
-            data-notification-title-message-id="${escapeHtml7(messageId || "")}"
+            data-notification-expand-key="${escapeHtml4(expansionKey)}"
+            data-notification-title-message-id="${escapeHtml4(messageId || "")}"
             data-notification-title-unread="${isUnread ? "true" : "false"}"
-            aria-expanded="${isExpanded ? "true" : "false"}">${escapeHtml7(title)}</button>
+            aria-expanded="${isExpanded ? "true" : "false"}">${escapeHtml4(title)}</button>
         </div>
         ${content}
       </article>`;
     }).join("");
   }
   const markAll = unread ? `<button type="button" class="nm-notification-mark-all"${card._notificationBeta4MarkAllPending ? " disabled" : ""}>${card._notificationBeta4MarkAllPending ? "Marking…" : "Mark all as read"}</button>` : "<span></span>";
-  const error = card._notificationBeta4ActionError ? `<div class="nm-notification-action-error" role="alert">${escapeHtml7(card._notificationBeta4ActionError)}</div>` : "";
+  const error = card._notificationBeta4ActionError ? `<div class="nm-notification-action-error" role="alert">${escapeHtml4(card._notificationBeta4ActionError)}</div>` : "";
   host.innerHTML = `<div class="nm-backdrop nm-notification-backdrop">
     <div class="nm-dialog nm-notification-dialog" role="dialog" aria-modal="true" aria-label="Notifications">
       <div class="nm-notification-head">
@@ -5061,7 +5020,7 @@ function renderNotificationDialog4(card) {
   });
 }
 function maybeAutoMarkReadOnOpen3(card) {
-  if (!booleanValue3(card?._config?.notification_mark_read_on_open, false)) return;
+  if (!booleanValue(card?._config?.notification_mark_read_on_open, false)) return;
   const { state } = notificationState4(card);
   if (!hasUnreadNotifications(notificationItemsWithMessageIds(state))) return;
   void markAllNotificationsRead3(card);
@@ -5503,7 +5462,7 @@ node.splice(mowerIndex, 0, iconField);
       const value = offset === 0 ? "today" : String(offset);
       const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
       const active = offset === 0 ? selected === null : Number(selected) === offset;
-      return "<button type=\"button\" class=\"nm-history-choice" + (active ? " active" : "") + "\" data-history-offset=\"" + value + "\">" + escapeHtml2(label) + "</button>";
+      return "<button type=\"button\" class=\"nm-history-choice" + (active ? " active" : "") + "\" data-history-offset=\"" + value + "\">" + escapeHtml(label) + "</button>";
     }).join("");
   };
 

@@ -1,36 +1,20 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { prepareZoneArtifactsBeta8 } from "./prepare-zone-artifacts-beta8.mjs";
 import { normalizeRuntimeVersionLog } from "./runtime-logging.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const sourcePath = resolve(root, "src", "navimower-map-card.js");
-let source = await readFile(sourcePath, "utf8");
-
-const beta6Marker = "__navimower037Beta6FlickerFree";
-if (!source.includes(beta6Marker)) {
-  const patch = await readFile(resolve(root, "scripts", "runtime-v037-beta6.js.txt"), "utf8");
-  source = `${source.trimEnd()}\n\n${patch.trim()}\n`;
-  console.log("Applied beta6 flicker-free runtime patch");
-}
-
-const beta7Marker = "__navimower037Beta7StableCycle";
-if (!source.includes(beta7Marker)) {
-  const patch = await readFile(resolve(root, "scripts", "runtime-v037-beta7.js.txt"), "utf8");
-  source = `${source.trimEnd()}\n\n${patch.trim()}\n`;
-  console.log("Applied beta7 stable-cycle runtime patch");
-}
-source = await prepareZoneArtifactsBeta8(source, root);
+const current = await readFile(sourcePath, "utf8");
 
 const marker = /var NAVIMOWER_MAP_CARD_VERSION2 = "[^"]+";/;
-if (!marker.test(source)) {
+if (!marker.test(current)) {
   throw new Error("Runtime version marker NAVIMOWER_MAP_CARD_VERSION2 was not found");
 }
-source = source.replace(marker, `var NAVIMOWER_MAP_CARD_VERSION2 = "${pkg.version}";`);
-const next = normalizeRuntimeVersionLog(source, pkg.version);
-const current = await readFile(sourcePath, "utf8");
+
+const versioned = current.replace(marker, `var NAVIMOWER_MAP_CARD_VERSION2 = "${pkg.version}";`);
+const next = normalizeRuntimeVersionLog(versioned, pkg.version);
 if (next !== current) {
   await writeFile(sourcePath, next, "utf8");
   console.log(`Synced runtime version and startup log to ${pkg.version}`);

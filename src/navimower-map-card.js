@@ -6382,5632 +6382,5615 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 
 // 0.3.4-beta5: scheduler overview and configurable settings dialog.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-  const slots = Array.from({ length: 12 }, (_, index) => `settings_entity_${index + 1}`);
-  const originalStub = Card.getStubConfig?.bind(Card);
-  Card.getStubConfig = () => ({ ...(originalStub?.() || {}), ...Object.fromEntries(slots.map((key) => [key, null])) });
-  const originalForm = Card.getConfigForm?.bind(Card);
-  Card.getConfigForm = () => {
-    const form = originalForm?.() || { schema: [] };
-    const schema = Array.isArray(form.schema) ? [...form.schema] : [];
-    schema.push({ type: "expandable", name: "settings_dialog", title: "Settings dialog", flatten: true, schema: [
-      { type: "constant", name: "settings_dialog_hint" },
-      { type: "grid", name: "settings_dialog_grid", flatten: true, column_min_width: "200px", schema: slots.map((name) => ({ name, selector: { entity: {} } })) }
-    ] });
-    const label = form.computeLabel;
-    return { ...form, schema, computeLabel: (item) => {
-      if (item?.name === "settings_dialog_hint") return "Choose up to 12 entities shown behind the gear button.";
-      const match = String(item?.name || "").match(/^settings_entity_(\d+)$/);
-      if (match) return `Settings slot ${match[1]}`;
-      return label?.(item) || item?.name || "";
-    }};
-  };
-  const proto = Card.prototype;
-  async function discover(card) {
-    if (card._beta5SchedulerEntities || !card?._hass?.callWS) return card._beta5SchedulerEntities || {};
-    try {
-      const mower = card._mowerEntity?.();
-      const registry = await card._hass.callWS({ type: "config/entity_registry/list" });
-      const mowerEntry = Array.isArray(registry) ? registry.find((entry) => entry.entity_id === mower) : null;
-      const related = mowerEntry?.device_id ? registry.filter((entry) => entry.device_id === mowerEntry.device_id && !entry.disabled_by) : [];
-      const find = (domain, suffix) => related.find((entry) => String(entry.entity_id || "").startsWith(domain + ".") && (String(entry.unique_id || "").endsWith(suffix) || String(entry.entity_id || "").endsWith(suffix)))?.entity_id || null;
-      card._beta5SchedulerEntities = {
-        status: find("sensor", "navimower_schedule_status"),
-        managedSwitch: find("switch", "navimower_schedule"),
-        start: find("time", "navimower_schedule_start"),
-        end: find("time", "navimower_schedule_end"),
-        nativeSwitch: find("switch", "mowing_schedule_enabled") || card._scheduleSwitchEntity?.() || null
+if (__navimowerRuntimeCard && !__navimowerRuntimeAlreadyApplied) {
+  nmRuntimePatch1: {
+    const Card = __navimowerRuntimeCard;
+    const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+      const slots = Array.from({ length: 12 }, (_, index) => `settings_entity_${index + 1}`);
+      const originalStub = Card.getStubConfig?.bind(Card);
+      Card.getStubConfig = () => ({ ...(originalStub?.() || {}), ...Object.fromEntries(slots.map((key) => [key, null])) });
+      const originalForm = Card.getConfigForm?.bind(Card);
+      Card.getConfigForm = () => {
+        const form = originalForm?.() || { schema: [] };
+        const schema = Array.isArray(form.schema) ? [...form.schema] : [];
+        schema.push({ type: "expandable", name: "settings_dialog", title: "Settings dialog", flatten: true, schema: [
+          { type: "constant", name: "settings_dialog_hint" },
+          { type: "grid", name: "settings_dialog_grid", flatten: true, column_min_width: "200px", schema: slots.map((name) => ({ name, selector: { entity: {} } })) }
+        ] });
+        const label = form.computeLabel;
+        return { ...form, schema, computeLabel: (item) => {
+          if (item?.name === "settings_dialog_hint") return "Choose up to 12 entities shown behind the gear button.";
+          const match = String(item?.name || "").match(/^settings_entity_(\d+)$/);
+          if (match) return `Settings slot ${match[1]}`;
+          return label?.(item) || item?.name || "";
+        }};
       };
-    } catch (error) { console.debug("[Navimower Map Card] beta5 scheduler discovery failed", error); card._beta5SchedulerEntities = {}; }
-    return card._beta5SchedulerEntities;
+      const proto = Card.prototype;
+      async function discover(card) {
+        if (card._beta5SchedulerEntities || !card?._hass?.callWS) return card._beta5SchedulerEntities || {};
+        try {
+          const mower = card._mowerEntity?.();
+          const registry = await card._hass.callWS({ type: "config/entity_registry/list" });
+          const mowerEntry = Array.isArray(registry) ? registry.find((entry) => entry.entity_id === mower) : null;
+          const related = mowerEntry?.device_id ? registry.filter((entry) => entry.device_id === mowerEntry.device_id && !entry.disabled_by) : [];
+          const find = (domain, suffix) => related.find((entry) => String(entry.entity_id || "").startsWith(domain + ".") && (String(entry.unique_id || "").endsWith(suffix) || String(entry.entity_id || "").endsWith(suffix)))?.entity_id || null;
+          card._beta5SchedulerEntities = {
+            status: find("sensor", "navimower_schedule_status"),
+            managedSwitch: find("switch", "navimower_schedule"),
+            start: find("time", "navimower_schedule_start"),
+            end: find("time", "navimower_schedule_end"),
+            nativeSwitch: find("switch", "mowing_schedule_enabled") || card._scheduleSwitchEntity?.() || null
+          };
+        } catch (error) { console.debug("[Navimower Map Card] beta5 scheduler discovery failed", error); card._beta5SchedulerEntities = {}; }
+        return card._beta5SchedulerEntities;
+      }
+      function isOn(card, entityId) { return String(card?._hass?.states?.[entityId]?.state || "").toLowerCase() === "on"; }
+      function friendly(card, entityId) { const state = card?._hass?.states?.[entityId]; return state?.attributes?.friendly_name || entityId || "Entity"; }
+      function value(card, entityId) { const state = card?._hass?.states?.[entityId]; if (!state) return "Unavailable"; const unit = state.attributes?.unit_of_measurement || ""; return `${state.state}${unit ? " " + unit : ""}`; }
+      function ensureUi(card) {
+        if (!card?._domReady) return;
+        const header = card.querySelector?.(".nm-header-actions") || card.querySelector?.(".nm-header");
+        if (header && !card.querySelector?.(".nm-settings-button")) {
+          const button = document.createElement("button"); button.type = "button"; button.className = "nm-settings-button"; button.title = "Settings"; button.setAttribute("aria-label", "Open mower settings"); button.innerHTML = '<ha-icon icon="mdi:cog"></ha-icon>';
+          button.addEventListener("click", () => { card._mowDialogOpen = false; card._scheduleDialogOpen = false; card._notificationDialogOpen = false; card._beta5ManagedScheduleOpen = false; card._beta5SettingsOpen = true; card._renderDialog?.(); });
+          header.appendChild(button);
+        }
+        if (!card._beta5StylesApplied) {
+          const style = card.querySelector?.("style"); if (!style) return; card._beta5StylesApplied = true;
+          style.textContent += `
+            .nm-settings-button { width:34px;height:34px;display:inline-grid;place-items:center;padding:0;border:0;border-radius:50%;cursor:pointer;color:var(--secondary-text-color);background:transparent; }
+            .nm-settings-button:hover,.nm-settings-button:focus-visible { background:color-mix(in srgb,currentColor 10%,transparent);outline:none; }
+            .nm-settings-button ha-icon { --mdc-icon-size:20px; }
+            .nm-settings-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:4px 0; }
+            .nm-settings-tile { min-width:0;padding:10px 12px;border:1px solid var(--divider-color);border-radius:10px;background:var(--secondary-background-color);cursor:pointer;text-align:left;color:var(--primary-text-color);font:inherit; }
+            .nm-settings-name { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;color:var(--secondary-text-color); }
+            .nm-settings-value { margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650; }
+            .nm-managed-summary { display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 12px;color:var(--secondary-text-color);font-size:.88rem; }
+            .nm-managed-queue { display:grid;gap:7px; }
+            .nm-managed-zone { display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;background:var(--secondary-background-color);color:var(--primary-text-color); }
+            .nm-managed-zone.completed { color:var(--secondary-text-color);opacity:.72; }
+            .nm-managed-zone.active { color:#FF5A00;font-weight:700;box-shadow:inset 3px 0 #FF5A00; }
+            .nm-managed-zone ha-icon { --mdc-icon-size:19px; }
+            .nm-managed-empty { padding:18px 4px;color:var(--secondary-text-color);text-align:center; }
+            @media(max-width:480px){.nm-settings-grid{grid-template-columns:1fr;}}
+          `;
+        }
+      }
+      function renderSettings(card) {
+        const host = card._modalHostEl; if (!host) return;
+        const entities = slots.map((key) => card._config?.[key]).filter(Boolean);
+        const rows = entities.length ? entities.map((entityId) => `<button type="button" class="nm-settings-tile" data-settings-entity="${esc(entityId)}"><div class="nm-settings-name">${esc(friendly(card, entityId))}</div><div class="nm-settings-value">${esc(value(card, entityId))}</div></button>`).join("") : '<div class="nm-managed-empty">No settings selected. Add entities in the card visual editor → Settings dialog.</div>';
+        host.innerHTML = `<div class="nm-backdrop nm-settings-backdrop"><div class="nm-dialog" role="dialog" aria-modal="true" aria-label="Settings"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Settings</div><button type="button" class="nm-schedule-close" data-settings-close aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-settings-grid">${rows}</div></div></div>`;
+        const backdrop = host.querySelector(".nm-settings-backdrop"); backdrop?.addEventListener("click", (event) => { if (event.target === backdrop) { card._beta5SettingsOpen = false; card._renderDialog(); } });
+        host.querySelector("[data-settings-close]")?.addEventListener("click", () => { card._beta5SettingsOpen = false; card._renderDialog(); });
+        host.querySelectorAll("[data-settings-entity]").forEach((button) => button.addEventListener("click", () => card.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: button.dataset.settingsEntity } }))));
+      }
+      function renderManaged(card) {
+        const host = card._modalHostEl; if (!host) return;
+        const ids = card._beta5SchedulerEntities || {}; const state = card._hass?.states?.[ids.status]; const attrs = state?.attributes || {};
+        const queue = Array.isArray(attrs.queue) ? attrs.queue : [];
+        const icon = (status) => status === "completed" ? "mdi:check-circle-outline" : status === "active" ? "mdi:progress-clock" : "mdi:circle-outline";
+        const rows = queue.length ? queue.map((zone) => `<div class="nm-managed-zone ${esc(zone.status || "upcoming")}"><ha-icon icon="${icon(zone.status)}"></ha-icon><span>${esc(zone.name || `Zone ${zone.id}`)}</span></div>`).join("") : '<div class="nm-managed-empty">No eligible zones in the current scheduler queue.</div>';
+        const round = attrs.round_index ?? 1; const windowText = attrs.start && attrs.end ? `${attrs.start}–${attrs.end}` : "Window unavailable";
+        host.innerHTML = `<div class="nm-backdrop nm-managed-backdrop"><div class="nm-dialog nm-schedule-dialog" role="dialog" aria-modal="true" aria-label="Navimower schedule"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Navimower schedule</div><button type="button" class="nm-schedule-close" data-managed-close aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-managed-summary"><span>${esc(windowText)}</span><span>Round ${esc(round)}</span><span>${esc(state?.state || "Unavailable")}</span></div><div class="nm-managed-queue">${rows}</div></div></div>`;
+        const backdrop = host.querySelector(".nm-managed-backdrop"); backdrop?.addEventListener("click", (event) => { if (event.target === backdrop) { card._beta5ManagedScheduleOpen = false; card._renderDialog(); } });
+        host.querySelector("[data-managed-close]")?.addEventListener("click", () => { card._beta5ManagedScheduleOpen = false; card._renderDialog(); });
+      }
+      const originalEnsure = proto._ensureDom;
+      proto._ensureDom = function(...args) { const result = originalEnsure?.apply(this, args); ensureUi(this); void discover(this); return result; };
+      const originalDialog = proto._renderDialog;
+      proto._renderDialog = function(...args) { if (this._beta5SettingsOpen) { renderSettings(this); return; } if (this._beta5ManagedScheduleOpen) { renderManaged(this); return; } return originalDialog?.apply(this, args); };
+      const originalOpenSchedule = proto._openScheduleDialog;
+      proto._openScheduleDialog = async function(...args) {
+        const ids = await discover(this); const managedOn = isOn(this, ids.managedSwitch); const nativeOn = isOn(this, ids.nativeSwitch);
+        this._beta5SettingsOpen = false;
+        if (managedOn && ids.status) { this._mowDialogOpen = false; this._notificationDialogOpen = false; this._scheduleDialogOpen = false; this._beta5ManagedScheduleOpen = true; this._renderDialog(); return; }
+        this._beta5ManagedScheduleOpen = false;
+        // Native schedule remains the configuration entry point whenever the managed scheduler is off, including when both schedulers are off.
+        return originalOpenSchedule?.apply(this, args);
+      };
+      const originalHass = Object.getOwnPropertyDescriptor(proto, "hass");
+      if (originalHass?.set) Object.defineProperty(proto, "hass", { configurable: true, get: originalHass.get, set(value) { originalHass.set.call(this, value); ensureUi(this); if (this._beta5ManagedScheduleOpen) renderManaged(this); if (this._beta5SettingsOpen) renderSettings(this); } });
   }
-  function isOn(card, entityId) { return String(card?._hass?.states?.[entityId]?.state || "").toLowerCase() === "on"; }
-  function friendly(card, entityId) { const state = card?._hass?.states?.[entityId]; return state?.attributes?.friendly_name || entityId || "Entity"; }
-  function value(card, entityId) { const state = card?._hass?.states?.[entityId]; if (!state) return "Unavailable"; const unit = state.attributes?.unit_of_measurement || ""; return `${state.state}${unit ? " " + unit : ""}`; }
-  function ensureUi(card) {
-    if (!card?._domReady) return;
-    const header = card.querySelector?.(".nm-header-actions") || card.querySelector?.(".nm-header");
-    if (header && !card.querySelector?.(".nm-settings-button")) {
-      const button = document.createElement("button"); button.type = "button"; button.className = "nm-settings-button"; button.title = "Settings"; button.setAttribute("aria-label", "Open mower settings"); button.innerHTML = '<ha-icon icon="mdi:cog"></ha-icon>';
-      button.addEventListener("click", () => { card._mowDialogOpen = false; card._scheduleDialogOpen = false; card._notificationDialogOpen = false; card._beta5ManagedScheduleOpen = false; card._beta5SettingsOpen = true; card._renderDialog?.(); });
-      header.appendChild(button);
-    }
-    if (!card._beta5StylesApplied) {
-      const style = card.querySelector?.("style"); if (!style) return; card._beta5StylesApplied = true;
-      style.textContent += `
-        .nm-settings-button { width:34px;height:34px;display:inline-grid;place-items:center;padding:0;border:0;border-radius:50%;cursor:pointer;color:var(--secondary-text-color);background:transparent; }
-        .nm-settings-button:hover,.nm-settings-button:focus-visible { background:color-mix(in srgb,currentColor 10%,transparent);outline:none; }
-        .nm-settings-button ha-icon { --mdc-icon-size:20px; }
-        .nm-settings-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:4px 0; }
-        .nm-settings-tile { min-width:0;padding:10px 12px;border:1px solid var(--divider-color);border-radius:10px;background:var(--secondary-background-color);cursor:pointer;text-align:left;color:var(--primary-text-color);font:inherit; }
-        .nm-settings-name { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;color:var(--secondary-text-color); }
-        .nm-settings-value { margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650; }
-        .nm-managed-summary { display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 12px;color:var(--secondary-text-color);font-size:.88rem; }
-        .nm-managed-queue { display:grid;gap:7px; }
-        .nm-managed-zone { display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;background:var(--secondary-background-color);color:var(--primary-text-color); }
-        .nm-managed-zone.completed { color:var(--secondary-text-color);opacity:.72; }
-        .nm-managed-zone.active { color:#FF5A00;font-weight:700;box-shadow:inset 3px 0 #FF5A00; }
-        .nm-managed-zone ha-icon { --mdc-icon-size:19px; }
-        .nm-managed-empty { padding:18px 4px;color:var(--secondary-text-color);text-align:center; }
-        @media(max-width:480px){.nm-settings-grid{grid-template-columns:1fr;}}
-      `;
-    }
-  }
-  function renderSettings(card) {
-    const host = card._modalHostEl; if (!host) return;
-    const entities = slots.map((key) => card._config?.[key]).filter(Boolean);
-    const rows = entities.length ? entities.map((entityId) => `<button type="button" class="nm-settings-tile" data-settings-entity="${esc(entityId)}"><div class="nm-settings-name">${esc(friendly(card, entityId))}</div><div class="nm-settings-value">${esc(value(card, entityId))}</div></button>`).join("") : '<div class="nm-managed-empty">No settings selected. Add entities in the card visual editor → Settings dialog.</div>';
-    host.innerHTML = `<div class="nm-backdrop nm-settings-backdrop"><div class="nm-dialog" role="dialog" aria-modal="true" aria-label="Settings"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Settings</div><button type="button" class="nm-schedule-close" data-settings-close aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-settings-grid">${rows}</div></div></div>`;
-    const backdrop = host.querySelector(".nm-settings-backdrop"); backdrop?.addEventListener("click", (event) => { if (event.target === backdrop) { card._beta5SettingsOpen = false; card._renderDialog(); } });
-    host.querySelector("[data-settings-close]")?.addEventListener("click", () => { card._beta5SettingsOpen = false; card._renderDialog(); });
-    host.querySelectorAll("[data-settings-entity]").forEach((button) => button.addEventListener("click", () => card.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: button.dataset.settingsEntity } }))));
-  }
-  function renderManaged(card) {
-    const host = card._modalHostEl; if (!host) return;
-    const ids = card._beta5SchedulerEntities || {}; const state = card._hass?.states?.[ids.status]; const attrs = state?.attributes || {};
-    const queue = Array.isArray(attrs.queue) ? attrs.queue : [];
-    const icon = (status) => status === "completed" ? "mdi:check-circle-outline" : status === "active" ? "mdi:progress-clock" : "mdi:circle-outline";
-    const rows = queue.length ? queue.map((zone) => `<div class="nm-managed-zone ${esc(zone.status || "upcoming")}"><ha-icon icon="${icon(zone.status)}"></ha-icon><span>${esc(zone.name || `Zone ${zone.id}`)}</span></div>`).join("") : '<div class="nm-managed-empty">No eligible zones in the current scheduler queue.</div>';
-    const round = attrs.round_index ?? 1; const windowText = attrs.start && attrs.end ? `${attrs.start}–${attrs.end}` : "Window unavailable";
-    host.innerHTML = `<div class="nm-backdrop nm-managed-backdrop"><div class="nm-dialog nm-schedule-dialog" role="dialog" aria-modal="true" aria-label="Navimower schedule"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Navimower schedule</div><button type="button" class="nm-schedule-close" data-managed-close aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-managed-summary"><span>${esc(windowText)}</span><span>Round ${esc(round)}</span><span>${esc(state?.state || "Unavailable")}</span></div><div class="nm-managed-queue">${rows}</div></div></div>`;
-    const backdrop = host.querySelector(".nm-managed-backdrop"); backdrop?.addEventListener("click", (event) => { if (event.target === backdrop) { card._beta5ManagedScheduleOpen = false; card._renderDialog(); } });
-    host.querySelector("[data-managed-close]")?.addEventListener("click", () => { card._beta5ManagedScheduleOpen = false; card._renderDialog(); });
-  }
-  const originalEnsure = proto._ensureDom;
-  proto._ensureDom = function(...args) { const result = originalEnsure?.apply(this, args); ensureUi(this); void discover(this); return result; };
-  const originalDialog = proto._renderDialog;
-  proto._renderDialog = function(...args) { if (this._beta5SettingsOpen) { renderSettings(this); return; } if (this._beta5ManagedScheduleOpen) { renderManaged(this); return; } return originalDialog?.apply(this, args); };
-  const originalOpenSchedule = proto._openScheduleDialog;
-  proto._openScheduleDialog = async function(...args) {
-    const ids = await discover(this); const managedOn = isOn(this, ids.managedSwitch); const nativeOn = isOn(this, ids.nativeSwitch);
-    this._beta5SettingsOpen = false;
-    if (managedOn && ids.status) { this._mowDialogOpen = false; this._notificationDialogOpen = false; this._scheduleDialogOpen = false; this._beta5ManagedScheduleOpen = true; this._renderDialog(); return; }
-    this._beta5ManagedScheduleOpen = false;
-    // Native schedule remains the configuration entry point whenever the managed scheduler is off, including when both schedulers are off.
-    return originalOpenSchedule?.apply(this, args);
-  };
-  const originalHass = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (originalHass?.set) Object.defineProperty(proto, "hass", { configurable: true, get: originalHass.get, set(value) { originalHass.set.call(this, value); ensureUi(this); if (this._beta5ManagedScheduleOpen) renderManaged(this); if (this._beta5SettingsOpen) renderSettings(this); } });
-})();
+
 
 
 // 0.3.4-beta6: schedule source selection, custom queue editing and inline settings controls.
-(() => {
-  const Card=globalThis.customElements?.get?.('navimower-map-card'); if (!Card || __navimowerRuntimeAlreadyApplied) return; const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
-  const proto=Card.prototype; const slots=Array.from({length:12},(_,i)=>`settings_entity_${i+1}`);
-  const oldStub=Card.getStubConfig?.bind(Card); Card.getStubConfig=()=>({...oldStub?.(),schedule_view_mode:'auto'});
-  const oldForm=Card.getConfigForm?.bind(Card); Card.getConfigForm=()=>{const f=oldForm?.()||{schema:[]};const schema=[...(f.schema||[])];schema.push({type:'expandable',name:'schedule_view',title:'Schedule button',flatten:true,schema:[{name:'schedule_view_mode',selector:{select:{options:[{value:'auto',label:'Automatic'},{value:'navimower',label:'Navimower'},{value:'native',label:'Native'}]}}}]});const label=f.computeLabel;return{...f,schema,computeLabel:i=>i?.name==='schedule_view_mode'?'Schedule view':label?.(i)||i?.name||''};};
-  const discover=async card=>{if(card._beta6SchedulerEntities)return card._beta6SchedulerEntities;try{const mower=card._mowerEntity?.();const reg=await card._hass.callWS({type:'config/entity_registry/list'});const me=reg.find(e=>e.entity_id===mower);const rel=me?.device_id?reg.filter(e=>e.device_id===me.device_id&&!e.disabled_by):[];const find=(domain,suffixes)=>rel.find(e=>String(e.entity_id).startsWith(domain+'.')&&suffixes.some(s=>String(e.unique_id||'').endsWith(s)||String(e.entity_id).endsWith(s)))?.entity_id||null;card._beta6SchedulerEntities={status:find('sensor',['navimower_schedule_status']),managedSwitch:find('switch',['navimower_schedule']),nativeSwitch:find('switch',['mowing_schedule_enabled'])||card._scheduleSwitchEntity?.(),start:find('time',['navimower_schedule_start']),end:find('time',['navimower_schedule_end'])};}catch(e){console.debug('[Navimower Map Card] beta6 discovery failed',e);card._beta6SchedulerEntities={};}return card._beta6SchedulerEntities;};
-  const state=(c,id)=>id?c._hass?.states?.[id]:null; const friendly=(c,id)=>state(c,id)?.attributes?.friendly_name||id; const domain=id=>String(id||'').split('.')[0];
-  const call=async(c,d,s,data)=>c._hass.callService(d,s,data);
-  function settingControl(c,id){const st=state(c,id),d=domain(id);if(!st)return '<div class="nm-setting-value">Unavailable</div>';if(d==='switch'||d==='input_boolean')return `<label class="nm-inline-switch"><input type="checkbox" data-setting-switch="${esc(id)}" ${st.state==='on'?'checked':''}><span>${st.state==='on'?'On':'Off'}</span></label>`;if(d==='select'||d==='input_select'){const opts=st.attributes?.options||[];return `<select data-setting-select="${esc(id)}">${opts.map(o=>`<option ${String(o)===st.state?'selected':''}>${esc(o)}</option>`).join('')}</select>`;}if(d==='number'||d==='input_number'){const min=st.attributes?.min??0,max=st.attributes?.max??100,step=st.attributes?.step??1;return `<div class="nm-number-control"><input type="range" min="${min}" max="${max}" step="${step}" value="${esc(st.state)}" data-setting-number="${esc(id)}"><span>${esc(st.state)}${esc(st.attributes?.unit_of_measurement||'')}</span></div>`;}if(d==='time'||d==='input_datetime')return `<input type="time" value="${esc(String(st.state).slice(0,5))}" data-setting-time="${esc(id)}">`;return `<button type="button" class="nm-setting-more" data-setting-more="${esc(id)}">${esc(st.state)}${st.attributes?.unit_of_measurement?' '+esc(st.attributes.unit_of_measurement):''}</button>`;}
-  function renderSettings(c){const h=c._modalHostEl;if(!h)return;const entities=slots.map(k=>c._config?.[k]).filter(Boolean);h.innerHTML=`<div class="nm-backdrop nm-beta6-settings"><div class="nm-dialog nm-beta6-dialog"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Settings</div><button class="nm-schedule-close" data-beta6-settings-close><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-beta6-settings-grid">${entities.length?entities.map(id=>`<div class="nm-setting-row"><div class="nm-settings-name">${esc(friendly(c,id))}</div>${settingControl(c,id)}</div>`).join(''):'<div class="nm-managed-empty">No settings selected in the visual editor.</div>'}</div></div></div>`;h.querySelector('[data-beta6-settings-close]')?.addEventListener('click',()=>{c._beta6SettingsOpen=false;c._renderDialog();});h.querySelectorAll('[data-setting-switch]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingSwitch;await call(c,domain(id),x.checked?'turn_on':'turn_off',{entity_id:id});}));h.querySelectorAll('[data-setting-select]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingSelect;await call(c,domain(id),'select_option',{entity_id:id,option:x.value});}));h.querySelectorAll('[data-setting-number]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingNumber;await call(c,domain(id),'set_value',{entity_id:id,value:Number(x.value)});}));h.querySelectorAll('[data-setting-time]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingTime;const d=domain(id);await call(c,d,d==='time'?'set_value':'set_datetime',d==='time'?{entity_id:id,time:x.value}:{entity_id:id,time:x.value});}));h.querySelectorAll('[data-setting-more]').forEach(x=>x.addEventListener('click',()=>c.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:x.dataset.settingMore}}))));}
-  function queueFrom(c,attrs){const q=Array.isArray(attrs.custom_queue)?attrs.custom_queue:[];if(q.length)return q.map(Number);return (attrs.queue||[]).filter(z=>z.status!=='completed').map(z=>Number(z.id)).filter(Number.isFinite);}
-  async function saveQueue(c,queue){const id=c._mowerDeviceId?.();const data={zones:queue};if(id)data.device_id=id;await call(c,'navimower','set_schedule_queue',data);}
-  function renderManaged(c){const h=c._modalHostEl;if(!h)return;const ids=c._beta6SchedulerEntities||{};const st=state(c,ids.status),a=st?.attributes||{};let queue=queueFrom(c,a);const names=new Map((a.queue||[]).map(z=>[Number(z.id),z.name||`Zone ${z.id}`]));const order=a.order_mode||'automatic';const editable=order==='custom';const rows=queue.map((id,i)=>`<div class="nm-managed-zone"><span class="nm-queue-index">${i+1}</span><span class="nm-queue-name">${esc(names.get(id)||`Zone ${id}`)}</span>${editable?`<button data-queue-up="${i}" title="Move up">↑</button><button data-queue-down="${i}" title="Move down">↓</button><button data-queue-add="${i}" title="Repeat zone">＋</button><button data-queue-remove="${i}" title="Remove">×</button>`:''}</div>`).join('');h.innerHTML=`<div class="nm-backdrop nm-managed-backdrop"><div class="nm-dialog nm-schedule-dialog"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Navimower schedule</div><button class="nm-schedule-close" data-managed-close><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-managed-summary"><span>${esc(a.start||'—')}–${esc(a.end||'—')}</span><span>${esc(order==='custom'?'Custom order':'Automatic order')}</span><span>${esc(st?.state||'Unavailable')}</span></div><div class="nm-managed-queue">${rows||'<div class="nm-managed-empty">No queue available.</div>'}</div>${editable?'<div class="nm-dialog-hint">Use arrows to reorder, + to repeat a zone, and × to remove it. Saving the queue does not enable or start the scheduler.</div>':''}</div></div>`;h.querySelector('[data-managed-close]')?.addEventListener('click',()=>{c._beta6ManagedOpen=false;c._renderDialog();});const change=async(type,i)=>{if(type==='up'&&i>0)[queue[i-1],queue[i]]=[queue[i],queue[i-1]];if(type==='down'&&i<queue.length-1)[queue[i+1],queue[i]]=[queue[i],queue[i+1]];if(type==='add')queue.splice(i+1,0,queue[i]);if(type==='remove'&&queue.length>1)queue.splice(i,1);await saveQueue(c,queue);renderManaged(c);};for(const t of ['up','down','add','remove'])h.querySelectorAll(`[data-queue-${t}]`).forEach(b=>b.addEventListener('click',()=>change(t,Number(b.dataset[`queue${t[0].toUpperCase()+t.slice(1)}`]))));}
-  const oldEnsure=proto._ensureDom;proto._ensureDom=function(...a){const r=oldEnsure?.apply(this,a);void discover(this);return r;};
-  const oldDialog=proto._renderDialog;proto._renderDialog=function(...a){if(this._beta6SettingsOpen){renderSettings(this);return;}if(this._beta6ManagedOpen){renderManaged(this);return;}return oldDialog?.apply(this,a);};
-  const oldOpen=proto._openScheduleDialog;proto._openScheduleDialog=async function(...a){const ids=await discover(this);const mode=this._config?.schedule_view_mode||'auto';const managedOn=state(this,ids.managedSwitch)?.state==='on';this._beta6SettingsOpen=false;if(mode==='navimower'||(mode==='auto'&&managedOn&&ids.status)){this._beta5ManagedScheduleOpen=false;this._scheduleDialogOpen=false;this._mowDialogOpen=false;this._beta6ManagedOpen=true;this._renderDialog();return;}this._beta6ManagedOpen=false;return oldOpen?.apply(this,a);};
-  const oldHass=Object.getOwnPropertyDescriptor(proto,'hass');if(oldHass?.set)Object.defineProperty(proto,'hass',{configurable:true,get:oldHass.get,set(v){oldHass.set.call(this,v);if(this._beta6SettingsOpen)renderSettings(this);if(this._beta6ManagedOpen)renderManaged(this);}});
-  const oldEnsure2=proto._ensureDom;proto._ensureDom=function(...a){const r=oldEnsure2?.apply(this,a);const gear=this.querySelector?.('.nm-settings-button');if(gear&&!gear.__beta6){gear.__beta6=true;gear.addEventListener('click',()=>{this._beta5SettingsOpen=false;this._beta6ManagedOpen=false;this._beta6SettingsOpen=true;this._renderDialog();},{capture:true});}return r;};
-})();
+  nmRuntimePatch2: {
+    const Card = __navimowerRuntimeCard;
+    const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+      const proto=Card.prototype; const slots=Array.from({length:12},(_,i)=>`settings_entity_${i+1}`);
+      const oldStub=Card.getStubConfig?.bind(Card); Card.getStubConfig=()=>({...oldStub?.(),schedule_view_mode:'auto'});
+      const oldForm=Card.getConfigForm?.bind(Card); Card.getConfigForm=()=>{const f=oldForm?.()||{schema:[]};const schema=[...(f.schema||[])];schema.push({type:'expandable',name:'schedule_view',title:'Schedule button',flatten:true,schema:[{name:'schedule_view_mode',selector:{select:{options:[{value:'auto',label:'Automatic'},{value:'navimower',label:'Navimower'},{value:'native',label:'Native'}]}}}]});const label=f.computeLabel;return{...f,schema,computeLabel:i=>i?.name==='schedule_view_mode'?'Schedule view':label?.(i)||i?.name||''};};
+      const discover=async card=>{if(card._beta6SchedulerEntities)return card._beta6SchedulerEntities;try{const mower=card._mowerEntity?.();const reg=await card._hass.callWS({type:'config/entity_registry/list'});const me=reg.find(e=>e.entity_id===mower);const rel=me?.device_id?reg.filter(e=>e.device_id===me.device_id&&!e.disabled_by):[];const find=(domain,suffixes)=>rel.find(e=>String(e.entity_id).startsWith(domain+'.')&&suffixes.some(s=>String(e.unique_id||'').endsWith(s)||String(e.entity_id).endsWith(s)))?.entity_id||null;card._beta6SchedulerEntities={status:find('sensor',['navimower_schedule_status']),managedSwitch:find('switch',['navimower_schedule']),nativeSwitch:find('switch',['mowing_schedule_enabled'])||card._scheduleSwitchEntity?.(),start:find('time',['navimower_schedule_start']),end:find('time',['navimower_schedule_end'])};}catch(e){console.debug('[Navimower Map Card] beta6 discovery failed',e);card._beta6SchedulerEntities={};}return card._beta6SchedulerEntities;};
+      const state=(c,id)=>id?c._hass?.states?.[id]:null; const friendly=(c,id)=>state(c,id)?.attributes?.friendly_name||id; const domain=id=>String(id||'').split('.')[0];
+      const call=async(c,d,s,data)=>c._hass.callService(d,s,data);
+      function settingControl(c,id){const st=state(c,id),d=domain(id);if(!st)return '<div class="nm-setting-value">Unavailable</div>';if(d==='switch'||d==='input_boolean')return `<label class="nm-inline-switch"><input type="checkbox" data-setting-switch="${esc(id)}" ${st.state==='on'?'checked':''}><span>${st.state==='on'?'On':'Off'}</span></label>`;if(d==='select'||d==='input_select'){const opts=st.attributes?.options||[];return `<select data-setting-select="${esc(id)}">${opts.map(o=>`<option ${String(o)===st.state?'selected':''}>${esc(o)}</option>`).join('')}</select>`;}if(d==='number'||d==='input_number'){const min=st.attributes?.min??0,max=st.attributes?.max??100,step=st.attributes?.step??1;return `<div class="nm-number-control"><input type="range" min="${min}" max="${max}" step="${step}" value="${esc(st.state)}" data-setting-number="${esc(id)}"><span>${esc(st.state)}${esc(st.attributes?.unit_of_measurement||'')}</span></div>`;}if(d==='time'||d==='input_datetime')return `<input type="time" value="${esc(String(st.state).slice(0,5))}" data-setting-time="${esc(id)}">`;return `<button type="button" class="nm-setting-more" data-setting-more="${esc(id)}">${esc(st.state)}${st.attributes?.unit_of_measurement?' '+esc(st.attributes.unit_of_measurement):''}</button>`;}
+      function renderSettings(c){const h=c._modalHostEl;if(!h)return;const entities=slots.map(k=>c._config?.[k]).filter(Boolean);h.innerHTML=`<div class="nm-backdrop nm-beta6-settings"><div class="nm-dialog nm-beta6-dialog"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Settings</div><button class="nm-schedule-close" data-beta6-settings-close><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-beta6-settings-grid">${entities.length?entities.map(id=>`<div class="nm-setting-row"><div class="nm-settings-name">${esc(friendly(c,id))}</div>${settingControl(c,id)}</div>`).join(''):'<div class="nm-managed-empty">No settings selected in the visual editor.</div>'}</div></div></div>`;h.querySelector('[data-beta6-settings-close]')?.addEventListener('click',()=>{c._beta6SettingsOpen=false;c._renderDialog();});h.querySelectorAll('[data-setting-switch]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingSwitch;await call(c,domain(id),x.checked?'turn_on':'turn_off',{entity_id:id});}));h.querySelectorAll('[data-setting-select]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingSelect;await call(c,domain(id),'select_option',{entity_id:id,option:x.value});}));h.querySelectorAll('[data-setting-number]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingNumber;await call(c,domain(id),'set_value',{entity_id:id,value:Number(x.value)});}));h.querySelectorAll('[data-setting-time]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingTime;const d=domain(id);await call(c,d,d==='time'?'set_value':'set_datetime',d==='time'?{entity_id:id,time:x.value}:{entity_id:id,time:x.value});}));h.querySelectorAll('[data-setting-more]').forEach(x=>x.addEventListener('click',()=>c.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:x.dataset.settingMore}}))));}
+      function queueFrom(c,attrs){const q=Array.isArray(attrs.custom_queue)?attrs.custom_queue:[];if(q.length)return q.map(Number);return (attrs.queue||[]).filter(z=>z.status!=='completed').map(z=>Number(z.id)).filter(Number.isFinite);}
+      async function saveQueue(c,queue){const id=c._mowerDeviceId?.();const data={zones:queue};if(id)data.device_id=id;await call(c,'navimower','set_schedule_queue',data);}
+      function renderManaged(c){const h=c._modalHostEl;if(!h)return;const ids=c._beta6SchedulerEntities||{};const st=state(c,ids.status),a=st?.attributes||{};let queue=queueFrom(c,a);const names=new Map((a.queue||[]).map(z=>[Number(z.id),z.name||`Zone ${z.id}`]));const order=a.order_mode||'automatic';const editable=order==='custom';const rows=queue.map((id,i)=>`<div class="nm-managed-zone"><span class="nm-queue-index">${i+1}</span><span class="nm-queue-name">${esc(names.get(id)||`Zone ${id}`)}</span>${editable?`<button data-queue-up="${i}" title="Move up">↑</button><button data-queue-down="${i}" title="Move down">↓</button><button data-queue-add="${i}" title="Repeat zone">＋</button><button data-queue-remove="${i}" title="Remove">×</button>`:''}</div>`).join('');h.innerHTML=`<div class="nm-backdrop nm-managed-backdrop"><div class="nm-dialog nm-schedule-dialog"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Navimower schedule</div><button class="nm-schedule-close" data-managed-close><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-managed-summary"><span>${esc(a.start||'—')}–${esc(a.end||'—')}</span><span>${esc(order==='custom'?'Custom order':'Automatic order')}</span><span>${esc(st?.state||'Unavailable')}</span></div><div class="nm-managed-queue">${rows||'<div class="nm-managed-empty">No queue available.</div>'}</div>${editable?'<div class="nm-dialog-hint">Use arrows to reorder, + to repeat a zone, and × to remove it. Saving the queue does not enable or start the scheduler.</div>':''}</div></div>`;h.querySelector('[data-managed-close]')?.addEventListener('click',()=>{c._beta6ManagedOpen=false;c._renderDialog();});const change=async(type,i)=>{if(type==='up'&&i>0)[queue[i-1],queue[i]]=[queue[i],queue[i-1]];if(type==='down'&&i<queue.length-1)[queue[i+1],queue[i]]=[queue[i],queue[i+1]];if(type==='add')queue.splice(i+1,0,queue[i]);if(type==='remove'&&queue.length>1)queue.splice(i,1);await saveQueue(c,queue);renderManaged(c);};for(const t of ['up','down','add','remove'])h.querySelectorAll(`[data-queue-${t}]`).forEach(b=>b.addEventListener('click',()=>change(t,Number(b.dataset[`queue${t[0].toUpperCase()+t.slice(1)}`]))));}
+      const oldEnsure=proto._ensureDom;proto._ensureDom=function(...a){const r=oldEnsure?.apply(this,a);void discover(this);return r;};
+      const oldDialog=proto._renderDialog;proto._renderDialog=function(...a){if(this._beta6SettingsOpen){renderSettings(this);return;}if(this._beta6ManagedOpen){renderManaged(this);return;}return oldDialog?.apply(this,a);};
+      const oldOpen=proto._openScheduleDialog;proto._openScheduleDialog=async function(...a){const ids=await discover(this);const mode=this._config?.schedule_view_mode||'auto';const managedOn=state(this,ids.managedSwitch)?.state==='on';this._beta6SettingsOpen=false;if(mode==='navimower'||(mode==='auto'&&managedOn&&ids.status)){this._beta5ManagedScheduleOpen=false;this._scheduleDialogOpen=false;this._mowDialogOpen=false;this._beta6ManagedOpen=true;this._renderDialog();return;}this._beta6ManagedOpen=false;return oldOpen?.apply(this,a);};
+      const oldHass=Object.getOwnPropertyDescriptor(proto,'hass');if(oldHass?.set)Object.defineProperty(proto,'hass',{configurable:true,get:oldHass.get,set(v){oldHass.set.call(this,v);if(this._beta6SettingsOpen)renderSettings(this);if(this._beta6ManagedOpen)renderManaged(this);}});
+      const oldEnsure2=proto._ensureDom;proto._ensureDom=function(...a){const r=oldEnsure2?.apply(this,a);const gear=this.querySelector?.('.nm-settings-button');if(gear&&!gear.__beta6){gear.__beta6=true;gear.addEventListener('click',()=>{this._beta5SettingsOpen=false;this._beta6ManagedOpen=false;this._beta6SettingsOpen=true;this._renderDialog();},{capture:true});}return r;};
+  }
+
 
 
 // 0.3.4-beta8: native Home Assistant Settings rows and single-dialog flow.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const slots = Array.from({ length: 12 }, (_, index) => "settings_entity_" + (index + 1));
-
-  function updateNativeRows(card, root) {
-    root.querySelectorAll("[data-beta8-row]").forEach((row) => {
-      row.hass = card._hass;
-    });
-  }
-
-  function closeNativeSettings(card) {
-    card._beta8SettingsOpen = false;
-    card._beta6SettingsOpen = false;
-    card._beta5SettingsOpen = false;
-    card._beta8SettingsEntityKey = null;
-    card._beta8SettingsRenderToken = (card._beta8SettingsRenderToken || 0) + 1;
-    card._renderDialog();
-  }
-
-  async function renderNativeSettings(card) {
-    const host = card._modalHostEl;
-    if (!host) return;
-
-    const entities = slots.map((key) => card._config?.[key]).filter(Boolean);
-    const entityKey = entities.join("|");
-    const existing = host.querySelector("[data-beta8-settings-root]");
-    if (existing && card._beta8SettingsEntityKey === entityKey) {
-      updateNativeRows(card, existing);
-      return;
-    }
-
-    card._beta5SettingsOpen = false;
-    card._beta6SettingsOpen = false;
-    const token = (card._beta8SettingsRenderToken || 0) + 1;
-    card._beta8SettingsRenderToken = token;
-    card._beta8SettingsEntityKey = entityKey;
-
-    host.innerHTML =
-      '<div class="nm-backdrop nm-beta8-settings" data-beta8-settings-root>' +
-        '<div class="nm-dialog nm-beta8-dialog">' +
-          '<style>' +
-            '.nm-beta8-dialog{width:min(92vw,680px);max-height:min(86vh,820px);display:flex;flex-direction:column;overflow:hidden;}' +
-            '.nm-beta8-settings-list{overflow:auto;padding:4px 0 12px;}' +
-            '.nm-native-row-wrap{padding:4px 8px;border-bottom:1px solid var(--divider-color);}' +
-            '.nm-native-row-wrap:last-child{border-bottom:0;}' +
-            '.nm-native-row-wrap>.nm-native-entity-row{display:block;width:100%;}' +
-            '.nm-native-fallback{display:block;width:100%;padding:14px 12px;border:0;border-bottom:1px solid var(--divider-color);background:transparent;color:var(--primary-text-color);text-align:left;font:inherit;}' +
-            '.nm-native-loading,.nm-native-empty{padding:20px 12px;color:var(--secondary-text-color);}' +
-          '</style>' +
-          '<div class="nm-schedule-dialog-head">' +
-            '<div class="nm-schedule-dialog-title">Settings</div>' +
-            '<button class="nm-schedule-close" type="button" data-beta8-settings-close><ha-icon icon="mdi:close"></ha-icon></button>' +
-          '</div>' +
-          '<div class="nm-beta8-settings-list" data-beta8-settings-list>' +
-            (entities.length ? '<div class="nm-native-loading">Loading Home Assistant controls…</div>' : '<div class="nm-native-empty">No settings selected in the visual editor.</div>') +
-          '</div>' +
-        '</div>' +
-      '</div>';
-
-    host.querySelector("[data-beta8-settings-close]")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeNativeSettings(card);
-    });
-
-    if (!entities.length) return;
-    const list = host.querySelector("[data-beta8-settings-list]");
-    if (!list) return;
-
-    try {
-      const helpers = await globalThis.loadCardHelpers?.();
-      if (!helpers || typeof helpers.createRowElement !== "function") {
-        throw new Error("Home Assistant createRowElement helper is unavailable");
-      }
-      if (!card._beta8SettingsOpen || card._beta8SettingsRenderToken !== token || !list.isConnected) return;
-
-      list.textContent = "";
-      for (const entityId of entities) {
-        const wrapper = document.createElement("div");
-        wrapper.className = "nm-native-row-wrap";
-        const row = helpers.createRowElement({ entity: entityId });
-        row.classList.add("nm-native-entity-row");
-        row.dataset.beta8Row = entityId;
-        row.hass = card._hass;
-        wrapper.append(row);
-        list.append(wrapper);
-      }
-    } catch (error) {
-      console.warn("[Navimower Map Card] native Settings rows unavailable", error);
-      if (!card._beta8SettingsOpen || card._beta8SettingsRenderToken !== token || !list.isConnected) return;
-      list.textContent = "";
-      for (const entityId of entities) {
-        const state = card._hass?.states?.[entityId];
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "nm-native-fallback";
-        button.textContent = (state?.attributes?.friendly_name || entityId) + " — " + (state?.state || "unavailable");
-        button.addEventListener("click", () => {
-          card.dispatchEvent(new CustomEvent("hass-more-info", {
-            bubbles: true,
-            composed: true,
-            detail: { entityId },
-          }));
+  nmRuntimePatch3: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const slots = Array.from({ length: 12 }, (_, index) => "settings_entity_" + (index + 1));
+    
+      function updateNativeRows(card, root) {
+        root.querySelectorAll("[data-beta8-row]").forEach((row) => {
+          row.hass = card._hass;
         });
-        list.append(button);
       }
-    }
+    
+      function closeNativeSettings(card) {
+        card._beta8SettingsOpen = false;
+        card._beta6SettingsOpen = false;
+        card._beta5SettingsOpen = false;
+        card._beta8SettingsEntityKey = null;
+        card._beta8SettingsRenderToken = (card._beta8SettingsRenderToken || 0) + 1;
+        card._renderDialog();
+      }
+    
+      async function renderNativeSettings(card) {
+        const host = card._modalHostEl;
+        if (!host) return;
+    
+        const entities = slots.map((key) => card._config?.[key]).filter(Boolean);
+        const entityKey = entities.join("|");
+        const existing = host.querySelector("[data-beta8-settings-root]");
+        if (existing && card._beta8SettingsEntityKey === entityKey) {
+          updateNativeRows(card, existing);
+          return;
+        }
+    
+        card._beta5SettingsOpen = false;
+        card._beta6SettingsOpen = false;
+        const token = (card._beta8SettingsRenderToken || 0) + 1;
+        card._beta8SettingsRenderToken = token;
+        card._beta8SettingsEntityKey = entityKey;
+    
+        host.innerHTML =
+          '<div class="nm-backdrop nm-beta8-settings" data-beta8-settings-root>' +
+            '<div class="nm-dialog nm-beta8-dialog">' +
+              '<style>' +
+                '.nm-beta8-dialog{width:min(92vw,680px);max-height:min(86vh,820px);display:flex;flex-direction:column;overflow:hidden;}' +
+                '.nm-beta8-settings-list{overflow:auto;padding:4px 0 12px;}' +
+                '.nm-native-row-wrap{padding:4px 8px;border-bottom:1px solid var(--divider-color);}' +
+                '.nm-native-row-wrap:last-child{border-bottom:0;}' +
+                '.nm-native-row-wrap>.nm-native-entity-row{display:block;width:100%;}' +
+                '.nm-native-fallback{display:block;width:100%;padding:14px 12px;border:0;border-bottom:1px solid var(--divider-color);background:transparent;color:var(--primary-text-color);text-align:left;font:inherit;}' +
+                '.nm-native-loading,.nm-native-empty{padding:20px 12px;color:var(--secondary-text-color);}' +
+              '</style>' +
+              '<div class="nm-schedule-dialog-head">' +
+                '<div class="nm-schedule-dialog-title">Settings</div>' +
+                '<button class="nm-schedule-close" type="button" data-beta8-settings-close><ha-icon icon="mdi:close"></ha-icon></button>' +
+              '</div>' +
+              '<div class="nm-beta8-settings-list" data-beta8-settings-list>' +
+                (entities.length ? '<div class="nm-native-loading">Loading Home Assistant controls…</div>' : '<div class="nm-native-empty">No settings selected in the visual editor.</div>') +
+              '</div>' +
+            '</div>' +
+          '</div>';
+    
+        host.querySelector("[data-beta8-settings-close]")?.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          closeNativeSettings(card);
+        });
+    
+        if (!entities.length) return;
+        const list = host.querySelector("[data-beta8-settings-list]");
+        if (!list) return;
+    
+        try {
+          const helpers = await globalThis.loadCardHelpers?.();
+          if (!helpers || typeof helpers.createRowElement !== "function") {
+            throw new Error("Home Assistant createRowElement helper is unavailable");
+          }
+          if (!card._beta8SettingsOpen || card._beta8SettingsRenderToken !== token || !list.isConnected) return;
+    
+          list.textContent = "";
+          for (const entityId of entities) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "nm-native-row-wrap";
+            const row = helpers.createRowElement({ entity: entityId });
+            row.classList.add("nm-native-entity-row");
+            row.dataset.beta8Row = entityId;
+            row.hass = card._hass;
+            wrapper.append(row);
+            list.append(wrapper);
+          }
+        } catch (error) {
+          console.warn("[Navimower Map Card] native Settings rows unavailable", error);
+          if (!card._beta8SettingsOpen || card._beta8SettingsRenderToken !== token || !list.isConnected) return;
+          list.textContent = "";
+          for (const entityId of entities) {
+            const state = card._hass?.states?.[entityId];
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "nm-native-fallback";
+            button.textContent = (state?.attributes?.friendly_name || entityId) + " — " + (state?.state || "unavailable");
+            button.addEventListener("click", () => {
+              card.dispatchEvent(new CustomEvent("hass-more-info", {
+                bubbles: true,
+                composed: true,
+                detail: { entityId },
+              }));
+            });
+            list.append(button);
+          }
+        }
+      }
+    
+      const previousDialog = proto._renderDialog;
+      proto._renderDialog = function (...args) {
+        if (this._beta8SettingsOpen) {
+          void renderNativeSettings(this);
+          return;
+        }
+        return previousDialog?.apply(this, args);
+      };
+    
+      const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
+      if (previousHass?.set) {
+        Object.defineProperty(proto, "hass", {
+          configurable: true,
+          get: previousHass.get,
+          set(value) {
+            previousHass.set.call(this, value);
+            if (this._beta8SettingsOpen) void renderNativeSettings(this);
+          },
+        });
+      }
+    
+      const previousEnsure = proto._ensureDom;
+      proto._ensureDom = function (...args) {
+        const result = previousEnsure?.apply(this, args);
+        if (!this.__beta8SettingsCapture) {
+          this.__beta8SettingsCapture = true;
+          this.addEventListener("click", (event) => {
+            const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+            const settingsButton = path.find((node) => node?.classList?.contains?.("nm-settings-button"));
+            if (!settingsButton) return;
+    
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            this._beta5SettingsOpen = false;
+            this._beta6SettingsOpen = false;
+            this._beta6ManagedOpen = false;
+            this._scheduleDialogOpen = false;
+            this._mowDialogOpen = false;
+            this._beta8SettingsOpen = true;
+            this._renderDialog();
+          }, { capture: true });
+        }
+        return result;
+      };
   }
 
-  const previousDialog = proto._renderDialog;
-  proto._renderDialog = function (...args) {
-    if (this._beta8SettingsOpen) {
-      void renderNativeSettings(this);
-      return;
-    }
-    return previousDialog?.apply(this, args);
-  };
-
-  const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (previousHass?.set) {
-    Object.defineProperty(proto, "hass", {
-      configurable: true,
-      get: previousHass.get,
-      set(value) {
-        previousHass.set.call(this, value);
-        if (this._beta8SettingsOpen) void renderNativeSettings(this);
-      },
-    });
-  }
-
-  const previousEnsure = proto._ensureDom;
-  proto._ensureDom = function (...args) {
-    const result = previousEnsure?.apply(this, args);
-    if (!this.__beta8SettingsCapture) {
-      this.__beta8SettingsCapture = true;
-      this.addEventListener("click", (event) => {
-        const path = typeof event.composedPath === "function" ? event.composedPath() : [];
-        const settingsButton = path.find((node) => node?.classList?.contains?.("nm-settings-button"));
-        if (!settingsButton) return;
-
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        this._beta5SettingsOpen = false;
-        this._beta6SettingsOpen = false;
-        this._beta6ManagedOpen = false;
-        this._scheduleDialogOpen = false;
-        this._mowDialogOpen = false;
-        this._beta8SettingsOpen = true;
-        this._renderDialog();
-      }, { capture: true });
-    }
-    return result;
-  };
-
-})();
 
 
 // 0.3.4-beta9: current-cycle live history label.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const previousRenderHistoryBar = proto._renderHistoryBar;
-  proto._renderHistoryBar = function (...args) {
-    const result = previousRenderHistoryBar?.apply(this, args);
-    if (this._mapPayload?.daily_trails?.scope === "current_cycle") {
-      this._historyBarEl
-        ?.querySelectorAll?.('[data-history-offset="today"]')
-        ?.forEach?.((button) => {
-          button.textContent = "Current cycle";
-          button.title = "Current mowing cycle since the latest confirmed reset";
-        });
-    }
-    return result;
-  };
+  nmRuntimePatch4: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const previousRenderHistoryBar = proto._renderHistoryBar;
+      proto._renderHistoryBar = function (...args) {
+        const result = previousRenderHistoryBar?.apply(this, args);
+        if (this._mapPayload?.daily_trails?.scope === "current_cycle") {
+          this._historyBarEl
+            ?.querySelectorAll?.('[data-history-offset="today"]')
+            ?.forEach?.((button) => {
+              button.textContent = "Current cycle";
+              button.title = "Current mowing cycle since the latest confirmed reset";
+            });
+        }
+        return result;
+      };
+  }
 
-})();
 
 
 // 0.3.4-beta10: resilient Navimower scheduler discovery.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const CACHE_TTL_MS = 30000;
-
-  const state = (card, entityId) => entityId ? card?._hass?.states?.[entityId] : null;
-  const activeEntries = (registry) => registry.filter((entry) => !entry?.disabled_by);
-  const hasSuffix = (entry, suffix) => {
-    const entityId = String(entry?.entity_id || "");
-    const uniqueId = String(entry?.unique_id || "");
-    return entityId.endsWith(suffix) || uniqueId.endsWith(suffix);
-  };
-  const findEntity = (entries, domain, suffix) => entries.find((entry) =>
-    String(entry?.entity_id || "").startsWith(domain + ".") && hasSuffix(entry, suffix)
-  ) || null;
-
-  function apiEntryId(card) {
-    let path = null;
-    try {
-      path = typeof card?._apiPath === "function" ? card._apiPath() : null;
-    } catch (_error) {
-      path = null;
-    }
-    const match = String(path || "").match(/\/api\/navimower\/map\/([^/?#]+)/);
-    if (!match) return null;
-    try {
-      return decodeURIComponent(match[1]);
-    } catch (_error) {
-      return match[1];
-    }
-  }
-
-  function cacheKey(card) {
-    const mower = typeof card?._mowerEntity === "function"
-      ? card._mowerEntity()
-      : card?._resolved?.mower_entity || card?._config?.entity || null;
-    return [
-      apiEntryId(card) || "",
-      card?._resolved?.map_entity || card?._config?.map_entity || "",
-      mower || "",
-    ].join("|");
-  }
-
-  function clearDiscovery(card) {
-    card._beta10SchedulerEntities = null;
-    card._beta10ScheduleDeviceId = null;
-    card._beta6SchedulerEntities = null;
-    card._beta5SchedulerEntities = null;
-  }
-
-  function syncLegacyCaches(card, result) {
-    const legacy = {
-      status: result.status || null,
-      managedSwitch: result.managedSwitch || null,
-      nativeSwitch: result.nativeSwitch || null,
-      start: result.start || null,
-      end: result.end || null,
-    };
-    card._beta6SchedulerEntities = legacy;
-    card._beta5SchedulerEntities = legacy;
-    card._beta10ScheduleDeviceId = result.deviceId || null;
-  }
-
-  async function discover(card, options = {}) {
-    const key = cacheKey(card);
-    const cached = card._beta10SchedulerEntities;
-    const now = Date.now();
-    if (
-      !options.force &&
-      cached?.status &&
-      cached._cacheKey === key &&
-      now - Number(cached._discoveredAt || 0) < CACHE_TTL_MS &&
-      state(card, cached.status)
-    ) {
-      syncLegacyCaches(card, cached);
-      return cached;
-    }
-
-    if (!card?._hass?.callWS) {
-      return { status: null, managedSwitch: null, nativeSwitch: null, start: null, end: null };
-    }
-
-    let registry;
-    try {
-      registry = await card._hass.callWS({ type: "config/entity_registry/list" });
-    } catch (error) {
-      console.debug("[Navimower Map Card] beta10 scheduler discovery failed", error);
-      clearDiscovery(card);
-      return { status: null, managedSwitch: null, nativeSwitch: null, start: null, end: null };
-    }
-    if (!Array.isArray(registry)) {
-      clearDiscovery(card);
-      return { status: null, managedSwitch: null, nativeSwitch: null, start: null, end: null };
-    }
-
-    const entries = activeEntries(registry);
-    const mower = typeof card._mowerEntity === "function"
-      ? card._mowerEntity()
-      : card?._resolved?.mower_entity || card?._config?.entity || null;
-    const mapEntityId = card?._resolved?.map_entity || card?._config?.map_entity || null;
-    const mowerEntry = entries.find((entry) => entry.entity_id === mower) || null;
-    const mapEntry = entries.find((entry) => entry.entity_id === mapEntityId) || null;
-    const entryId = apiEntryId(card);
-
-    const scopes = [];
-    const seenScopes = new Set();
-    const addScope = (name, values) => {
-      if (!values.length) return;
-      const signature = values.map((entry) => entry.entity_id).sort().join("|");
-      if (!signature || seenScopes.has(signature)) return;
-      seenScopes.add(signature);
-      scopes.push({ name, values });
-    };
-
-    if (entryId) {
-      addScope("map_api_config_entry", entries.filter((entry) => entry.config_entry_id === entryId));
-    }
-    if (mapEntry?.config_entry_id) {
-      addScope("map_config_entry", entries.filter((entry) => entry.config_entry_id === mapEntry.config_entry_id));
-    }
-    if (mapEntry?.device_id) {
-      addScope("map_device", entries.filter((entry) => entry.device_id === mapEntry.device_id));
-    }
-    if (mowerEntry?.config_entry_id) {
-      addScope("mower_config_entry", entries.filter((entry) => entry.config_entry_id === mowerEntry.config_entry_id));
-    }
-    if (mowerEntry?.device_id) {
-      addScope("mower_device", entries.filter((entry) => entry.device_id === mowerEntry.device_id));
-    }
-
-    const uniqueCandidates = [mapEntry?.unique_id, mowerEntry?.unique_id]
-      .map((value) => String(value || ""))
-      .filter(Boolean);
-    for (const uniqueId of uniqueCandidates) {
-      const prefix = uniqueId.replace(/_(?:map_data|mower)$/, "_");
-      if (prefix && prefix !== uniqueId) {
-        addScope("unique_id_prefix", entries.filter((entry) => String(entry.unique_id || "").startsWith(prefix)));
+  nmRuntimePatch5: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const CACHE_TTL_MS = 30000;
+    
+      const state = (card, entityId) => entityId ? card?._hass?.states?.[entityId] : null;
+      const activeEntries = (registry) => registry.filter((entry) => !entry?.disabled_by);
+      const hasSuffix = (entry, suffix) => {
+        const entityId = String(entry?.entity_id || "");
+        const uniqueId = String(entry?.unique_id || "");
+        return entityId.endsWith(suffix) || uniqueId.endsWith(suffix);
+      };
+      const findEntity = (entries, domain, suffix) => entries.find((entry) =>
+        String(entry?.entity_id || "").startsWith(domain + ".") && hasSuffix(entry, suffix)
+      ) || null;
+    
+      function apiEntryId(card) {
+        let path = null;
+        try {
+          path = typeof card?._apiPath === "function" ? card._apiPath() : null;
+        } catch (_error) {
+          path = null;
+        }
+        const match = String(path || "").match(/\/api\/navimower\/map\/([^/?#]+)/);
+        if (!match) return null;
+        try {
+          return decodeURIComponent(match[1]);
+        } catch (_error) {
+          return match[1];
+        }
       }
-    }
-
-    let statusEntry = null;
-    let matchedScope = null;
-    for (const scope of scopes) {
-      statusEntry = findEntity(scope.values, "sensor", "navimower_schedule_status");
-      if (statusEntry) {
-        matchedScope = scope;
-        break;
+    
+      function cacheKey(card) {
+        const mower = typeof card?._mowerEntity === "function"
+          ? card._mowerEntity()
+          : card?._resolved?.mower_entity || card?._config?.entity || null;
+        return [
+          apiEntryId(card) || "",
+          card?._resolved?.map_entity || card?._config?.map_entity || "",
+          mower || "",
+        ].join("|");
       }
-    }
-
-    if (!statusEntry) {
-      const globalStatuses = entries.filter((entry) =>
-        String(entry.entity_id || "").startsWith("sensor.") &&
-        hasSuffix(entry, "navimower_schedule_status")
-      );
-      if (globalStatuses.length === 1) {
-        statusEntry = globalStatuses[0];
-        matchedScope = { name: "single_global_status", values: entries };
+    
+      function clearDiscovery(card) {
+        card._beta10SchedulerEntities = null;
+        card._beta10ScheduleDeviceId = null;
+        card._beta6SchedulerEntities = null;
+        card._beta5SchedulerEntities = null;
       }
-    }
-
-    if (!statusEntry) {
-      clearDiscovery(card);
-      return { status: null, managedSwitch: null, nativeSwitch: null, start: null, end: null };
-    }
-
-    let family = matchedScope?.values || entries;
-    if (statusEntry.config_entry_id) {
-      family = entries.filter((entry) => entry.config_entry_id === statusEntry.config_entry_id);
-    } else if (statusEntry.device_id) {
-      family = entries.filter((entry) => entry.device_id === statusEntry.device_id);
-    }
-
-    let nativeSwitch = findEntity(family, "switch", "mowing_schedule_enabled")?.entity_id || null;
-    if (!nativeSwitch && typeof card._scheduleSwitchEntity === "function") {
-      nativeSwitch = card._scheduleSwitchEntity() || null;
-    }
-
-    const result = {
-      status: statusEntry.entity_id,
-      managedSwitch: findEntity(family, "switch", "navimower_schedule")?.entity_id || null,
-      nativeSwitch,
-      start: findEntity(family, "time", "navimower_schedule_start")?.entity_id || null,
-      end: findEntity(family, "time", "navimower_schedule_end")?.entity_id || null,
-      deviceId: statusEntry.device_id || null,
-      configEntryId: statusEntry.config_entry_id || entryId || null,
-      source: matchedScope?.name || "unknown",
-      _cacheKey: key,
-      _discoveredAt: now,
-    };
-
-    card._beta10SchedulerEntities = result;
-    syncLegacyCaches(card, result);
-    return result;
+    
+      function syncLegacyCaches(card, result) {
+        const legacy = {
+          status: result.status || null,
+          managedSwitch: result.managedSwitch || null,
+          nativeSwitch: result.nativeSwitch || null,
+          start: result.start || null,
+          end: result.end || null,
+        };
+        card._beta6SchedulerEntities = legacy;
+        card._beta5SchedulerEntities = legacy;
+        card._beta10ScheduleDeviceId = result.deviceId || null;
+      }
+    
+      async function discover(card, options = {}) {
+        const key = cacheKey(card);
+        const cached = card._beta10SchedulerEntities;
+        const now = Date.now();
+        if (
+          !options.force &&
+          cached?.status &&
+          cached._cacheKey === key &&
+          now - Number(cached._discoveredAt || 0) < CACHE_TTL_MS &&
+          state(card, cached.status)
+        ) {
+          syncLegacyCaches(card, cached);
+          return cached;
+        }
+    
+        if (!card?._hass?.callWS) {
+          return { status: null, managedSwitch: null, nativeSwitch: null, start: null, end: null };
+        }
+    
+        let registry;
+        try {
+          registry = await card._hass.callWS({ type: "config/entity_registry/list" });
+        } catch (error) {
+          console.debug("[Navimower Map Card] beta10 scheduler discovery failed", error);
+          clearDiscovery(card);
+          return { status: null, managedSwitch: null, nativeSwitch: null, start: null, end: null };
+        }
+        if (!Array.isArray(registry)) {
+          clearDiscovery(card);
+          return { status: null, managedSwitch: null, nativeSwitch: null, start: null, end: null };
+        }
+    
+        const entries = activeEntries(registry);
+        const mower = typeof card._mowerEntity === "function"
+          ? card._mowerEntity()
+          : card?._resolved?.mower_entity || card?._config?.entity || null;
+        const mapEntityId = card?._resolved?.map_entity || card?._config?.map_entity || null;
+        const mowerEntry = entries.find((entry) => entry.entity_id === mower) || null;
+        const mapEntry = entries.find((entry) => entry.entity_id === mapEntityId) || null;
+        const entryId = apiEntryId(card);
+    
+        const scopes = [];
+        const seenScopes = new Set();
+        const addScope = (name, values) => {
+          if (!values.length) return;
+          const signature = values.map((entry) => entry.entity_id).sort().join("|");
+          if (!signature || seenScopes.has(signature)) return;
+          seenScopes.add(signature);
+          scopes.push({ name, values });
+        };
+    
+        if (entryId) {
+          addScope("map_api_config_entry", entries.filter((entry) => entry.config_entry_id === entryId));
+        }
+        if (mapEntry?.config_entry_id) {
+          addScope("map_config_entry", entries.filter((entry) => entry.config_entry_id === mapEntry.config_entry_id));
+        }
+        if (mapEntry?.device_id) {
+          addScope("map_device", entries.filter((entry) => entry.device_id === mapEntry.device_id));
+        }
+        if (mowerEntry?.config_entry_id) {
+          addScope("mower_config_entry", entries.filter((entry) => entry.config_entry_id === mowerEntry.config_entry_id));
+        }
+        if (mowerEntry?.device_id) {
+          addScope("mower_device", entries.filter((entry) => entry.device_id === mowerEntry.device_id));
+        }
+    
+        const uniqueCandidates = [mapEntry?.unique_id, mowerEntry?.unique_id]
+          .map((value) => String(value || ""))
+          .filter(Boolean);
+        for (const uniqueId of uniqueCandidates) {
+          const prefix = uniqueId.replace(/_(?:map_data|mower)$/, "_");
+          if (prefix && prefix !== uniqueId) {
+            addScope("unique_id_prefix", entries.filter((entry) => String(entry.unique_id || "").startsWith(prefix)));
+          }
+        }
+    
+        let statusEntry = null;
+        let matchedScope = null;
+        for (const scope of scopes) {
+          statusEntry = findEntity(scope.values, "sensor", "navimower_schedule_status");
+          if (statusEntry) {
+            matchedScope = scope;
+            break;
+          }
+        }
+    
+        if (!statusEntry) {
+          const globalStatuses = entries.filter((entry) =>
+            String(entry.entity_id || "").startsWith("sensor.") &&
+            hasSuffix(entry, "navimower_schedule_status")
+          );
+          if (globalStatuses.length === 1) {
+            statusEntry = globalStatuses[0];
+            matchedScope = { name: "single_global_status", values: entries };
+          }
+        }
+    
+        if (!statusEntry) {
+          clearDiscovery(card);
+          return { status: null, managedSwitch: null, nativeSwitch: null, start: null, end: null };
+        }
+    
+        let family = matchedScope?.values || entries;
+        if (statusEntry.config_entry_id) {
+          family = entries.filter((entry) => entry.config_entry_id === statusEntry.config_entry_id);
+        } else if (statusEntry.device_id) {
+          family = entries.filter((entry) => entry.device_id === statusEntry.device_id);
+        }
+    
+        let nativeSwitch = findEntity(family, "switch", "mowing_schedule_enabled")?.entity_id || null;
+        if (!nativeSwitch && typeof card._scheduleSwitchEntity === "function") {
+          nativeSwitch = card._scheduleSwitchEntity() || null;
+        }
+    
+        const result = {
+          status: statusEntry.entity_id,
+          managedSwitch: findEntity(family, "switch", "navimower_schedule")?.entity_id || null,
+          nativeSwitch,
+          start: findEntity(family, "time", "navimower_schedule_start")?.entity_id || null,
+          end: findEntity(family, "time", "navimower_schedule_end")?.entity_id || null,
+          deviceId: statusEntry.device_id || null,
+          configEntryId: statusEntry.config_entry_id || entryId || null,
+          source: matchedScope?.name || "unknown",
+          _cacheKey: key,
+          _discoveredAt: now,
+        };
+    
+        card._beta10SchedulerEntities = result;
+        syncLegacyCaches(card, result);
+        return result;
+      }
+    
+      proto._discoverNavimowerSchedulerEntities = function (options) {
+        return discover(this, options);
+      };
+    
+      const previousSetConfig = proto.setConfig;
+      if (typeof previousSetConfig === "function") {
+        proto.setConfig = function schedulerDiscoverySetConfig(config) {
+          const result = previousSetConfig.call(this, config);
+          clearDiscovery(this);
+          return result;
+        };
+      }
+    
+      const previousMowerDeviceId = proto._mowerDeviceId;
+      if (typeof previousMowerDeviceId === "function") {
+        proto._mowerDeviceId = function schedulerAwareMowerDeviceId(...args) {
+          if (this._beta6ManagedOpen && this._beta10ScheduleDeviceId) {
+            return this._beta10ScheduleDeviceId;
+          }
+          return previousMowerDeviceId.apply(this, args);
+        };
+      }
+    
+      const previousOpenSchedule = proto._openScheduleDialog;
+      proto._openScheduleDialog = async function resilientScheduleOpen(...args) {
+        const mode = this._config?.schedule_view_mode || "auto";
+        if (mode === "native") {
+          this._beta10ScheduleDeviceId = null;
+          return previousOpenSchedule?.apply(this, args);
+        }
+    
+        const ids = await discover(this);
+        const statusState = state(this, ids.status);
+        const enabledAttribute = statusState?.attributes?.enabled;
+        const managedOn = typeof enabledAttribute === "boolean"
+          ? enabledAttribute
+          : String(state(this, ids.managedSwitch)?.state || "").toLowerCase() === "on";
+    
+        this._beta6SettingsOpen = false;
+        this._beta5SettingsOpen = false;
+        if (ids.status && (mode === "navimower" || (mode === "auto" && managedOn))) {
+          this._beta5ManagedScheduleOpen = false;
+          this._scheduleDialogOpen = false;
+          this._mowDialogOpen = false;
+          this._notificationDialogOpen = false;
+          this._beta6ManagedOpen = true;
+          this._renderDialog();
+          return;
+        }
+    
+        this._beta6ManagedOpen = false;
+        return previousOpenSchedule?.apply(this, args);
+      };
   }
 
-  proto._discoverNavimowerSchedulerEntities = function (options) {
-    return discover(this, options);
-  };
-
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function schedulerDiscoverySetConfig(config) {
-      const result = previousSetConfig.call(this, config);
-      clearDiscovery(this);
-      return result;
-    };
-  }
-
-  const previousMowerDeviceId = proto._mowerDeviceId;
-  if (typeof previousMowerDeviceId === "function") {
-    proto._mowerDeviceId = function schedulerAwareMowerDeviceId(...args) {
-      if (this._beta6ManagedOpen && this._beta10ScheduleDeviceId) {
-        return this._beta10ScheduleDeviceId;
-      }
-      return previousMowerDeviceId.apply(this, args);
-    };
-  }
-
-  const previousOpenSchedule = proto._openScheduleDialog;
-  proto._openScheduleDialog = async function resilientScheduleOpen(...args) {
-    const mode = this._config?.schedule_view_mode || "auto";
-    if (mode === "native") {
-      this._beta10ScheduleDeviceId = null;
-      return previousOpenSchedule?.apply(this, args);
-    }
-
-    const ids = await discover(this);
-    const statusState = state(this, ids.status);
-    const enabledAttribute = statusState?.attributes?.enabled;
-    const managedOn = typeof enabledAttribute === "boolean"
-      ? enabledAttribute
-      : String(state(this, ids.managedSwitch)?.state || "").toLowerCase() === "on";
-
-    this._beta6SettingsOpen = false;
-    this._beta5SettingsOpen = false;
-    if (ids.status && (mode === "navimower" || (mode === "auto" && managedOn))) {
-      this._beta5ManagedScheduleOpen = false;
-      this._scheduleDialogOpen = false;
-      this._mowDialogOpen = false;
-      this._notificationDialogOpen = false;
-      this._beta6ManagedOpen = true;
-      this._renderDialog();
-      return;
-    }
-
-    this._beta6ManagedOpen = false;
-    return previousOpenSchedule?.apply(this, args);
-  };
-
-})();
 
 
 // 0.3.4-beta11: responsive managed scheduler editor.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const SAVE_DEBOUNCE_MS = 750;
-  const SAVED_FEEDBACK_MS = 1000;
-
-  const esc = (value) => String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-  const state = (card, entityId) => entityId ? card?._hass?.states?.[entityId] : null;
-  const normalizedQueue = (values) => (Array.isArray(values) ? values : [])
-    .map((value) => Number(value))
-    .filter(Number.isFinite);
-  const sameQueue = (left, right) => {
-    const a = normalizedQueue(left);
-    const b = normalizedQueue(right);
-    return a.length === b.length && a.every((value, index) => value === b[index]);
-  };
-
-  function statusSnapshot(card) {
-    const ids = card._beta10SchedulerEntities || card._beta6SchedulerEntities || {};
-    const statusState = state(card, ids.status);
-    const attrs = statusState?.attributes || {};
-    return { ids, statusState, attrs };
-  }
-
-  function configuredZones(card, attrs) {
-    const selected = new Set(normalizedQueue(attrs.selected_zone_ids));
-    const names = new Map();
-    for (const row of Array.isArray(attrs.queue) ? attrs.queue : []) {
-      const id = Number(row?.id);
-      if (Number.isFinite(id)) names.set(id, row?.name || ("Zone " + id));
-    }
-    const available = typeof card._availableMowZones === "function" ? card._availableMowZones() : [];
-    for (const row of available) {
-      const id = Number(row?.id);
-      if (Number.isFinite(id)) names.set(id, row?.name || ("Zone " + id));
-    }
-    return [...selected].map((id) => ({ id, name: names.get(id) || ("Zone " + id) }));
-  }
-
-  function ensureDraft(card, attrs, force = false) {
-    const serverQueue = normalizedQueue(attrs.custom_queue);
-    if (force || !Array.isArray(card._beta11ScheduleDraft)) {
-      card._beta11ScheduleDraft = serverQueue.slice();
-      card._beta11ScheduleServerQueue = serverQueue.slice();
-      card._beta11ScheduleDirty = false;
-      card._beta11ScheduleSaveState = "idle";
-      return card._beta11ScheduleDraft;
-    }
-    if (!card._beta11ScheduleDirty && !sameQueue(serverQueue, card._beta11ScheduleServerQueue)) {
-      card._beta11ScheduleDraft = serverQueue.slice();
-      card._beta11ScheduleServerQueue = serverQueue.slice();
-    }
-    return card._beta11ScheduleDraft;
-  }
-
-  function markDirty(card) {
-    card._beta11ScheduleDirty = !sameQueue(card._beta11ScheduleDraft, card._beta11ScheduleServerQueue);
-    if (card._beta11ScheduleSaveState === "saved") card._beta11ScheduleSaveState = "idle";
-  }
-
-  function missingZones(card) {
-    const { attrs } = statusSnapshot(card);
-    const present = new Set(normalizedQueue(card._beta11ScheduleDraft));
-    return configuredZones(card, attrs).filter((zone) => !present.has(zone.id));
-  }
-
-  proto._managedScheduleMissingZones = function () {
-    ensureDraft(this, statusSnapshot(this).attrs);
-    return missingZones(this);
-  };
-
-  proto._managedScheduleMoveDraft = function (from, to) {
-    const draft = ensureDraft(this, statusSnapshot(this).attrs);
-    const source = Number(from);
-    const target = Number(to);
-    if (!Number.isInteger(source) || !Number.isInteger(target) || source < 0 || target < 0 || source >= draft.length || target >= draft.length || source === target) return false;
-    const [item] = draft.splice(source, 1);
-    draft.splice(target, 0, item);
-    markDirty(this);
-    return true;
-  };
-
-  proto._managedScheduleRepeatDraft = function (index) {
-    const draft = ensureDraft(this, statusSnapshot(this).attrs);
-    const at = Number(index);
-    if (!Number.isInteger(at) || at < 0 || at >= draft.length) return false;
-    draft.splice(at + 1, 0, draft[at]);
-    markDirty(this);
-    return true;
-  };
-
-  proto._managedScheduleRemoveDraft = function (index) {
-    const draft = ensureDraft(this, statusSnapshot(this).attrs);
-    const at = Number(index);
-    if (!Number.isInteger(at) || at < 0 || at >= draft.length || draft.length <= 1) return false;
-    draft.splice(at, 1);
-    markDirty(this);
-    return true;
-  };
-
-  proto._managedScheduleAddDraftZone = function (zoneId) {
-    const id = Number(zoneId);
-    if (!Number.isFinite(id)) return false;
-    const allowed = new Set(this._managedScheduleMissingZones().map((zone) => zone.id));
-    if (!allowed.has(id)) return false;
-    ensureDraft(this, statusSnapshot(this).attrs).push(id);
-    markDirty(this);
-    return true;
-  };
-
-  proto._managedScheduleResetDraft = function () {
-    ensureDraft(this, statusSnapshot(this).attrs, true);
-  };
-
-  proto._managedScheduleSaveDraft = async function () {
-    const draft = ensureDraft(this, statusSnapshot(this).attrs).slice();
-    if (!draft.length || !this._beta11ScheduleDirty || this._beta11ScheduleSaveState === "saving") return false;
-    this._beta11ScheduleSaveState = "saving";
-    renderManaged(this);
-    if (this._beta11ScheduleSaveTimer) clearTimeout(this._beta11ScheduleSaveTimer);
-    await new Promise((resolve) => {
-      this._beta11ScheduleSaveTimer = setTimeout(resolve, SAVE_DEBOUNCE_MS);
-    });
-    const data = { zones: draft };
-    const deviceId = this._beta10ScheduleDeviceId || this._mowerDeviceId?.();
-    if (deviceId) data.device_id = deviceId;
-    try {
-      await this._hass.callService("navimower", "set_schedule_queue", data);
-      this._beta11ScheduleServerQueue = draft.slice();
-      this._beta11ScheduleDirty = false;
-      this._beta11ScheduleSaveState = "saved";
-      renderManaged(this);
-      setTimeout(() => {
-        if (this._beta11ScheduleSaveState === "saved") {
-          this._beta11ScheduleSaveState = "idle";
+  nmRuntimePatch6: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const SAVE_DEBOUNCE_MS = 750;
+      const SAVED_FEEDBACK_MS = 1000;
+    
+      const esc = (value) => String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+      const state = (card, entityId) => entityId ? card?._hass?.states?.[entityId] : null;
+      const normalizedQueue = (values) => (Array.isArray(values) ? values : [])
+        .map((value) => Number(value))
+        .filter(Number.isFinite);
+      const sameQueue = (left, right) => {
+        const a = normalizedQueue(left);
+        const b = normalizedQueue(right);
+        return a.length === b.length && a.every((value, index) => value === b[index]);
+      };
+    
+      function statusSnapshot(card) {
+        const ids = card._beta10SchedulerEntities || card._beta6SchedulerEntities || {};
+        const statusState = state(card, ids.status);
+        const attrs = statusState?.attributes || {};
+        return { ids, statusState, attrs };
+      }
+    
+      function configuredZones(card, attrs) {
+        const selected = new Set(normalizedQueue(attrs.selected_zone_ids));
+        const names = new Map();
+        for (const row of Array.isArray(attrs.queue) ? attrs.queue : []) {
+          const id = Number(row?.id);
+          if (Number.isFinite(id)) names.set(id, row?.name || ("Zone " + id));
+        }
+        const available = typeof card._availableMowZones === "function" ? card._availableMowZones() : [];
+        for (const row of available) {
+          const id = Number(row?.id);
+          if (Number.isFinite(id)) names.set(id, row?.name || ("Zone " + id));
+        }
+        return [...selected].map((id) => ({ id, name: names.get(id) || ("Zone " + id) }));
+      }
+    
+      function ensureDraft(card, attrs, force = false) {
+        const serverQueue = normalizedQueue(attrs.custom_queue);
+        if (force || !Array.isArray(card._beta11ScheduleDraft)) {
+          card._beta11ScheduleDraft = serverQueue.slice();
+          card._beta11ScheduleServerQueue = serverQueue.slice();
+          card._beta11ScheduleDirty = false;
+          card._beta11ScheduleSaveState = "idle";
+          return card._beta11ScheduleDraft;
+        }
+        if (!card._beta11ScheduleDirty && !sameQueue(serverQueue, card._beta11ScheduleServerQueue)) {
+          card._beta11ScheduleDraft = serverQueue.slice();
+          card._beta11ScheduleServerQueue = serverQueue.slice();
+        }
+        return card._beta11ScheduleDraft;
+      }
+    
+      function markDirty(card) {
+        card._beta11ScheduleDirty = !sameQueue(card._beta11ScheduleDraft, card._beta11ScheduleServerQueue);
+        if (card._beta11ScheduleSaveState === "saved") card._beta11ScheduleSaveState = "idle";
+      }
+    
+      function missingZones(card) {
+        const { attrs } = statusSnapshot(card);
+        const present = new Set(normalizedQueue(card._beta11ScheduleDraft));
+        return configuredZones(card, attrs).filter((zone) => !present.has(zone.id));
+      }
+    
+      proto._managedScheduleMissingZones = function () {
+        ensureDraft(this, statusSnapshot(this).attrs);
+        return missingZones(this);
+      };
+    
+      proto._managedScheduleMoveDraft = function (from, to) {
+        const draft = ensureDraft(this, statusSnapshot(this).attrs);
+        const source = Number(from);
+        const target = Number(to);
+        if (!Number.isInteger(source) || !Number.isInteger(target) || source < 0 || target < 0 || source >= draft.length || target >= draft.length || source === target) return false;
+        const [item] = draft.splice(source, 1);
+        draft.splice(target, 0, item);
+        markDirty(this);
+        return true;
+      };
+    
+      proto._managedScheduleRepeatDraft = function (index) {
+        const draft = ensureDraft(this, statusSnapshot(this).attrs);
+        const at = Number(index);
+        if (!Number.isInteger(at) || at < 0 || at >= draft.length) return false;
+        draft.splice(at + 1, 0, draft[at]);
+        markDirty(this);
+        return true;
+      };
+    
+      proto._managedScheduleRemoveDraft = function (index) {
+        const draft = ensureDraft(this, statusSnapshot(this).attrs);
+        const at = Number(index);
+        if (!Number.isInteger(at) || at < 0 || at >= draft.length || draft.length <= 1) return false;
+        draft.splice(at, 1);
+        markDirty(this);
+        return true;
+      };
+    
+      proto._managedScheduleAddDraftZone = function (zoneId) {
+        const id = Number(zoneId);
+        if (!Number.isFinite(id)) return false;
+        const allowed = new Set(this._managedScheduleMissingZones().map((zone) => zone.id));
+        if (!allowed.has(id)) return false;
+        ensureDraft(this, statusSnapshot(this).attrs).push(id);
+        markDirty(this);
+        return true;
+      };
+    
+      proto._managedScheduleResetDraft = function () {
+        ensureDraft(this, statusSnapshot(this).attrs, true);
+      };
+    
+      proto._managedScheduleSaveDraft = async function () {
+        const draft = ensureDraft(this, statusSnapshot(this).attrs).slice();
+        if (!draft.length || !this._beta11ScheduleDirty || this._beta11ScheduleSaveState === "saving") return false;
+        this._beta11ScheduleSaveState = "saving";
+        renderManaged(this);
+        if (this._beta11ScheduleSaveTimer) clearTimeout(this._beta11ScheduleSaveTimer);
+        await new Promise((resolve) => {
+          this._beta11ScheduleSaveTimer = setTimeout(resolve, SAVE_DEBOUNCE_MS);
+        });
+        const data = { zones: draft };
+        const deviceId = this._beta10ScheduleDeviceId || this._mowerDeviceId?.();
+        if (deviceId) data.device_id = deviceId;
+        try {
+          await this._hass.callService("navimower", "set_schedule_queue", data);
+          this._beta11ScheduleServerQueue = draft.slice();
+          this._beta11ScheduleDirty = false;
+          this._beta11ScheduleSaveState = "saved";
+          renderManaged(this);
+          setTimeout(() => {
+            if (this._beta11ScheduleSaveState === "saved") {
+              this._beta11ScheduleSaveState = "idle";
+              renderManaged(this);
+            }
+          }, SAVED_FEEDBACK_MS);
+          return true;
+        } catch (error) {
+          console.warn("[Navimower Map Card] custom schedule queue save failed", error);
+          this._beta11ScheduleSaveState = "error";
+          renderManaged(this);
+          return false;
+        }
+      };
+    
+      function queueNames(card, attrs) {
+        const names = new Map(configuredZones(card, attrs).map((zone) => [zone.id, zone.name]));
+        for (const row of Array.isArray(attrs.queue) ? attrs.queue : []) {
+          const id = Number(row?.id);
+          if (Number.isFinite(id) && row?.name) names.set(id, row.name);
+        }
+        return names;
+      }
+    
+      function updateNativeRows(card, root) {
+        root?.querySelectorAll?.("[data-beta11-time-row]")?.forEach?.((row) => { row.hass = card._hass; });
+      }
+    
+      async function mountTimeRows(card, root, token) {
+        const { ids } = statusSnapshot(card);
+        const list = root?.querySelector?.("[data-beta11-time-list]");
+        if (!list) return;
+        const entities = [ids.start, ids.end].filter(Boolean);
+        if (!entities.length) {
+          list.innerHTML = '<div class="nm-beta11-muted">Schedule time entities are unavailable.</div>';
+          return;
+        }
+        try {
+          const helpers = await globalThis.loadCardHelpers?.();
+          if (!helpers || typeof helpers.createRowElement !== "function") throw new Error("Home Assistant createRowElement helper is unavailable");
+          if (!card._beta6ManagedOpen || card._beta11ScheduleRenderToken !== token || !list.isConnected) return;
+          list.textContent = "";
+          for (const entityId of entities) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "nm-beta11-native-row";
+            const row = helpers.createRowElement({ entity: entityId });
+            row.dataset.beta11TimeRow = entityId;
+            row.hass = card._hass;
+            wrapper.append(row);
+            list.append(wrapper);
+          }
+        } catch (error) {
+          console.warn("[Navimower Map Card] native schedule time rows unavailable", error);
+          if (!card._beta6ManagedOpen || card._beta11ScheduleRenderToken !== token || !list.isConnected) return;
+          list.textContent = "";
+          for (const entityId of entities) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "nm-beta11-time-fallback";
+            const rowState = state(card, entityId);
+            button.textContent = (rowState?.attributes?.friendly_name || entityId) + " — " + (rowState?.state || "unavailable");
+            button.addEventListener("click", () => card.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId } })));
+            list.append(button);
+          }
+        }
+      }
+    
+      function dragAutoScroll(root, clientY) {
+        const content = root?.querySelector?.("[data-beta11-scroll]");
+        if (!content) return;
+        const rect = content.getBoundingClientRect();
+        const edge = 54;
+        if (clientY < rect.top + edge) content.scrollBy({ top: -18, behavior: "auto" });
+        else if (clientY > rect.bottom - edge) content.scrollBy({ top: 18, behavior: "auto" });
+      }
+    
+      function bindDrag(card, root) {
+        root.querySelectorAll("[data-beta11-drag]").forEach((handle) => {
+          handle.addEventListener("pointerdown", (event) => {
+            if (event.button !== undefined && event.button !== 0) return;
+            event.preventDefault();
+            const start = Number(handle.dataset.beta11Drag);
+            if (!Number.isInteger(start)) return;
+            card._beta11DragIndex = start;
+            handle.setPointerCapture?.(event.pointerId);
+            root.querySelector('[data-beta11-row="' + start + '"]')?.classList?.add("nm-beta11-dragging");
+          });
+          handle.addEventListener("pointermove", (event) => {
+            if (!Number.isInteger(card._beta11DragIndex)) return;
+            event.preventDefault();
+            dragAutoScroll(root, event.clientY);
+            const target = document.elementFromPoint?.(event.clientX, event.clientY)?.closest?.("[data-beta11-row]");
+            if (!target || !root.contains(target)) return;
+            const targetIndex = Number(target.dataset.beta11Row);
+            const from = card._beta11DragIndex;
+            if (!Number.isInteger(targetIndex) || targetIndex === from) return;
+            if (card._managedScheduleMoveDraft(from, targetIndex)) {
+              card._beta11DragIndex = targetIndex;
+              renderManaged(card, { preserveScroll: true });
+            }
+          });
+          const finish = () => {
+            card._beta11DragIndex = null;
+            root.querySelectorAll(".nm-beta11-dragging").forEach((row) => row.classList.remove("nm-beta11-dragging"));
+          };
+          handle.addEventListener("pointerup", finish);
+          handle.addEventListener("pointercancel", finish);
+        });
+      }
+    
+      function saveLabel(card) {
+        if (card._beta11ScheduleSaveState === "saving") return "Saving…";
+        if (card._beta11ScheduleSaveState === "saved") return "Saved";
+        if (card._beta11ScheduleSaveState === "error") return "Retry save";
+        return "Save order";
+      }
+    
+      function renderManaged(card, options = {}) {
+        const host = card._modalHostEl;
+        if (!host || !card._beta6ManagedOpen) return;
+        const previousScroll = options.preserveScroll ? host.querySelector?.("[data-beta11-scroll]")?.scrollTop || 0 : 0;
+        const { statusState, attrs } = statusSnapshot(card);
+        const draft = ensureDraft(card, attrs);
+        const names = queueNames(card, attrs);
+        const missing = missingZones(card);
+        const editable = (attrs.order_mode || "automatic") === "custom";
+        const token = (card._beta11ScheduleRenderToken || 0) + 1;
+        card._beta11ScheduleRenderToken = token;
+    
+        const rows = draft.map((id, index) =>
+          '<div class="nm-beta11-zone" data-beta11-row="' + index + '">' +
+            '<div class="nm-beta11-zone-actions">' +
+              '<ha-icon-button class="nm-beta11-repeat" data-beta11-repeat="' + index + '" title="Repeat zone"><ha-icon icon="mdi:plus"></ha-icon></ha-icon-button>' +
+              '<ha-icon-button class="nm-beta11-remove" data-beta11-remove="' + index + '" title="Remove zone"' + (draft.length <= 1 ? ' disabled' : '') + '><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>' +
+            '</div>' +
+            '<div class="nm-beta11-zone-name">' + esc(names.get(id) || ("Zone " + id)) + '</div>' +
+            '<ha-icon-button class="nm-beta11-drag" data-beta11-drag="' + index + '" title="Drag to reorder"><ha-icon icon="mdi:drag"></ha-icon></ha-icon-button>' +
+          '</div>'
+        ).join("");
+    
+        const addOptions = missing.map((zone) => '<option value="' + zone.id + '">' + esc(zone.name) + '</option>').join("");
+        const addDisabled = !editable || missing.length === 0;
+        const saveDisabled = !editable || !card._beta11ScheduleDirty || card._beta11ScheduleSaveState === "saving";
+    
+        host.innerHTML =
+          '<div class="nm-backdrop nm-beta11-backdrop" data-beta11-root>' +
+            '<div class="nm-dialog nm-beta11-dialog">' +
+              '<style>' +
+                '.nm-beta11-dialog{width:min(94vw,680px);max-height:min(88vh,860px);display:flex;flex-direction:column;overflow:hidden;}' +
+                '.nm-beta11-head{flex:0 0 auto;}' +
+                '.nm-beta11-scroll{overflow-y:auto;overscroll-behavior:contain;padding:0 0 14px;min-height:0;}' +
+                '.nm-beta11-section{padding:14px 16px 4px;}' +
+                '.nm-beta11-section-title{font-weight:650;margin:0 0 8px;}' +
+                '.nm-beta11-status{color:var(--secondary-text-color);font-size:.92em;margin-top:2px;}' +
+                '.nm-beta11-native-row{padding:2px 0;border-bottom:1px solid var(--divider-color);}' +
+                '.nm-beta11-native-row:last-child{border-bottom:0;}' +
+                '.nm-beta11-time-fallback{display:block;width:100%;padding:14px 4px;border:0;border-bottom:1px solid var(--divider-color);background:transparent;color:var(--primary-text-color);text-align:left;font:inherit;}' +
+                '.nm-beta11-muted{color:var(--secondary-text-color);padding:10px 0;}' +
+                '.nm-beta11-queue{display:grid;gap:8px;}' +
+                '.nm-beta11-zone{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:8px 8px;border-radius:14px;background:var(--secondary-background-color);touch-action:pan-y;}' +
+                '.nm-beta11-zone-actions{display:flex;align-items:center;gap:2px;}' +
+                '.nm-beta11-zone-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:8px 2px;}' +
+                '.nm-beta11-repeat{color:var(--success-color,#43a047);}' +
+                '.nm-beta11-remove{color:var(--error-color,#db4437);}' +
+                '.nm-beta11-drag{color:var(--secondary-text-color);touch-action:none;cursor:grab;}' +
+                '.nm-beta11-dragging{outline:2px solid var(--primary-color);opacity:.78;}' +
+                '.nm-beta11-add{display:flex;gap:8px;align-items:center;margin-top:10px;}' +
+                '.nm-beta11-add select{flex:1;min-width:0;height:42px;border:1px solid var(--divider-color);border-radius:10px;background:var(--card-background-color);color:var(--primary-text-color);padding:0 10px;font:inherit;}' +
+                '.nm-beta11-add button{height:42px;border:0;border-radius:10px;padding:0 16px;background:var(--primary-color);color:var(--text-primary-color,#fff);font:inherit;font-weight:600;}' +
+                '.nm-beta11-add button:disabled,.nm-beta11-add select:disabled{opacity:.42;}' +
+                '.nm-beta11-footer{flex:0 0 auto;position:sticky;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--divider-color);background:var(--card-background-color);}' +
+                '.nm-beta11-save{width:100%;min-height:46px;border:0;border-radius:12px;background:var(--primary-color);color:var(--text-primary-color,#fff);font:inherit;font-weight:700;}' +
+                '.nm-beta11-save:disabled{opacity:.42;}' +
+              '</style>' +
+              '<div class="nm-schedule-dialog-head nm-beta11-head">' +
+                '<div><div class="nm-schedule-dialog-title">Navimower schedule</div><div class="nm-beta11-status">' + esc(statusState?.state || "Unavailable") + '</div></div>' +
+                '<button class="nm-schedule-close" type="button" data-beta11-close><ha-icon icon="mdi:close"></ha-icon></button>' +
+              '</div>' +
+              '<div class="nm-beta11-scroll" data-beta11-scroll>' +
+                '<section class="nm-beta11-section"><div class="nm-beta11-section-title">Time window</div><div data-beta11-time-list><div class="nm-beta11-muted">Loading Home Assistant controls…</div></div></section>' +
+                '<section class="nm-beta11-section"><div class="nm-beta11-section-title">Custom order</div>' +
+                  '<div class="nm-beta11-queue">' + (rows || '<div class="nm-beta11-muted">No queue available.</div>') + '</div>' +
+                  '<div class="nm-beta11-add">' +
+                    '<select data-beta11-add-select' + (addDisabled ? ' disabled' : '') + '><option value="">Add zone…</option>' + addOptions + '</select>' +
+                    '<button type="button" data-beta11-add' + (addDisabled ? ' disabled' : '') + '>Add zone</button>' +
+                  '</div>' +
+                '</section>' +
+              '</div>' +
+              '<div class="nm-beta11-footer"><button type="button" class="nm-beta11-save" data-beta11-save' + (saveDisabled ? ' disabled' : '') + '>' + esc(saveLabel(card)) + '</button></div>' +
+            '</div>' +
+          '</div>';
+    
+        const root = host.querySelector("[data-beta11-root]");
+        const scroll = root?.querySelector?.("[data-beta11-scroll]");
+        if (scroll && previousScroll) scroll.scrollTop = previousScroll;
+    
+        root?.querySelector?.("[data-beta11-close]")?.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          card._beta11ScheduleDraft = null;
+          card._beta11ScheduleServerQueue = null;
+          card._beta11ScheduleDirty = false;
+          card._beta11ScheduleSaveState = "idle";
+          card._beta11DragIndex = null;
+          card._beta6ManagedOpen = false;
+          card._renderDialog();
+        });
+        root?.querySelectorAll?.("[data-beta11-repeat]")?.forEach?.((button) => button.addEventListener("click", () => {
+          if (card._managedScheduleRepeatDraft(Number(button.dataset.beta11Repeat))) renderManaged(card, { preserveScroll: true });
+        }));
+        root?.querySelectorAll?.("[data-beta11-remove]")?.forEach?.((button) => button.addEventListener("click", () => {
+          if (card._managedScheduleRemoveDraft(Number(button.dataset.beta11Remove))) renderManaged(card, { preserveScroll: true });
+        }));
+        const addSelect = root?.querySelector?.("[data-beta11-add-select]");
+        root?.querySelector?.("[data-beta11-add]")?.addEventListener("click", () => {
+          if (card._managedScheduleAddDraftZone(Number(addSelect?.value))) renderManaged(card, { preserveScroll: true });
+        });
+        root?.querySelector?.("[data-beta11-save]")?.addEventListener("click", () => { void card._managedScheduleSaveDraft(); });
+        bindDrag(card, root);
+        void mountTimeRows(card, root, token);
+      }
+    
+      const previousDialog = proto._renderDialog;
+      proto._renderDialog = function (...args) {
+        if (this._beta6ManagedOpen) {
+          renderManaged(this);
+          return;
+        }
+        return previousDialog?.apply(this, args);
+      };
+    
+      const previousOpenSchedule = proto._openScheduleDialog;
+      proto._openScheduleDialog = async function (...args) {
+        const wasOpen = this._beta6ManagedOpen;
+        const result = await previousOpenSchedule?.apply(this, args);
+        if (!wasOpen && this._beta6ManagedOpen) {
+          const { attrs } = statusSnapshot(this);
+          ensureDraft(this, attrs, true);
           renderManaged(this);
         }
-      }, SAVED_FEEDBACK_MS);
-      return true;
-    } catch (error) {
-      console.warn("[Navimower Map Card] custom schedule queue save failed", error);
-      this._beta11ScheduleSaveState = "error";
-      renderManaged(this);
-      return false;
-    }
-  };
-
-  function queueNames(card, attrs) {
-    const names = new Map(configuredZones(card, attrs).map((zone) => [zone.id, zone.name]));
-    for (const row of Array.isArray(attrs.queue) ? attrs.queue : []) {
-      const id = Number(row?.id);
-      if (Number.isFinite(id) && row?.name) names.set(id, row.name);
-    }
-    return names;
-  }
-
-  function updateNativeRows(card, root) {
-    root?.querySelectorAll?.("[data-beta11-time-row]")?.forEach?.((row) => { row.hass = card._hass; });
-  }
-
-  async function mountTimeRows(card, root, token) {
-    const { ids } = statusSnapshot(card);
-    const list = root?.querySelector?.("[data-beta11-time-list]");
-    if (!list) return;
-    const entities = [ids.start, ids.end].filter(Boolean);
-    if (!entities.length) {
-      list.innerHTML = '<div class="nm-beta11-muted">Schedule time entities are unavailable.</div>';
-      return;
-    }
-    try {
-      const helpers = await globalThis.loadCardHelpers?.();
-      if (!helpers || typeof helpers.createRowElement !== "function") throw new Error("Home Assistant createRowElement helper is unavailable");
-      if (!card._beta6ManagedOpen || card._beta11ScheduleRenderToken !== token || !list.isConnected) return;
-      list.textContent = "";
-      for (const entityId of entities) {
-        const wrapper = document.createElement("div");
-        wrapper.className = "nm-beta11-native-row";
-        const row = helpers.createRowElement({ entity: entityId });
-        row.dataset.beta11TimeRow = entityId;
-        row.hass = card._hass;
-        wrapper.append(row);
-        list.append(wrapper);
-      }
-    } catch (error) {
-      console.warn("[Navimower Map Card] native schedule time rows unavailable", error);
-      if (!card._beta6ManagedOpen || card._beta11ScheduleRenderToken !== token || !list.isConnected) return;
-      list.textContent = "";
-      for (const entityId of entities) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "nm-beta11-time-fallback";
-        const rowState = state(card, entityId);
-        button.textContent = (rowState?.attributes?.friendly_name || entityId) + " — " + (rowState?.state || "unavailable");
-        button.addEventListener("click", () => card.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId } })));
-        list.append(button);
-      }
-    }
-  }
-
-  function dragAutoScroll(root, clientY) {
-    const content = root?.querySelector?.("[data-beta11-scroll]");
-    if (!content) return;
-    const rect = content.getBoundingClientRect();
-    const edge = 54;
-    if (clientY < rect.top + edge) content.scrollBy({ top: -18, behavior: "auto" });
-    else if (clientY > rect.bottom - edge) content.scrollBy({ top: 18, behavior: "auto" });
-  }
-
-  function bindDrag(card, root) {
-    root.querySelectorAll("[data-beta11-drag]").forEach((handle) => {
-      handle.addEventListener("pointerdown", (event) => {
-        if (event.button !== undefined && event.button !== 0) return;
-        event.preventDefault();
-        const start = Number(handle.dataset.beta11Drag);
-        if (!Number.isInteger(start)) return;
-        card._beta11DragIndex = start;
-        handle.setPointerCapture?.(event.pointerId);
-        root.querySelector('[data-beta11-row="' + start + '"]')?.classList?.add("nm-beta11-dragging");
-      });
-      handle.addEventListener("pointermove", (event) => {
-        if (!Number.isInteger(card._beta11DragIndex)) return;
-        event.preventDefault();
-        dragAutoScroll(root, event.clientY);
-        const target = document.elementFromPoint?.(event.clientX, event.clientY)?.closest?.("[data-beta11-row]");
-        if (!target || !root.contains(target)) return;
-        const targetIndex = Number(target.dataset.beta11Row);
-        const from = card._beta11DragIndex;
-        if (!Number.isInteger(targetIndex) || targetIndex === from) return;
-        if (card._managedScheduleMoveDraft(from, targetIndex)) {
-          card._beta11DragIndex = targetIndex;
-          renderManaged(card, { preserveScroll: true });
-        }
-      });
-      const finish = () => {
-        card._beta11DragIndex = null;
-        root.querySelectorAll(".nm-beta11-dragging").forEach((row) => row.classList.remove("nm-beta11-dragging"));
+        return result;
       };
-      handle.addEventListener("pointerup", finish);
-      handle.addEventListener("pointercancel", finish);
-    });
+    
+      const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
+      if (previousHass?.set) {
+        Object.defineProperty(proto, "hass", {
+          configurable: true,
+          get: previousHass.get,
+          set(value) {
+            const managedOpen = Boolean(this._beta6ManagedOpen);
+            if (managedOpen) this._beta6ManagedOpen = false;
+            previousHass.set.call(this, value);
+            if (managedOpen) {
+              this._beta6ManagedOpen = true;
+              const root = this._modalHostEl?.querySelector?.("[data-beta11-root]");
+              if (root) updateNativeRows(this, root);
+              renderManaged(this, { preserveScroll: true });
+            }
+          },
+        });
+      }
   }
 
-  function saveLabel(card) {
-    if (card._beta11ScheduleSaveState === "saving") return "Saving…";
-    if (card._beta11ScheduleSaveState === "saved") return "Saved";
-    if (card._beta11ScheduleSaveState === "error") return "Retry save";
-    return "Save order";
-  }
-
-  function renderManaged(card, options = {}) {
-    const host = card._modalHostEl;
-    if (!host || !card._beta6ManagedOpen) return;
-    const previousScroll = options.preserveScroll ? host.querySelector?.("[data-beta11-scroll]")?.scrollTop || 0 : 0;
-    const { statusState, attrs } = statusSnapshot(card);
-    const draft = ensureDraft(card, attrs);
-    const names = queueNames(card, attrs);
-    const missing = missingZones(card);
-    const editable = (attrs.order_mode || "automatic") === "custom";
-    const token = (card._beta11ScheduleRenderToken || 0) + 1;
-    card._beta11ScheduleRenderToken = token;
-
-    const rows = draft.map((id, index) =>
-      '<div class="nm-beta11-zone" data-beta11-row="' + index + '">' +
-        '<div class="nm-beta11-zone-actions">' +
-          '<ha-icon-button class="nm-beta11-repeat" data-beta11-repeat="' + index + '" title="Repeat zone"><ha-icon icon="mdi:plus"></ha-icon></ha-icon-button>' +
-          '<ha-icon-button class="nm-beta11-remove" data-beta11-remove="' + index + '" title="Remove zone"' + (draft.length <= 1 ? ' disabled' : '') + '><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>' +
-        '</div>' +
-        '<div class="nm-beta11-zone-name">' + esc(names.get(id) || ("Zone " + id)) + '</div>' +
-        '<ha-icon-button class="nm-beta11-drag" data-beta11-drag="' + index + '" title="Drag to reorder"><ha-icon icon="mdi:drag"></ha-icon></ha-icon-button>' +
-      '</div>'
-    ).join("");
-
-    const addOptions = missing.map((zone) => '<option value="' + zone.id + '">' + esc(zone.name) + '</option>').join("");
-    const addDisabled = !editable || missing.length === 0;
-    const saveDisabled = !editable || !card._beta11ScheduleDirty || card._beta11ScheduleSaveState === "saving";
-
-    host.innerHTML =
-      '<div class="nm-backdrop nm-beta11-backdrop" data-beta11-root>' +
-        '<div class="nm-dialog nm-beta11-dialog">' +
-          '<style>' +
-            '.nm-beta11-dialog{width:min(94vw,680px);max-height:min(88vh,860px);display:flex;flex-direction:column;overflow:hidden;}' +
-            '.nm-beta11-head{flex:0 0 auto;}' +
-            '.nm-beta11-scroll{overflow-y:auto;overscroll-behavior:contain;padding:0 0 14px;min-height:0;}' +
-            '.nm-beta11-section{padding:14px 16px 4px;}' +
-            '.nm-beta11-section-title{font-weight:650;margin:0 0 8px;}' +
-            '.nm-beta11-status{color:var(--secondary-text-color);font-size:.92em;margin-top:2px;}' +
-            '.nm-beta11-native-row{padding:2px 0;border-bottom:1px solid var(--divider-color);}' +
-            '.nm-beta11-native-row:last-child{border-bottom:0;}' +
-            '.nm-beta11-time-fallback{display:block;width:100%;padding:14px 4px;border:0;border-bottom:1px solid var(--divider-color);background:transparent;color:var(--primary-text-color);text-align:left;font:inherit;}' +
-            '.nm-beta11-muted{color:var(--secondary-text-color);padding:10px 0;}' +
-            '.nm-beta11-queue{display:grid;gap:8px;}' +
-            '.nm-beta11-zone{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:8px 8px;border-radius:14px;background:var(--secondary-background-color);touch-action:pan-y;}' +
-            '.nm-beta11-zone-actions{display:flex;align-items:center;gap:2px;}' +
-            '.nm-beta11-zone-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:8px 2px;}' +
-            '.nm-beta11-repeat{color:var(--success-color,#43a047);}' +
-            '.nm-beta11-remove{color:var(--error-color,#db4437);}' +
-            '.nm-beta11-drag{color:var(--secondary-text-color);touch-action:none;cursor:grab;}' +
-            '.nm-beta11-dragging{outline:2px solid var(--primary-color);opacity:.78;}' +
-            '.nm-beta11-add{display:flex;gap:8px;align-items:center;margin-top:10px;}' +
-            '.nm-beta11-add select{flex:1;min-width:0;height:42px;border:1px solid var(--divider-color);border-radius:10px;background:var(--card-background-color);color:var(--primary-text-color);padding:0 10px;font:inherit;}' +
-            '.nm-beta11-add button{height:42px;border:0;border-radius:10px;padding:0 16px;background:var(--primary-color);color:var(--text-primary-color,#fff);font:inherit;font-weight:600;}' +
-            '.nm-beta11-add button:disabled,.nm-beta11-add select:disabled{opacity:.42;}' +
-            '.nm-beta11-footer{flex:0 0 auto;position:sticky;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--divider-color);background:var(--card-background-color);}' +
-            '.nm-beta11-save{width:100%;min-height:46px;border:0;border-radius:12px;background:var(--primary-color);color:var(--text-primary-color,#fff);font:inherit;font-weight:700;}' +
-            '.nm-beta11-save:disabled{opacity:.42;}' +
-          '</style>' +
-          '<div class="nm-schedule-dialog-head nm-beta11-head">' +
-            '<div><div class="nm-schedule-dialog-title">Navimower schedule</div><div class="nm-beta11-status">' + esc(statusState?.state || "Unavailable") + '</div></div>' +
-            '<button class="nm-schedule-close" type="button" data-beta11-close><ha-icon icon="mdi:close"></ha-icon></button>' +
-          '</div>' +
-          '<div class="nm-beta11-scroll" data-beta11-scroll>' +
-            '<section class="nm-beta11-section"><div class="nm-beta11-section-title">Time window</div><div data-beta11-time-list><div class="nm-beta11-muted">Loading Home Assistant controls…</div></div></section>' +
-            '<section class="nm-beta11-section"><div class="nm-beta11-section-title">Custom order</div>' +
-              '<div class="nm-beta11-queue">' + (rows || '<div class="nm-beta11-muted">No queue available.</div>') + '</div>' +
-              '<div class="nm-beta11-add">' +
-                '<select data-beta11-add-select' + (addDisabled ? ' disabled' : '') + '><option value="">Add zone…</option>' + addOptions + '</select>' +
-                '<button type="button" data-beta11-add' + (addDisabled ? ' disabled' : '') + '>Add zone</button>' +
-              '</div>' +
-            '</section>' +
-          '</div>' +
-          '<div class="nm-beta11-footer"><button type="button" class="nm-beta11-save" data-beta11-save' + (saveDisabled ? ' disabled' : '') + '>' + esc(saveLabel(card)) + '</button></div>' +
-        '</div>' +
-      '</div>';
-
-    const root = host.querySelector("[data-beta11-root]");
-    const scroll = root?.querySelector?.("[data-beta11-scroll]");
-    if (scroll && previousScroll) scroll.scrollTop = previousScroll;
-
-    root?.querySelector?.("[data-beta11-close]")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      card._beta11ScheduleDraft = null;
-      card._beta11ScheduleServerQueue = null;
-      card._beta11ScheduleDirty = false;
-      card._beta11ScheduleSaveState = "idle";
-      card._beta11DragIndex = null;
-      card._beta6ManagedOpen = false;
-      card._renderDialog();
-    });
-    root?.querySelectorAll?.("[data-beta11-repeat]")?.forEach?.((button) => button.addEventListener("click", () => {
-      if (card._managedScheduleRepeatDraft(Number(button.dataset.beta11Repeat))) renderManaged(card, { preserveScroll: true });
-    }));
-    root?.querySelectorAll?.("[data-beta11-remove]")?.forEach?.((button) => button.addEventListener("click", () => {
-      if (card._managedScheduleRemoveDraft(Number(button.dataset.beta11Remove))) renderManaged(card, { preserveScroll: true });
-    }));
-    const addSelect = root?.querySelector?.("[data-beta11-add-select]");
-    root?.querySelector?.("[data-beta11-add]")?.addEventListener("click", () => {
-      if (card._managedScheduleAddDraftZone(Number(addSelect?.value))) renderManaged(card, { preserveScroll: true });
-    });
-    root?.querySelector?.("[data-beta11-save]")?.addEventListener("click", () => { void card._managedScheduleSaveDraft(); });
-    bindDrag(card, root);
-    void mountTimeRows(card, root, token);
-  }
-
-  const previousDialog = proto._renderDialog;
-  proto._renderDialog = function (...args) {
-    if (this._beta6ManagedOpen) {
-      renderManaged(this);
-      return;
-    }
-    return previousDialog?.apply(this, args);
-  };
-
-  const previousOpenSchedule = proto._openScheduleDialog;
-  proto._openScheduleDialog = async function (...args) {
-    const wasOpen = this._beta6ManagedOpen;
-    const result = await previousOpenSchedule?.apply(this, args);
-    if (!wasOpen && this._beta6ManagedOpen) {
-      const { attrs } = statusSnapshot(this);
-      ensureDraft(this, attrs, true);
-      renderManaged(this);
-    }
-    return result;
-  };
-
-  const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (previousHass?.set) {
-    Object.defineProperty(proto, "hass", {
-      configurable: true,
-      get: previousHass.get,
-      set(value) {
-        const managedOpen = Boolean(this._beta6ManagedOpen);
-        if (managedOpen) this._beta6ManagedOpen = false;
-        previousHass.set.call(this, value);
-        if (managedOpen) {
-          this._beta6ManagedOpen = true;
-          const root = this._modalHostEl?.querySelector?.("[data-beta11-root]");
-          if (root) updateNativeRows(this, root);
-          renderManaged(this, { preserveScroll: true });
-        }
-      },
-    });
-  }
-
-})();
 
 
 // 0.3.5-beta2: lazy persistent scheduler runtime.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const REGISTRY_FALLBACK_DELAY_MS = 250;
-  const SAVE_DEBOUNCE_MS = 750;
-  const SAVED_FEEDBACK_MS = 1000;
-
-  const normalizedQueue = (values) => (Array.isArray(values) ? values : [])
-    .map((value) => Number(value))
-    .filter(Number.isFinite);
-  const sameQueue = (left, right) => {
-    const a = normalizedQueue(left);
-    const b = normalizedQueue(right);
-    return a.length === b.length && a.every((value, index) => value === b[index]);
-  };
-  const state = (card, entityId) => entityId ? card?._hass?.states?.[entityId] : null;
-
-  function frontendMetadata(card) {
-    const frontend = card?._mapPayload?.frontend;
-    const entities = frontend?.entities;
-    if (!entities || typeof entities !== "object") return null;
-    return { frontend, entities };
-  }
-
-  function applyFrontendEntities(card) {
-    const metadata = frontendMetadata(card);
-    if (!metadata) return false;
-    const { frontend, entities } = metadata;
-    const map = {
-      mower_entity: entities.mower,
-      map_entity: entities.map_data,
-      x_entity: entities.position_x,
-      y_entity: entities.position_y,
-      heading_entity: entities.heading,
-      battery_entity: entities.battery,
-      zone_entity: entities.current_physical_zone,
-      schedule_entity: entities.native_schedule_data,
-      schedule_switch_entity: entities.native_schedule,
-    };
-    card._resolved = { ...(card._resolved || {}) };
-    for (const [key, entityId] of Object.entries(map)) {
-      if (entityId && card._hass?.states?.[entityId]) card._resolved[key] = entityId;
-    }
-    if (frontend.device_id) card._deviceId = frontend.device_id;
-    return true;
-  }
-
-  function schedulerIdsFromPayload(card) {
-    const metadata = frontendMetadata(card);
-    if (!metadata) return null;
-    const { frontend, entities } = metadata;
-    const status = entities.schedule_status || null;
-    if (!status || !card._hass?.states?.[status]) return null;
-    return {
-      status,
-      managedSwitch: entities.managed_schedule || null,
-      nativeSwitch: entities.native_schedule || card._scheduleSwitchEntity?.() || null,
-      start: entities.schedule_start || null,
-      end: entities.schedule_end || null,
-      deviceId: frontend.device_id || null,
-      configEntryId: card._mapPayload?.entry_id || null,
-      source: "map_payload_frontend",
-    };
-  }
-
-  function syncSchedulerCaches(card, ids) {
-    if (!ids) return;
-    card._beta10SchedulerEntities = { ...ids, cachedAt: Date.now() };
-    card._beta10ScheduleDeviceId = ids.deviceId || card._beta10ScheduleDeviceId || null;
-    card._beta6SchedulerEntities = {
-      status: ids.status || null,
-      managedSwitch: ids.managedSwitch || null,
-      nativeSwitch: ids.nativeSwitch || null,
-      start: ids.start || null,
-      end: ids.end || null,
-    };
-    card._beta5SchedulerEntities = { ...card._beta6SchedulerEntities };
-  }
-
-  async function schedulerIds(card) {
-    const fast = schedulerIdsFromPayload(card);
-    if (fast) {
-      syncSchedulerCaches(card, fast);
-      return fast;
-    }
-    if (typeof card._discoverNavimowerSchedulerEntities === "function") {
-      const discovered = await card._discoverNavimowerSchedulerEntities({ force: true });
-      if (discovered?.status) syncSchedulerCaches(card, discovered);
-      return discovered || {};
-    }
-    return {};
-  }
-
-  // Stop the beta5/beta6 eager entity-registry scans. Their discover functions
-  // short-circuit on a truthy cache. The new runtime resolves scheduler metadata
-  // from the Map API and falls back to registry discovery only on Schedule click.
-  const previousSetConfig = proto.setConfig;
-  proto.setConfig = function beta2SetConfig(config) {
-    if (!this._beta5SchedulerEntities) this._beta5SchedulerEntities = {};
-    if (!this._beta6SchedulerEntities) this._beta6SchedulerEntities = {};
-    return previousSetConfig.call(this, config);
-  };
-
-  // Core entity registry discovery remains a compatibility fallback for renamed
-  // installations, but defer it briefly. Normal Navimower cards load the map via
-  // name resolution first; beta44 metadata then supplies exact entity IDs and
-  // cancels the large registry response before it is requested.
-  const previousRegistryResolve = proto._resolveEntitiesFromRegistry;
-  if (typeof previousRegistryResolve === "function") {
-    proto._resolveEntitiesFromRegistry = function beta2DeferredRegistryResolve(...args) {
-      if (this._beta2RegistryTimer) clearTimeout(this._beta2RegistryTimer);
-      return new Promise((resolve) => {
-        this._beta2RegistryResolve = resolve;
-        this._beta2RegistryTimer = setTimeout(async () => {
-          this._beta2RegistryTimer = null;
-          this._beta2RegistryResolve = null;
-          if (applyFrontendEntities(this)) {
-            resolve();
-            return;
+  nmRuntimePatch7: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const REGISTRY_FALLBACK_DELAY_MS = 250;
+      const SAVE_DEBOUNCE_MS = 750;
+      const SAVED_FEEDBACK_MS = 1000;
+    
+      const normalizedQueue = (values) => (Array.isArray(values) ? values : [])
+        .map((value) => Number(value))
+        .filter(Number.isFinite);
+      const sameQueue = (left, right) => {
+        const a = normalizedQueue(left);
+        const b = normalizedQueue(right);
+        return a.length === b.length && a.every((value, index) => value === b[index]);
+      };
+      const state = (card, entityId) => entityId ? card?._hass?.states?.[entityId] : null;
+    
+      function frontendMetadata(card) {
+        const frontend = card?._mapPayload?.frontend;
+        const entities = frontend?.entities;
+        if (!entities || typeof entities !== "object") return null;
+        return { frontend, entities };
+      }
+    
+      function applyFrontendEntities(card) {
+        const metadata = frontendMetadata(card);
+        if (!metadata) return false;
+        const { frontend, entities } = metadata;
+        const map = {
+          mower_entity: entities.mower,
+          map_entity: entities.map_data,
+          x_entity: entities.position_x,
+          y_entity: entities.position_y,
+          heading_entity: entities.heading,
+          battery_entity: entities.battery,
+          zone_entity: entities.current_physical_zone,
+          schedule_entity: entities.native_schedule_data,
+          schedule_switch_entity: entities.native_schedule,
+        };
+        card._resolved = { ...(card._resolved || {}) };
+        for (const [key, entityId] of Object.entries(map)) {
+          if (entityId && card._hass?.states?.[entityId]) card._resolved[key] = entityId;
+        }
+        if (frontend.device_id) card._deviceId = frontend.device_id;
+        return true;
+      }
+    
+      function schedulerIdsFromPayload(card) {
+        const metadata = frontendMetadata(card);
+        if (!metadata) return null;
+        const { frontend, entities } = metadata;
+        const status = entities.schedule_status || null;
+        if (!status || !card._hass?.states?.[status]) return null;
+        return {
+          status,
+          managedSwitch: entities.managed_schedule || null,
+          nativeSwitch: entities.native_schedule || card._scheduleSwitchEntity?.() || null,
+          start: entities.schedule_start || null,
+          end: entities.schedule_end || null,
+          deviceId: frontend.device_id || null,
+          configEntryId: card._mapPayload?.entry_id || null,
+          source: "map_payload_frontend",
+        };
+      }
+    
+      function syncSchedulerCaches(card, ids) {
+        if (!ids) return;
+        card._beta10SchedulerEntities = { ...ids, cachedAt: Date.now() };
+        card._beta10ScheduleDeviceId = ids.deviceId || card._beta10ScheduleDeviceId || null;
+        card._beta6SchedulerEntities = {
+          status: ids.status || null,
+          managedSwitch: ids.managedSwitch || null,
+          nativeSwitch: ids.nativeSwitch || null,
+          start: ids.start || null,
+          end: ids.end || null,
+        };
+        card._beta5SchedulerEntities = { ...card._beta6SchedulerEntities };
+      }
+    
+      async function schedulerIds(card) {
+        const fast = schedulerIdsFromPayload(card);
+        if (fast) {
+          syncSchedulerCaches(card, fast);
+          return fast;
+        }
+        if (typeof card._discoverNavimowerSchedulerEntities === "function") {
+          const discovered = await card._discoverNavimowerSchedulerEntities({ force: true });
+          if (discovered?.status) syncSchedulerCaches(card, discovered);
+          return discovered || {};
+        }
+        return {};
+      }
+    
+      // Stop the beta5/beta6 eager entity-registry scans. Their discover functions
+      // short-circuit on a truthy cache. The new runtime resolves scheduler metadata
+      // from the Map API and falls back to registry discovery only on Schedule click.
+      const previousSetConfig = proto.setConfig;
+      proto.setConfig = function beta2SetConfig(config) {
+        if (!this._beta5SchedulerEntities) this._beta5SchedulerEntities = {};
+        if (!this._beta6SchedulerEntities) this._beta6SchedulerEntities = {};
+        return previousSetConfig.call(this, config);
+      };
+    
+      // Core entity registry discovery remains a compatibility fallback for renamed
+      // installations, but defer it briefly. Normal Navimower cards load the map via
+      // name resolution first; beta44 metadata then supplies exact entity IDs and
+      // cancels the large registry response before it is requested.
+      const previousRegistryResolve = proto._resolveEntitiesFromRegistry;
+      if (typeof previousRegistryResolve === "function") {
+        proto._resolveEntitiesFromRegistry = function beta2DeferredRegistryResolve(...args) {
+          if (this._beta2RegistryTimer) clearTimeout(this._beta2RegistryTimer);
+          return new Promise((resolve) => {
+            this._beta2RegistryResolve = resolve;
+            this._beta2RegistryTimer = setTimeout(async () => {
+              this._beta2RegistryTimer = null;
+              this._beta2RegistryResolve = null;
+              if (applyFrontendEntities(this)) {
+                resolve();
+                return;
+              }
+              try {
+                resolve(await previousRegistryResolve.apply(this, args));
+              } catch (error) {
+                console.debug("[Navimower Map Card] deferred entity discovery failed", error);
+                resolve();
+              }
+            }, REGISTRY_FALLBACK_DELAY_MS);
+          });
+        };
+      }
+    
+      const previousApplyMapPayload = proto._applyMapPayload;
+      if (typeof previousApplyMapPayload === "function") {
+        proto._applyMapPayload = function beta2ApplyMapPayload(...args) {
+          const result = previousApplyMapPayload.apply(this, args);
+          const applied = applyFrontendEntities(this);
+          const ids = schedulerIdsFromPayload(this);
+          if (ids) syncSchedulerCaches(this, ids);
+          if (applied && this._beta2RegistryTimer) {
+            clearTimeout(this._beta2RegistryTimer);
+            this._beta2RegistryTimer = null;
+            const resolve = this._beta2RegistryResolve;
+            this._beta2RegistryResolve = null;
+            resolve?.();
           }
-          try {
-            resolve(await previousRegistryResolve.apply(this, args));
-          } catch (error) {
-            console.debug("[Navimower Map Card] deferred entity discovery failed", error);
-            resolve();
+          return result;
+        };
+      }
+    
+      function snapshot(card) {
+        const ids = card._beta2SchedulerIds || schedulerIdsFromPayload(card) || card._beta10SchedulerEntities || {};
+        const statusState = state(card, ids.status);
+        return { ids, statusState, attrs: statusState?.attributes || {} };
+      }
+    
+      function configuredZones(card, attrs) {
+        const selected = new Set(normalizedQueue(attrs.selected_zone_ids));
+        const names = new Map();
+        for (const row of Array.isArray(attrs.queue) ? attrs.queue : []) {
+          const id = Number(row?.id);
+          if (Number.isFinite(id) && row?.name) names.set(id, String(row.name));
+        }
+        const available = typeof card._availableMowZones === "function" ? card._availableMowZones() : [];
+        for (const row of available) {
+          const id = Number(row?.id);
+          if (Number.isFinite(id) && row?.name) names.set(id, String(row.name));
+        }
+        return [...selected].map((id) => ({ id, name: names.get(id) || ("Zone " + id) }));
+      }
+    
+      function ensureDraft(card, attrs, force = false) {
+        const serverQueue = normalizedQueue(attrs.custom_queue);
+        if (force || !Array.isArray(card._beta2ScheduleDraft)) {
+          card._beta2ScheduleDraft = serverQueue.slice();
+          card._beta2ScheduleServerQueue = serverQueue.slice();
+          card._beta2ScheduleDirty = false;
+          card._beta2ScheduleSaveState = "idle";
+        } else if (!card._beta2ScheduleDirty && !sameQueue(serverQueue, card._beta2ScheduleServerQueue)) {
+          card._beta2ScheduleDraft = serverQueue.slice();
+          card._beta2ScheduleServerQueue = serverQueue.slice();
+        }
+        return card._beta2ScheduleDraft;
+      }
+    
+      function markDirty(card) {
+        card._beta2ScheduleDirty = !sameQueue(card._beta2ScheduleDraft, card._beta2ScheduleServerQueue);
+        if (card._beta2ScheduleSaveState === "saved") card._beta2ScheduleSaveState = "idle";
+      }
+    
+      function missingZones(card, attrs) {
+        const present = new Set(normalizedQueue(card._beta2ScheduleDraft));
+        return configuredZones(card, attrs).filter((zone) => !present.has(zone.id));
+      }
+    
+      function saveLabel(card) {
+        if (card._beta2ScheduleSaveState === "saving") return "Saving…";
+        if (card._beta2ScheduleSaveState === "saved") return "Saved";
+        if (card._beta2ScheduleSaveState === "error") return "Retry save";
+        return "Save order";
+      }
+    
+      function updateIndices(root) {
+        root?.querySelectorAll?.("[data-beta2-row]")?.forEach?.((row, index) => {
+          row.dataset.beta2Row = String(index);
+          const repeat = row.querySelector?.("[data-beta2-repeat]");
+          const remove = row.querySelector?.("[data-beta2-remove]");
+          const drag = row.querySelector?.("[data-beta2-drag]");
+          if (repeat) repeat.dataset.beta2Repeat = String(index);
+          if (remove) remove.dataset.beta2Remove = String(index);
+          if (drag) drag.dataset.beta2Drag = String(index);
+        });
+      }
+    
+      function updateControls(card, root) {
+        if (!root) return;
+        const { attrs } = snapshot(card);
+        const draft = ensureDraft(card, attrs);
+        const editable = (attrs.order_mode || "automatic") === "custom";
+        const missing = missingZones(card, attrs);
+        const select = root.querySelector?.("[data-beta2-add-select]");
+        if (select) {
+          const current = select.value;
+          select.innerHTML = '<option value="">Add zone…</option>' + missing
+            .map((zone) => '<option value="' + zone.id + '">' + String(zone.name).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") + '</option>')
+            .join("");
+          select.disabled = !editable || missing.length === 0;
+          if (missing.some((zone) => String(zone.id) === current)) select.value = current;
+        }
+        root.querySelectorAll?.("[data-beta2-remove]")?.forEach?.((button) => {
+          button.disabled = !editable || draft.length <= 1;
+        });
+        const save = root.querySelector?.("[data-beta2-save]");
+        if (save) {
+          save.disabled = !editable || !card._beta2ScheduleDirty || card._beta2ScheduleSaveState === "saving";
+          save.textContent = saveLabel(card);
+        }
+      }
+    
+      function zoneNameMap(card, attrs) {
+        return new Map(configuredZones(card, attrs).map((zone) => [zone.id, zone.name]));
+      }
+    
+      function makeZoneRow(card, id, index, attrs) {
+        const row = document.createElement("div");
+        row.className = "nm-beta2-zone";
+        row.dataset.beta2Row = String(index);
+        const names = zoneNameMap(card, attrs);
+        row.innerHTML =
+          '<div class="nm-beta2-actions">' +
+            '<ha-icon-button class="nm-beta2-repeat" data-beta2-repeat="' + index + '" title="Repeat zone"><ha-icon icon="mdi:plus"></ha-icon></ha-icon-button>' +
+            '<ha-icon-button class="nm-beta2-remove" data-beta2-remove="' + index + '" title="Remove zone"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>' +
+          '</div>' +
+          '<div class="nm-beta2-zone-name"></div>' +
+          '<ha-icon-button class="nm-beta2-drag" data-beta2-drag="' + index + '" title="Drag to reorder"><ha-icon icon="mdi:drag"></ha-icon></ha-icon-button>';
+        const name = row.querySelector(".nm-beta2-zone-name");
+        if (name) name.textContent = names.get(Number(id)) || ("Zone " + id);
+        return row;
+      }
+    
+      function bindRow(card, root, row) {
+        row.querySelector?.("[data-beta2-repeat]")?.addEventListener("click", (event) => {
+          event.preventDefault();
+          const index = Number(event.currentTarget.dataset.beta2Repeat);
+          const draft = card._beta2ScheduleDraft;
+          if (!Array.isArray(draft) || !Number.isInteger(index) || index < 0 || index >= draft.length) return;
+          draft.splice(index + 1, 0, draft[index]);
+          markDirty(card);
+          renderQueue(card, root);
+        });
+        row.querySelector?.("[data-beta2-remove]")?.addEventListener("click", (event) => {
+          event.preventDefault();
+          const index = Number(event.currentTarget.dataset.beta2Remove);
+          const draft = card._beta2ScheduleDraft;
+          if (!Array.isArray(draft) || draft.length <= 1 || !Number.isInteger(index) || index < 0 || index >= draft.length) return;
+          draft.splice(index, 1);
+          markDirty(card);
+          renderQueue(card, root);
+        });
+        const handle = row.querySelector?.("[data-beta2-drag]");
+        handle?.addEventListener("pointerdown", (event) => {
+          if (event.button !== undefined && event.button !== 0) return;
+          event.preventDefault();
+          const index = Number(handle.dataset.beta2Drag);
+          if (!Number.isInteger(index)) return;
+          card._beta2DragIndex = index;
+          card._beta2DragMoved = false;
+          handle.setPointerCapture?.(event.pointerId);
+          row.classList.add("nm-beta2-dragging");
+        });
+        handle?.addEventListener("pointermove", (event) => {
+          if (!Number.isInteger(card._beta2DragIndex)) return;
+          event.preventDefault();
+          const scroll = root.querySelector?.("[data-beta2-scroll]");
+          if (scroll) {
+            const rect = scroll.getBoundingClientRect();
+            if (event.clientY < rect.top + 54) scroll.scrollBy({ top: -18, behavior: "auto" });
+            else if (event.clientY > rect.bottom - 54) scroll.scrollBy({ top: 18, behavior: "auto" });
           }
-        }, REGISTRY_FALLBACK_DELAY_MS);
-      });
-    };
-  }
-
-  const previousApplyMapPayload = proto._applyMapPayload;
-  if (typeof previousApplyMapPayload === "function") {
-    proto._applyMapPayload = function beta2ApplyMapPayload(...args) {
-      const result = previousApplyMapPayload.apply(this, args);
-      const applied = applyFrontendEntities(this);
-      const ids = schedulerIdsFromPayload(this);
-      if (ids) syncSchedulerCaches(this, ids);
-      if (applied && this._beta2RegistryTimer) {
-        clearTimeout(this._beta2RegistryTimer);
-        this._beta2RegistryTimer = null;
-        const resolve = this._beta2RegistryResolve;
-        this._beta2RegistryResolve = null;
-        resolve?.();
+          const target = document.elementFromPoint?.(event.clientX, event.clientY)?.closest?.("[data-beta2-row]");
+          if (!target || !root.contains(target)) return;
+          const from = card._beta2DragIndex;
+          const to = Number(target.dataset.beta2Row);
+          if (!Number.isInteger(to) || from === to) return;
+          const draft = card._beta2ScheduleDraft;
+          if (!Array.isArray(draft) || from < 0 || from >= draft.length || to < 0 || to >= draft.length) return;
+          const [item] = draft.splice(from, 1);
+          draft.splice(to, 0, item);
+          const queue = root.querySelector?.("[data-beta2-queue]");
+          const moving = queue?.querySelector?.('[data-beta2-row="' + from + '"]');
+          const targetRow = queue?.querySelector?.('[data-beta2-row="' + to + '"]');
+          if (moving && targetRow && queue) {
+            if (from < to) targetRow.after(moving);
+            else targetRow.before(moving);
+            updateIndices(root);
+          }
+          card._beta2DragIndex = to;
+          card._beta2DragMoved = true;
+        });
+        const finish = () => {
+          if (Number.isInteger(card._beta2DragIndex)) {
+            card._beta2DragIndex = null;
+            if (card._beta2DragMoved) markDirty(card);
+            card._beta2DragMoved = false;
+            root.querySelectorAll?.(".nm-beta2-dragging")?.forEach?.((item) => item.classList.remove("nm-beta2-dragging"));
+            updateControls(card, root);
+          }
+        };
+        handle?.addEventListener("pointerup", finish);
+        handle?.addEventListener("pointercancel", finish);
       }
-      return result;
-    };
-  }
-
-  function snapshot(card) {
-    const ids = card._beta2SchedulerIds || schedulerIdsFromPayload(card) || card._beta10SchedulerEntities || {};
-    const statusState = state(card, ids.status);
-    return { ids, statusState, attrs: statusState?.attributes || {} };
-  }
-
-  function configuredZones(card, attrs) {
-    const selected = new Set(normalizedQueue(attrs.selected_zone_ids));
-    const names = new Map();
-    for (const row of Array.isArray(attrs.queue) ? attrs.queue : []) {
-      const id = Number(row?.id);
-      if (Number.isFinite(id) && row?.name) names.set(id, String(row.name));
-    }
-    const available = typeof card._availableMowZones === "function" ? card._availableMowZones() : [];
-    for (const row of available) {
-      const id = Number(row?.id);
-      if (Number.isFinite(id) && row?.name) names.set(id, String(row.name));
-    }
-    return [...selected].map((id) => ({ id, name: names.get(id) || ("Zone " + id) }));
-  }
-
-  function ensureDraft(card, attrs, force = false) {
-    const serverQueue = normalizedQueue(attrs.custom_queue);
-    if (force || !Array.isArray(card._beta2ScheduleDraft)) {
-      card._beta2ScheduleDraft = serverQueue.slice();
-      card._beta2ScheduleServerQueue = serverQueue.slice();
-      card._beta2ScheduleDirty = false;
-      card._beta2ScheduleSaveState = "idle";
-    } else if (!card._beta2ScheduleDirty && !sameQueue(serverQueue, card._beta2ScheduleServerQueue)) {
-      card._beta2ScheduleDraft = serverQueue.slice();
-      card._beta2ScheduleServerQueue = serverQueue.slice();
-    }
-    return card._beta2ScheduleDraft;
-  }
-
-  function markDirty(card) {
-    card._beta2ScheduleDirty = !sameQueue(card._beta2ScheduleDraft, card._beta2ScheduleServerQueue);
-    if (card._beta2ScheduleSaveState === "saved") card._beta2ScheduleSaveState = "idle";
-  }
-
-  function missingZones(card, attrs) {
-    const present = new Set(normalizedQueue(card._beta2ScheduleDraft));
-    return configuredZones(card, attrs).filter((zone) => !present.has(zone.id));
-  }
-
-  function saveLabel(card) {
-    if (card._beta2ScheduleSaveState === "saving") return "Saving…";
-    if (card._beta2ScheduleSaveState === "saved") return "Saved";
-    if (card._beta2ScheduleSaveState === "error") return "Retry save";
-    return "Save order";
-  }
-
-  function updateIndices(root) {
-    root?.querySelectorAll?.("[data-beta2-row]")?.forEach?.((row, index) => {
-      row.dataset.beta2Row = String(index);
-      const repeat = row.querySelector?.("[data-beta2-repeat]");
-      const remove = row.querySelector?.("[data-beta2-remove]");
-      const drag = row.querySelector?.("[data-beta2-drag]");
-      if (repeat) repeat.dataset.beta2Repeat = String(index);
-      if (remove) remove.dataset.beta2Remove = String(index);
-      if (drag) drag.dataset.beta2Drag = String(index);
-    });
-  }
-
-  function updateControls(card, root) {
-    if (!root) return;
-    const { attrs } = snapshot(card);
-    const draft = ensureDraft(card, attrs);
-    const editable = (attrs.order_mode || "automatic") === "custom";
-    const missing = missingZones(card, attrs);
-    const select = root.querySelector?.("[data-beta2-add-select]");
-    if (select) {
-      const current = select.value;
-      select.innerHTML = '<option value="">Add zone…</option>' + missing
-        .map((zone) => '<option value="' + zone.id + '">' + String(zone.name).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") + '</option>')
-        .join("");
-      select.disabled = !editable || missing.length === 0;
-      if (missing.some((zone) => String(zone.id) === current)) select.value = current;
-    }
-    root.querySelectorAll?.("[data-beta2-remove]")?.forEach?.((button) => {
-      button.disabled = !editable || draft.length <= 1;
-    });
-    const save = root.querySelector?.("[data-beta2-save]");
-    if (save) {
-      save.disabled = !editable || !card._beta2ScheduleDirty || card._beta2ScheduleSaveState === "saving";
-      save.textContent = saveLabel(card);
-    }
-  }
-
-  function zoneNameMap(card, attrs) {
-    return new Map(configuredZones(card, attrs).map((zone) => [zone.id, zone.name]));
-  }
-
-  function makeZoneRow(card, id, index, attrs) {
-    const row = document.createElement("div");
-    row.className = "nm-beta2-zone";
-    row.dataset.beta2Row = String(index);
-    const names = zoneNameMap(card, attrs);
-    row.innerHTML =
-      '<div class="nm-beta2-actions">' +
-        '<ha-icon-button class="nm-beta2-repeat" data-beta2-repeat="' + index + '" title="Repeat zone"><ha-icon icon="mdi:plus"></ha-icon></ha-icon-button>' +
-        '<ha-icon-button class="nm-beta2-remove" data-beta2-remove="' + index + '" title="Remove zone"><ha-icon icon="mdi:close"></ha-icon></ha-icon-button>' +
-      '</div>' +
-      '<div class="nm-beta2-zone-name"></div>' +
-      '<ha-icon-button class="nm-beta2-drag" data-beta2-drag="' + index + '" title="Drag to reorder"><ha-icon icon="mdi:drag"></ha-icon></ha-icon-button>';
-    const name = row.querySelector(".nm-beta2-zone-name");
-    if (name) name.textContent = names.get(Number(id)) || ("Zone " + id);
-    return row;
-  }
-
-  function bindRow(card, root, row) {
-    row.querySelector?.("[data-beta2-repeat]")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      const index = Number(event.currentTarget.dataset.beta2Repeat);
-      const draft = card._beta2ScheduleDraft;
-      if (!Array.isArray(draft) || !Number.isInteger(index) || index < 0 || index >= draft.length) return;
-      draft.splice(index + 1, 0, draft[index]);
-      markDirty(card);
-      renderQueue(card, root);
-    });
-    row.querySelector?.("[data-beta2-remove]")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      const index = Number(event.currentTarget.dataset.beta2Remove);
-      const draft = card._beta2ScheduleDraft;
-      if (!Array.isArray(draft) || draft.length <= 1 || !Number.isInteger(index) || index < 0 || index >= draft.length) return;
-      draft.splice(index, 1);
-      markDirty(card);
-      renderQueue(card, root);
-    });
-    const handle = row.querySelector?.("[data-beta2-drag]");
-    handle?.addEventListener("pointerdown", (event) => {
-      if (event.button !== undefined && event.button !== 0) return;
-      event.preventDefault();
-      const index = Number(handle.dataset.beta2Drag);
-      if (!Number.isInteger(index)) return;
-      card._beta2DragIndex = index;
-      card._beta2DragMoved = false;
-      handle.setPointerCapture?.(event.pointerId);
-      row.classList.add("nm-beta2-dragging");
-    });
-    handle?.addEventListener("pointermove", (event) => {
-      if (!Number.isInteger(card._beta2DragIndex)) return;
-      event.preventDefault();
-      const scroll = root.querySelector?.("[data-beta2-scroll]");
-      if (scroll) {
-        const rect = scroll.getBoundingClientRect();
-        if (event.clientY < rect.top + 54) scroll.scrollBy({ top: -18, behavior: "auto" });
-        else if (event.clientY > rect.bottom - 54) scroll.scrollBy({ top: 18, behavior: "auto" });
-      }
-      const target = document.elementFromPoint?.(event.clientX, event.clientY)?.closest?.("[data-beta2-row]");
-      if (!target || !root.contains(target)) return;
-      const from = card._beta2DragIndex;
-      const to = Number(target.dataset.beta2Row);
-      if (!Number.isInteger(to) || from === to) return;
-      const draft = card._beta2ScheduleDraft;
-      if (!Array.isArray(draft) || from < 0 || from >= draft.length || to < 0 || to >= draft.length) return;
-      const [item] = draft.splice(from, 1);
-      draft.splice(to, 0, item);
-      const queue = root.querySelector?.("[data-beta2-queue]");
-      const moving = queue?.querySelector?.('[data-beta2-row="' + from + '"]');
-      const targetRow = queue?.querySelector?.('[data-beta2-row="' + to + '"]');
-      if (moving && targetRow && queue) {
-        if (from < to) targetRow.after(moving);
-        else targetRow.before(moving);
-        updateIndices(root);
-      }
-      card._beta2DragIndex = to;
-      card._beta2DragMoved = true;
-    });
-    const finish = () => {
-      if (Number.isInteger(card._beta2DragIndex)) {
-        card._beta2DragIndex = null;
-        if (card._beta2DragMoved) markDirty(card);
-        card._beta2DragMoved = false;
-        root.querySelectorAll?.(".nm-beta2-dragging")?.forEach?.((item) => item.classList.remove("nm-beta2-dragging"));
+    
+      function renderQueue(card, root) {
+        const queue = root?.querySelector?.("[data-beta2-queue]");
+        if (!queue) return;
+        const { attrs } = snapshot(card);
+        const draft = ensureDraft(card, attrs);
+        queue.textContent = "";
+        draft.forEach((id, index) => {
+          const row = makeZoneRow(card, id, index, attrs);
+          queue.append(row);
+          bindRow(card, root, row);
+        });
         updateControls(card, root);
       }
-    };
-    handle?.addEventListener("pointerup", finish);
-    handle?.addEventListener("pointercancel", finish);
-  }
-
-  function renderQueue(card, root) {
-    const queue = root?.querySelector?.("[data-beta2-queue]");
-    if (!queue) return;
-    const { attrs } = snapshot(card);
-    const draft = ensureDraft(card, attrs);
-    queue.textContent = "";
-    draft.forEach((id, index) => {
-      const row = makeZoneRow(card, id, index, attrs);
-      queue.append(row);
-      bindRow(card, root, row);
-    });
-    updateControls(card, root);
-  }
-
-  async function mountTimeRows(card, root) {
-    const { ids } = snapshot(card);
-    const list = root?.querySelector?.("[data-beta2-time-list]");
-    if (!list || list.dataset.mounted === "1") return;
-    const entries = [[ids.start, "Start"], [ids.end, "End"]].filter(([entityId]) => Boolean(entityId));
-    if (!entries.length) {
-      list.textContent = "Schedule time entities are unavailable.";
-      return;
-    }
-    try {
-      const helpers = await globalThis.loadCardHelpers?.();
-      if (!helpers || typeof helpers.createRowElement !== "function") throw new Error("Home Assistant createRowElement helper is unavailable");
-      if (!card._beta2ScheduleOpen || !list.isConnected) return;
-      list.textContent = "";
-      for (const [entityId, label] of entries) {
-        const wrap = document.createElement("div");
-        wrap.className = "nm-beta2-native-row";
-        const row = helpers.createRowElement({ entity: entityId, name: label });
-        row.dataset.beta2TimeRow = entityId;
-        row.hass = card._hass;
-        wrap.append(row);
-        list.append(wrap);
-      }
-      list.dataset.mounted = "1";
-    } catch (error) {
-      console.warn("[Navimower Map Card] native schedule time rows unavailable", error);
-      list.textContent = "";
-      for (const [entityId, label] of entries) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "nm-beta2-time-fallback";
-        button.textContent = label + " — " + (state(card, entityId)?.state || "unavailable");
-        button.addEventListener("click", () => card.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId } })));
-        list.append(button);
-      }
-      list.dataset.mounted = "1";
-    }
-  }
-
-  function updateDialogState(card) {
-    const root = card._modalHostEl?.querySelector?.("[data-beta2-root]");
-    if (!root || !card._beta2ScheduleOpen) return;
-    const { statusState, attrs } = snapshot(card);
-    const status = root.querySelector?.("[data-beta2-status]");
-    if (status) status.textContent = statusState?.state || "unavailable";
-    root.querySelectorAll?.("[data-beta2-time-row]")?.forEach?.((row) => { row.hass = card._hass; });
-    const serverQueue = normalizedQueue(attrs.custom_queue);
-    if (!card._beta2ScheduleDirty && !sameQueue(serverQueue, card._beta2ScheduleServerQueue)) {
-      card._beta2ScheduleServerQueue = serverQueue.slice();
-      card._beta2ScheduleDraft = serverQueue.slice();
-      renderQueue(card, root);
-    } else {
-      updateControls(card, root);
-    }
-  }
-
-  function closeDialog(card) {
-    card._beta2ScheduleOpen = false;
-    card._beta2DragIndex = null;
-    card._beta2ScheduleDraft = null;
-    card._beta2ScheduleServerQueue = null;
-    card._beta2ScheduleDirty = false;
-    card._beta2ScheduleSaveState = "idle";
-    card._renderDialog();
-  }
-
-  async function saveDraft(card) {
-    if (!card._beta2ScheduleDirty || card._beta2ScheduleSaveState === "saving") return false;
-    const draft = normalizedQueue(card._beta2ScheduleDraft);
-    if (!draft.length) return false;
-    card._beta2ScheduleSaveState = "saving";
-    updateDialogState(card);
-    await new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS));
-    const data = { zones: draft };
-    const deviceId = card._beta2SchedulerIds?.deviceId || card._beta10ScheduleDeviceId || card._deviceId;
-    if (deviceId) data.device_id = deviceId;
-    try {
-      await card._hass.callService("navimower", "set_schedule_queue", data);
-      card._beta2ScheduleServerQueue = draft.slice();
-      card._beta2ScheduleDirty = false;
-      card._beta2ScheduleSaveState = "saved";
-      updateDialogState(card);
-      setTimeout(() => {
-        if (card._beta2ScheduleSaveState === "saved") {
-          card._beta2ScheduleSaveState = "idle";
-          updateDialogState(card);
+    
+      async function mountTimeRows(card, root) {
+        const { ids } = snapshot(card);
+        const list = root?.querySelector?.("[data-beta2-time-list]");
+        if (!list || list.dataset.mounted === "1") return;
+        const entries = [[ids.start, "Start"], [ids.end, "End"]].filter(([entityId]) => Boolean(entityId));
+        if (!entries.length) {
+          list.textContent = "Schedule time entities are unavailable.";
+          return;
         }
-      }, SAVED_FEEDBACK_MS);
-      return true;
-    } catch (error) {
-      console.warn("[Navimower Map Card] custom schedule queue save failed", error);
-      card._beta2ScheduleSaveState = "error";
-      updateDialogState(card);
-      return false;
-    }
+        try {
+          const helpers = await globalThis.loadCardHelpers?.();
+          if (!helpers || typeof helpers.createRowElement !== "function") throw new Error("Home Assistant createRowElement helper is unavailable");
+          if (!card._beta2ScheduleOpen || !list.isConnected) return;
+          list.textContent = "";
+          for (const [entityId, label] of entries) {
+            const wrap = document.createElement("div");
+            wrap.className = "nm-beta2-native-row";
+            const row = helpers.createRowElement({ entity: entityId, name: label });
+            row.dataset.beta2TimeRow = entityId;
+            row.hass = card._hass;
+            wrap.append(row);
+            list.append(wrap);
+          }
+          list.dataset.mounted = "1";
+        } catch (error) {
+          console.warn("[Navimower Map Card] native schedule time rows unavailable", error);
+          list.textContent = "";
+          for (const [entityId, label] of entries) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "nm-beta2-time-fallback";
+            button.textContent = label + " — " + (state(card, entityId)?.state || "unavailable");
+            button.addEventListener("click", () => card.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId } })));
+            list.append(button);
+          }
+          list.dataset.mounted = "1";
+        }
+      }
+    
+      function updateDialogState(card) {
+        const root = card._modalHostEl?.querySelector?.("[data-beta2-root]");
+        if (!root || !card._beta2ScheduleOpen) return;
+        const { statusState, attrs } = snapshot(card);
+        const status = root.querySelector?.("[data-beta2-status]");
+        if (status) status.textContent = statusState?.state || "unavailable";
+        root.querySelectorAll?.("[data-beta2-time-row]")?.forEach?.((row) => { row.hass = card._hass; });
+        const serverQueue = normalizedQueue(attrs.custom_queue);
+        if (!card._beta2ScheduleDirty && !sameQueue(serverQueue, card._beta2ScheduleServerQueue)) {
+          card._beta2ScheduleServerQueue = serverQueue.slice();
+          card._beta2ScheduleDraft = serverQueue.slice();
+          renderQueue(card, root);
+        } else {
+          updateControls(card, root);
+        }
+      }
+    
+      function closeDialog(card) {
+        card._beta2ScheduleOpen = false;
+        card._beta2DragIndex = null;
+        card._beta2ScheduleDraft = null;
+        card._beta2ScheduleServerQueue = null;
+        card._beta2ScheduleDirty = false;
+        card._beta2ScheduleSaveState = "idle";
+        card._renderDialog();
+      }
+    
+      async function saveDraft(card) {
+        if (!card._beta2ScheduleDirty || card._beta2ScheduleSaveState === "saving") return false;
+        const draft = normalizedQueue(card._beta2ScheduleDraft);
+        if (!draft.length) return false;
+        card._beta2ScheduleSaveState = "saving";
+        updateDialogState(card);
+        await new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS));
+        const data = { zones: draft };
+        const deviceId = card._beta2SchedulerIds?.deviceId || card._beta10ScheduleDeviceId || card._deviceId;
+        if (deviceId) data.device_id = deviceId;
+        try {
+          await card._hass.callService("navimower", "set_schedule_queue", data);
+          card._beta2ScheduleServerQueue = draft.slice();
+          card._beta2ScheduleDirty = false;
+          card._beta2ScheduleSaveState = "saved";
+          updateDialogState(card);
+          setTimeout(() => {
+            if (card._beta2ScheduleSaveState === "saved") {
+              card._beta2ScheduleSaveState = "idle";
+              updateDialogState(card);
+            }
+          }, SAVED_FEEDBACK_MS);
+          return true;
+        } catch (error) {
+          console.warn("[Navimower Map Card] custom schedule queue save failed", error);
+          card._beta2ScheduleSaveState = "error";
+          updateDialogState(card);
+          return false;
+        }
+      }
+    
+      function renderPersistentDialog(card) {
+        const host = card._modalHostEl;
+        if (!host || !card._beta2ScheduleOpen) return;
+        const existing = host.querySelector?.("[data-beta2-root]");
+        if (existing) {
+          updateDialogState(card);
+          return;
+        }
+        const { statusState, attrs } = snapshot(card);
+        ensureDraft(card, attrs, true);
+        const editable = (attrs.order_mode || "automatic") === "custom";
+        host.innerHTML =
+          '<div class="nm-backdrop nm-beta2-backdrop" data-beta2-root>' +
+            '<div class="nm-dialog nm-beta2-dialog">' +
+              '<style>' +
+                '.nm-beta2-dialog{width:min(94vw,680px);max-height:min(88vh,860px);display:flex;flex-direction:column;overflow:hidden;}' +
+                '.nm-beta2-scroll{overflow-y:auto;overscroll-behavior:contain;min-height:0;padding-bottom:8px;}' +
+                '.nm-beta2-section{padding:10px 16px 2px;}' +
+                '.nm-beta2-section-title{font-weight:650;margin:0 0 6px;}' +
+                '.nm-beta2-status{color:var(--secondary-text-color);font-size:.92em;margin-top:2px;}' +
+                '.nm-beta2-native-row{padding:0;border-bottom:1px solid var(--divider-color);}' +
+                '.nm-beta2-native-row:last-child{border-bottom:0;}' +
+                '.nm-beta2-time-fallback{display:block;width:100%;padding:12px 4px;border:0;border-bottom:1px solid var(--divider-color);background:transparent;color:var(--primary-text-color);text-align:left;font:inherit;}' +
+                '.nm-beta2-queue{display:grid;gap:6px;}' +
+                '.nm-beta2-zone{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:4px;min-height:48px;padding:2px 6px;border-radius:12px;background:var(--secondary-background-color);touch-action:pan-y;}' +
+                '.nm-beta2-actions{display:flex;align-items:center;gap:0;}' +
+                '.nm-beta2-zone-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 4px;}' +
+                '.nm-beta2-repeat{color:var(--success-color,#43a047);}' +
+                '.nm-beta2-remove{color:var(--error-color,#db4437);}' +
+                '.nm-beta2-drag{color:var(--secondary-text-color);touch-action:none;cursor:grab;}' +
+                '.nm-beta2-dragging{opacity:.72;box-shadow:0 2px 8px rgba(0,0,0,.22);}' +
+                '.nm-beta2-add{margin-top:8px;}' +
+                '.nm-beta2-add select{box-sizing:border-box;width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color);color:var(--primary-text-color);font:inherit;}' +
+                '.nm-beta2-add select:disabled{opacity:.45;}' +
+                '.nm-beta2-footer{position:sticky;bottom:0;flex:0 0 auto;padding:10px 16px 14px;border-top:1px solid var(--divider-color);background:var(--card-background-color);}' +
+                '.nm-beta2-save{width:100%;min-height:48px;border:0;border-radius:14px;background:var(--primary-color);color:var(--text-primary-color,#fff);font:inherit;font-weight:650;}' +
+                '.nm-beta2-save:disabled{opacity:.42;}' +
+              '</style>' +
+              '<div class="nm-schedule-dialog-head"><div><div class="nm-schedule-dialog-title">Navimower schedule</div><div class="nm-beta2-status" data-beta2-status></div></div><button class="nm-schedule-close" type="button" data-beta2-close><ha-icon icon="mdi:close"></ha-icon></button></div>' +
+              '<div class="nm-beta2-scroll" data-beta2-scroll>' +
+                '<section class="nm-beta2-section"><div class="nm-beta2-section-title">Time window</div><div data-beta2-time-list>Loading Home Assistant controls…</div></section>' +
+                '<section class="nm-beta2-section"><div class="nm-beta2-section-title">Custom order</div><div class="nm-beta2-queue" data-beta2-queue></div><div class="nm-beta2-add"><select data-beta2-add-select><option value="">Add zone…</option></select></div></section>' +
+              '</div>' +
+              '<div class="nm-beta2-footer"><button type="button" class="nm-beta2-save" data-beta2-save>Save order</button></div>' +
+            '</div>' +
+          '</div>';
+        const root = host.querySelector("[data-beta2-root]");
+        root.querySelector("[data-beta2-status]").textContent = statusState?.state || "unavailable";
+        root.querySelector("[data-beta2-close]")?.addEventListener("click", () => closeDialog(card));
+        root.querySelector("[data-beta2-add-select]")?.addEventListener("change", (event) => {
+          const id = Number(event.currentTarget.value);
+          if (!Number.isFinite(id)) return;
+          const missing = new Set(missingZones(card, snapshot(card).attrs).map((zone) => zone.id));
+          if (!missing.has(id)) return;
+          card._beta2ScheduleDraft.push(id);
+          markDirty(card);
+          renderQueue(card, root);
+        });
+        root.querySelector("[data-beta2-save]")?.addEventListener("click", () => { void saveDraft(card); });
+        renderQueue(card, root);
+        void mountTimeRows(card, root);
+        if (!editable) updateControls(card, root);
+      }
+    
+      const previousRenderDialog = proto._renderDialog;
+      proto._renderDialog = function beta2RenderDialog(...args) {
+        if (this._beta2ScheduleOpen) {
+          renderPersistentDialog(this);
+          return;
+        }
+        return previousRenderDialog?.apply(this, args);
+      };
+    
+      const previousOpenSchedule = proto._openScheduleDialog;
+      proto._openScheduleDialog = async function beta2OpenSchedule(...args) {
+        const mode = this._config?.schedule_view_mode || "auto";
+        if (mode === "native") {
+          this._beta2ScheduleOpen = false;
+          return previousOpenSchedule?.apply(this, args);
+        }
+        const ids = await schedulerIds(this);
+        const statusState = state(this, ids.status);
+        const enabledAttr = statusState?.attributes?.enabled;
+        const managedOn = typeof enabledAttr === "boolean"
+          ? enabledAttr
+          : String(state(this, ids.managedSwitch)?.state || "").toLowerCase() === "on";
+        if (ids.status && (mode === "navimower" || (mode === "auto" && managedOn))) {
+          this._beta2SchedulerIds = ids;
+          this._beta2ScheduleOpen = true;
+          this._beta5ManagedScheduleOpen = false;
+          this._beta6ManagedOpen = false;
+          this._beta8SettingsOpen = false;
+          this._beta6SettingsOpen = false;
+          this._scheduleDialogOpen = false;
+          this._mowDialogOpen = false;
+          renderPersistentDialog(this);
+          return;
+        }
+        this._beta2ScheduleOpen = false;
+        syncSchedulerCaches(this, ids);
+        return previousOpenSchedule?.apply(this, args);
+      };
+    
+      // Legacy hass wrappers only rebuild the managed scheduler when their old flag
+      // is active. beta2 uses a separate flag and keeps its DOM stable; each HA
+      // update merely refreshes native rows/status/control states.
+      const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
+      if (previousHass?.set) {
+        Object.defineProperty(proto, "hass", {
+          configurable: true,
+          get: previousHass.get,
+          set(value) {
+            previousHass.set.call(this, value);
+            if (this._beta2ScheduleOpen) updateDialogState(this);
+          },
+        });
+      }
+    
+      // Testable helpers for the draft model and metadata fast path.
+      proto._beta2ApplyFrontendEntities = function () { return applyFrontendEntities(this); };
+      proto._beta2SchedulerIdsFromPayload = function () { return schedulerIdsFromPayload(this); };
+      proto._beta2ScheduleMissingZones = function () {
+        const { attrs } = snapshot(this);
+        ensureDraft(this, attrs);
+        return missingZones(this, attrs);
+      };
+      proto._beta2ScheduleSaveDraft = function () { return saveDraft(this); };
   }
 
-  function renderPersistentDialog(card) {
-    const host = card._modalHostEl;
-    if (!host || !card._beta2ScheduleOpen) return;
-    const existing = host.querySelector?.("[data-beta2-root]");
-    if (existing) {
-      updateDialogState(card);
-      return;
-    }
-    const { statusState, attrs } = snapshot(card);
-    ensureDraft(card, attrs, true);
-    const editable = (attrs.order_mode || "automatic") === "custom";
-    host.innerHTML =
-      '<div class="nm-backdrop nm-beta2-backdrop" data-beta2-root>' +
-        '<div class="nm-dialog nm-beta2-dialog">' +
-          '<style>' +
-            '.nm-beta2-dialog{width:min(94vw,680px);max-height:min(88vh,860px);display:flex;flex-direction:column;overflow:hidden;}' +
-            '.nm-beta2-scroll{overflow-y:auto;overscroll-behavior:contain;min-height:0;padding-bottom:8px;}' +
-            '.nm-beta2-section{padding:10px 16px 2px;}' +
-            '.nm-beta2-section-title{font-weight:650;margin:0 0 6px;}' +
-            '.nm-beta2-status{color:var(--secondary-text-color);font-size:.92em;margin-top:2px;}' +
-            '.nm-beta2-native-row{padding:0;border-bottom:1px solid var(--divider-color);}' +
-            '.nm-beta2-native-row:last-child{border-bottom:0;}' +
-            '.nm-beta2-time-fallback{display:block;width:100%;padding:12px 4px;border:0;border-bottom:1px solid var(--divider-color);background:transparent;color:var(--primary-text-color);text-align:left;font:inherit;}' +
-            '.nm-beta2-queue{display:grid;gap:6px;}' +
-            '.nm-beta2-zone{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:4px;min-height:48px;padding:2px 6px;border-radius:12px;background:var(--secondary-background-color);touch-action:pan-y;}' +
-            '.nm-beta2-actions{display:flex;align-items:center;gap:0;}' +
-            '.nm-beta2-zone-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 4px;}' +
-            '.nm-beta2-repeat{color:var(--success-color,#43a047);}' +
-            '.nm-beta2-remove{color:var(--error-color,#db4437);}' +
-            '.nm-beta2-drag{color:var(--secondary-text-color);touch-action:none;cursor:grab;}' +
-            '.nm-beta2-dragging{opacity:.72;box-shadow:0 2px 8px rgba(0,0,0,.22);}' +
-            '.nm-beta2-add{margin-top:8px;}' +
-            '.nm-beta2-add select{box-sizing:border-box;width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color);color:var(--primary-text-color);font:inherit;}' +
-            '.nm-beta2-add select:disabled{opacity:.45;}' +
-            '.nm-beta2-footer{position:sticky;bottom:0;flex:0 0 auto;padding:10px 16px 14px;border-top:1px solid var(--divider-color);background:var(--card-background-color);}' +
-            '.nm-beta2-save{width:100%;min-height:48px;border:0;border-radius:14px;background:var(--primary-color);color:var(--text-primary-color,#fff);font:inherit;font-weight:650;}' +
-            '.nm-beta2-save:disabled{opacity:.42;}' +
-          '</style>' +
-          '<div class="nm-schedule-dialog-head"><div><div class="nm-schedule-dialog-title">Navimower schedule</div><div class="nm-beta2-status" data-beta2-status></div></div><button class="nm-schedule-close" type="button" data-beta2-close><ha-icon icon="mdi:close"></ha-icon></button></div>' +
-          '<div class="nm-beta2-scroll" data-beta2-scroll>' +
-            '<section class="nm-beta2-section"><div class="nm-beta2-section-title">Time window</div><div data-beta2-time-list>Loading Home Assistant controls…</div></section>' +
-            '<section class="nm-beta2-section"><div class="nm-beta2-section-title">Custom order</div><div class="nm-beta2-queue" data-beta2-queue></div><div class="nm-beta2-add"><select data-beta2-add-select><option value="">Add zone…</option></select></div></section>' +
-          '</div>' +
-          '<div class="nm-beta2-footer"><button type="button" class="nm-beta2-save" data-beta2-save>Save order</button></div>' +
-        '</div>' +
-      '</div>';
-    const root = host.querySelector("[data-beta2-root]");
-    root.querySelector("[data-beta2-status]").textContent = statusState?.state || "unavailable";
-    root.querySelector("[data-beta2-close]")?.addEventListener("click", () => closeDialog(card));
-    root.querySelector("[data-beta2-add-select]")?.addEventListener("change", (event) => {
-      const id = Number(event.currentTarget.value);
-      if (!Number.isFinite(id)) return;
-      const missing = new Set(missingZones(card, snapshot(card).attrs).map((zone) => zone.id));
-      if (!missing.has(id)) return;
-      card._beta2ScheduleDraft.push(id);
-      markDirty(card);
-      renderQueue(card, root);
-    });
-    root.querySelector("[data-beta2-save]")?.addEventListener("click", () => { void saveDraft(card); });
-    renderQueue(card, root);
-    void mountTimeRows(card, root);
-    if (!editable) updateControls(card, root);
-  }
-
-  const previousRenderDialog = proto._renderDialog;
-  proto._renderDialog = function beta2RenderDialog(...args) {
-    if (this._beta2ScheduleOpen) {
-      renderPersistentDialog(this);
-      return;
-    }
-    return previousRenderDialog?.apply(this, args);
-  };
-
-  const previousOpenSchedule = proto._openScheduleDialog;
-  proto._openScheduleDialog = async function beta2OpenSchedule(...args) {
-    const mode = this._config?.schedule_view_mode || "auto";
-    if (mode === "native") {
-      this._beta2ScheduleOpen = false;
-      return previousOpenSchedule?.apply(this, args);
-    }
-    const ids = await schedulerIds(this);
-    const statusState = state(this, ids.status);
-    const enabledAttr = statusState?.attributes?.enabled;
-    const managedOn = typeof enabledAttr === "boolean"
-      ? enabledAttr
-      : String(state(this, ids.managedSwitch)?.state || "").toLowerCase() === "on";
-    if (ids.status && (mode === "navimower" || (mode === "auto" && managedOn))) {
-      this._beta2SchedulerIds = ids;
-      this._beta2ScheduleOpen = true;
-      this._beta5ManagedScheduleOpen = false;
-      this._beta6ManagedOpen = false;
-      this._beta8SettingsOpen = false;
-      this._beta6SettingsOpen = false;
-      this._scheduleDialogOpen = false;
-      this._mowDialogOpen = false;
-      renderPersistentDialog(this);
-      return;
-    }
-    this._beta2ScheduleOpen = false;
-    syncSchedulerCaches(this, ids);
-    return previousOpenSchedule?.apply(this, args);
-  };
-
-  // Legacy hass wrappers only rebuild the managed scheduler when their old flag
-  // is active. beta2 uses a separate flag and keeps its DOM stable; each HA
-  // update merely refreshes native rows/status/control states.
-  const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (previousHass?.set) {
-    Object.defineProperty(proto, "hass", {
-      configurable: true,
-      get: previousHass.get,
-      set(value) {
-        previousHass.set.call(this, value);
-        if (this._beta2ScheduleOpen) updateDialogState(this);
-      },
-    });
-  }
-
-  // Testable helpers for the draft model and metadata fast path.
-  proto._beta2ApplyFrontendEntities = function () { return applyFrontendEntities(this); };
-  proto._beta2SchedulerIdsFromPayload = function () { return schedulerIdsFromPayload(this); };
-  proto._beta2ScheduleMissingZones = function () {
-    const { attrs } = snapshot(this);
-    ensureDraft(this, attrs);
-    return missingZones(this, attrs);
-  };
-  proto._beta2ScheduleSaveDraft = function () { return saveDraft(this); };
-
-})();
 
 
 // 0.3.5-beta3: mobile scheduler scope and interaction fixes.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const emptySchedulerIds = () => ({
-    status: null,
-    managedSwitch: null,
-    nativeSwitch: null,
-    start: null,
-    end: null,
-    deviceId: null,
-    configEntryId: null,
-    source: "none",
-  });
-  const normalizedQueue = (values) => (Array.isArray(values) ? values : [])
-    .map((value) => Number(value))
-    .filter(Number.isFinite);
-  const sameQueue = (left, right) => {
-    const a = normalizedQueue(left);
-    const b = normalizedQueue(right);
-    return a.length === b.length && a.every((value, index) => value === b[index]);
-  };
-  const state = (card, entityId) => entityId ? card?._hass?.states?.[entityId] : null;
-
-  function payloadFrontend(card) {
-    const frontend = card?._mapPayload?.frontend;
-    const entities = frontend?.entities;
-    if (!frontend || !entities || typeof entities !== "object") return null;
-    return { frontend, entities };
-  }
-
-  function scopedSchedulerIds(card) {
-    const metadata = payloadFrontend(card);
-    if (!metadata) return null;
-    const { frontend, entities } = metadata;
-    const status = entities.schedule_status || null;
-    if (!status || !state(card, status)) {
-      return {
-        ...emptySchedulerIds(),
-        nativeSwitch: entities.native_schedule || card._scheduleSwitchEntity?.() || null,
-        deviceId: frontend.device_id || null,
-        configEntryId: card?._mapPayload?.entry_id || null,
-        source: "map_payload_frontend_no_managed_schedule",
-        authoritative: true,
+  nmRuntimePatch8: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const emptySchedulerIds = () => ({
+        status: null,
+        managedSwitch: null,
+        nativeSwitch: null,
+        start: null,
+        end: null,
+        deviceId: null,
+        configEntryId: null,
+        source: "none",
+      });
+      const normalizedQueue = (values) => (Array.isArray(values) ? values : [])
+        .map((value) => Number(value))
+        .filter(Number.isFinite);
+      const sameQueue = (left, right) => {
+        const a = normalizedQueue(left);
+        const b = normalizedQueue(right);
+        return a.length === b.length && a.every((value, index) => value === b[index]);
       };
-    }
-    return {
-      status,
-      managedSwitch: entities.managed_schedule || null,
-      nativeSwitch: entities.native_schedule || card._scheduleSwitchEntity?.() || null,
-      start: entities.schedule_start || null,
-      end: entities.schedule_end || null,
-      deviceId: frontend.device_id || null,
-      configEntryId: card?._mapPayload?.entry_id || null,
-      source: "map_payload_frontend",
-      authoritative: true,
-    };
-  }
-
-  function clearManagedCaches(card, keepDeviceId = null) {
-    card._beta2SchedulerIds = null;
-    card._beta10SchedulerEntities = null;
-    card._beta10ScheduleDeviceId = keepDeviceId || null;
-    card._beta6SchedulerEntities = {};
-    card._beta5SchedulerEntities = {};
-  }
-
-  const previousDiscover = proto._discoverNavimowerSchedulerEntities;
-  if (typeof previousDiscover === "function") {
-    proto._discoverNavimowerSchedulerEntities = async function beta3ScopedDiscovery(options) {
-      const scoped = scopedSchedulerIds(this);
-      if (scoped?.authoritative) {
-        if (!scoped.status) clearManagedCaches(this, scoped.deviceId);
-        return scoped;
+      const state = (card, entityId) => entityId ? card?._hass?.states?.[entityId] : null;
+    
+      function payloadFrontend(card) {
+        const frontend = card?._mapPayload?.frontend;
+        const entities = frontend?.entities;
+        if (!frontend || !entities || typeof entities !== "object") return null;
+        return { frontend, entities };
       }
-      const result = await previousDiscover.call(this, options);
-      if (result?.source === "single_global_status") {
-        clearManagedCaches(this, null);
-        return emptySchedulerIds();
+    
+      function scopedSchedulerIds(card) {
+        const metadata = payloadFrontend(card);
+        if (!metadata) return null;
+        const { frontend, entities } = metadata;
+        const status = entities.schedule_status || null;
+        if (!status || !state(card, status)) {
+          return {
+            ...emptySchedulerIds(),
+            nativeSwitch: entities.native_schedule || card._scheduleSwitchEntity?.() || null,
+            deviceId: frontend.device_id || null,
+            configEntryId: card?._mapPayload?.entry_id || null,
+            source: "map_payload_frontend_no_managed_schedule",
+            authoritative: true,
+          };
+        }
+        return {
+          status,
+          managedSwitch: entities.managed_schedule || null,
+          nativeSwitch: entities.native_schedule || card._scheduleSwitchEntity?.() || null,
+          start: entities.schedule_start || null,
+          end: entities.schedule_end || null,
+          deviceId: frontend.device_id || null,
+          configEntryId: card?._mapPayload?.entry_id || null,
+          source: "map_payload_frontend",
+          authoritative: true,
+        };
       }
-      return result;
-    };
-  }
-
-  function statusAttributes(card) {
-    const ids = card._beta2SchedulerIds || scopedSchedulerIds(card) || card._beta10SchedulerEntities || {};
-    return state(card, ids.status)?.attributes || {};
-  }
-
-  function configuredZones(card) {
-    const attrs = statusAttributes(card);
-    const selected = [...new Set(normalizedQueue(attrs.selected_zone_ids))];
-    const names = new Map();
-    for (const row of Array.isArray(attrs.queue) ? attrs.queue : []) {
-      const id = Number(row?.id);
-      if (Number.isFinite(id) && row?.name) names.set(id, String(row.name));
-    }
-    const available = typeof card._availableMowZones === "function" ? card._availableMowZones() : [];
-    for (const row of available) {
-      const id = Number(row?.id);
-      if (Number.isFinite(id) && row?.name) names.set(id, String(row.name));
-    }
-    return selected.map((id) => ({ id, name: names.get(id) || ("Zone " + id) }));
-  }
-
-  function missingZones(card) {
-    const present = new Set(normalizedQueue(card._beta2ScheduleDraft));
-    return configuredZones(card).filter((zone) => !present.has(zone.id));
-  }
-
-  function markDirty(card) {
-    card._beta2ScheduleDirty = !sameQueue(card._beta2ScheduleDraft, card._beta2ScheduleServerQueue);
-    if (card._beta2ScheduleSaveState === "saved") card._beta2ScheduleSaveState = "idle";
-  }
-
-  function updateRowIndices(root) {
-    root?.querySelectorAll?.("[data-beta2-row]")?.forEach?.((row, index) => {
-      row.dataset.beta2Row = String(index);
-      const repeat = row.querySelector?.("[data-beta2-repeat]");
-      const remove = row.querySelector?.("[data-beta2-remove]");
-      const drag = row.querySelector?.("[data-beta2-drag]");
-      if (repeat) repeat.dataset.beta2Repeat = String(index);
-      if (remove) remove.dataset.beta2Remove = String(index);
-      if (drag) drag.dataset.beta2Drag = String(index);
-    });
-  }
-
-  function dragTargetIndex(clientY, rows, movingRow) {
-    const others = rows.filter((row) => row !== movingRow);
-    for (let index = 0; index < others.length; index += 1) {
-      const rect = others[index]?.getBoundingClientRect?.();
-      if (!rect) continue;
-      if (clientY < rect.top + rect.height / 2) return index;
-    }
-    return others.length;
-  }
-
-  function finishDrag(card, root, handle) {
-    if (card._beta3Drag?.handle !== handle) return;
-    const moved = Boolean(card._beta3Drag.moved);
-    card._beta3Drag = null;
-    root.querySelectorAll?.(".nm-beta2-dragging")?.forEach?.((item) => item.classList.remove("nm-beta2-dragging"));
-    if (moved) {
-      markDirty(card);
-      card._renderDialog?.();
-    }
-  }
-
-  function bindMobileDrag(card, root) {
-    if (!root || root.dataset.beta3DragBound === "1") return;
-    root.dataset.beta3DragBound = "1";
-
-    const handleFromEvent = (event) => {
-      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
-      return path.find((node) => node?.dataset?.beta2Drag !== undefined) || event.target?.closest?.("[data-beta2-drag]") || null;
-    };
-
-    root.addEventListener("pointerdown", (event) => {
-      const handle = handleFromEvent(event);
-      if (!handle || !root.contains(handle)) return;
-      if (event.button !== undefined && event.button !== 0) return;
-      const row = handle.closest?.("[data-beta2-row]");
-      if (!row) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      handle.setPointerCapture?.(event.pointerId);
-      row.classList.add("nm-beta2-dragging");
-      card._beta3Drag = { pointerId: event.pointerId, handle, row, moved: false };
-    }, true);
-
-    root.addEventListener("pointermove", (event) => {
-      const drag = card._beta3Drag;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const scroll = root.querySelector?.("[data-beta2-scroll]");
-      if (scroll) {
-        const rect = scroll.getBoundingClientRect?.();
-        if (rect) {
-          if (event.clientY < rect.top + 54) scroll.scrollBy?.({ top: -18, behavior: "auto" });
-          else if (event.clientY > rect.bottom - 54) scroll.scrollBy?.({ top: 18, behavior: "auto" });
+    
+      function clearManagedCaches(card, keepDeviceId = null) {
+        card._beta2SchedulerIds = null;
+        card._beta10SchedulerEntities = null;
+        card._beta10ScheduleDeviceId = keepDeviceId || null;
+        card._beta6SchedulerEntities = {};
+        card._beta5SchedulerEntities = {};
+      }
+    
+      const previousDiscover = proto._discoverNavimowerSchedulerEntities;
+      if (typeof previousDiscover === "function") {
+        proto._discoverNavimowerSchedulerEntities = async function beta3ScopedDiscovery(options) {
+          const scoped = scopedSchedulerIds(this);
+          if (scoped?.authoritative) {
+            if (!scoped.status) clearManagedCaches(this, scoped.deviceId);
+            return scoped;
+          }
+          const result = await previousDiscover.call(this, options);
+          if (result?.source === "single_global_status") {
+            clearManagedCaches(this, null);
+            return emptySchedulerIds();
+          }
+          return result;
+        };
+      }
+    
+      function statusAttributes(card) {
+        const ids = card._beta2SchedulerIds || scopedSchedulerIds(card) || card._beta10SchedulerEntities || {};
+        return state(card, ids.status)?.attributes || {};
+      }
+    
+      function configuredZones(card) {
+        const attrs = statusAttributes(card);
+        const selected = [...new Set(normalizedQueue(attrs.selected_zone_ids))];
+        const names = new Map();
+        for (const row of Array.isArray(attrs.queue) ? attrs.queue : []) {
+          const id = Number(row?.id);
+          if (Number.isFinite(id) && row?.name) names.set(id, String(row.name));
+        }
+        const available = typeof card._availableMowZones === "function" ? card._availableMowZones() : [];
+        for (const row of available) {
+          const id = Number(row?.id);
+          if (Number.isFinite(id) && row?.name) names.set(id, String(row.name));
+        }
+        return selected.map((id) => ({ id, name: names.get(id) || ("Zone " + id) }));
+      }
+    
+      function missingZones(card) {
+        const present = new Set(normalizedQueue(card._beta2ScheduleDraft));
+        return configuredZones(card).filter((zone) => !present.has(zone.id));
+      }
+    
+      function markDirty(card) {
+        card._beta2ScheduleDirty = !sameQueue(card._beta2ScheduleDraft, card._beta2ScheduleServerQueue);
+        if (card._beta2ScheduleSaveState === "saved") card._beta2ScheduleSaveState = "idle";
+      }
+    
+      function updateRowIndices(root) {
+        root?.querySelectorAll?.("[data-beta2-row]")?.forEach?.((row, index) => {
+          row.dataset.beta2Row = String(index);
+          const repeat = row.querySelector?.("[data-beta2-repeat]");
+          const remove = row.querySelector?.("[data-beta2-remove]");
+          const drag = row.querySelector?.("[data-beta2-drag]");
+          if (repeat) repeat.dataset.beta2Repeat = String(index);
+          if (remove) remove.dataset.beta2Remove = String(index);
+          if (drag) drag.dataset.beta2Drag = String(index);
+        });
+      }
+    
+      function dragTargetIndex(clientY, rows, movingRow) {
+        const others = rows.filter((row) => row !== movingRow);
+        for (let index = 0; index < others.length; index += 1) {
+          const rect = others[index]?.getBoundingClientRect?.();
+          if (!rect) continue;
+          if (clientY < rect.top + rect.height / 2) return index;
+        }
+        return others.length;
+      }
+    
+      function finishDrag(card, root, handle) {
+        if (card._beta3Drag?.handle !== handle) return;
+        const moved = Boolean(card._beta3Drag.moved);
+        card._beta3Drag = null;
+        root.querySelectorAll?.(".nm-beta2-dragging")?.forEach?.((item) => item.classList.remove("nm-beta2-dragging"));
+        if (moved) {
+          markDirty(card);
+          card._renderDialog?.();
         }
       }
-      const queue = root.querySelector?.("[data-beta2-queue]");
-      if (!queue) return;
-      const rows = [...queue.querySelectorAll("[data-beta2-row]")];
-      const currentIndex = rows.indexOf(drag.row);
-      if (currentIndex < 0) return;
-      const targetIndex = dragTargetIndex(event.clientY, rows, drag.row);
-      if (targetIndex === currentIndex) return;
-      const draft = card._beta2ScheduleDraft;
-      if (!Array.isArray(draft) || currentIndex >= draft.length) return;
-      const [item] = draft.splice(currentIndex, 1);
-      draft.splice(targetIndex, 0, item);
-      const others = rows.filter((row) => row !== drag.row);
-      if (targetIndex >= others.length) queue.append(drag.row);
-      else queue.insertBefore(drag.row, others[targetIndex]);
-      updateRowIndices(root);
-      drag.moved = true;
-    }, true);
-
-    const end = (event) => {
-      const drag = card._beta3Drag;
-      if (!drag || (event.pointerId !== undefined && drag.pointerId !== event.pointerId)) return;
-      event.preventDefault?.();
-      event.stopImmediatePropagation?.();
-      finishDrag(card, root, drag.handle);
-    };
-    root.addEventListener("pointerup", end, true);
-    root.addEventListener("pointercancel", end, true);
-    root.addEventListener("lostpointercapture", end, true);
-  }
-
-  function addBeta3Styles(root) {
-    if (!root || root.querySelector?.("style[data-beta3-style]")) return;
-    const style = document.createElement("style");
-    style.dataset.beta3Style = "1";
-    style.textContent =
-      '.nm-beta3-add-wrap{position:relative;margin-top:8px;}' +
-      '.nm-beta3-add-toggle{box-sizing:border-box;width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color);color:var(--primary-text-color);font:inherit;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:8px;}' +
-      '.nm-beta3-add-toggle:disabled{opacity:.45;}' +
-      '.nm-beta3-add-menu{display:none;margin-top:6px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color);overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.16);}' +
-      '.nm-beta3-add-menu[data-open="1"]{display:block;}' +
-      '.nm-beta3-add-option{display:block;width:100%;min-height:44px;padding:9px 12px;border:0;border-bottom:1px solid var(--divider-color);background:transparent;color:var(--primary-text-color);font:inherit;text-align:left;}' +
-      '.nm-beta3-add-option:last-child{border-bottom:0;}' +
-      '.nm-beta3-add-option:active{background:var(--secondary-background-color);}' +
-      '.nm-beta2-drag{touch-action:none!important;user-select:none;-webkit-user-select:none;}' +
-      '.nm-beta2-zone{min-height:46px;}';
-    root.append(style);
-  }
-
-  function syncAddZone(card, root) {
-    const add = root?.querySelector?.(".nm-beta2-add");
-    const select = root?.querySelector?.("[data-beta2-add-select]");
-    if (!add || !select) return;
-    addBeta3Styles(root);
-    select.style.display = "none";
-    let wrap = add.querySelector?.("[data-beta3-add-wrap]");
-    if (!wrap) {
-      wrap = document.createElement("div");
-      wrap.className = "nm-beta3-add-wrap";
-      wrap.dataset.beta3AddWrap = "1";
-      wrap.innerHTML = '<button type="button" class="nm-beta3-add-toggle" data-beta3-add-toggle><span>Add zone…</span><ha-icon icon="mdi:chevron-down"></ha-icon></button><div class="nm-beta3-add-menu" data-beta3-add-menu></div>';
-      add.append(wrap);
-      wrap.querySelector("[data-beta3-add-toggle]")?.addEventListener("click", (event) => {
-        event.preventDefault();
-        const menu = wrap.querySelector("[data-beta3-add-menu]");
-        if (!menu) return;
-        menu.dataset.open = menu.dataset.open === "1" ? "0" : "1";
-      });
-      wrap.querySelector("[data-beta3-add-menu]")?.addEventListener("click", (event) => {
-        const option = event.target?.closest?.("[data-beta3-zone-id]");
-        if (!option) return;
-        event.preventDefault();
-        const id = Number(option.dataset.beta3ZoneId);
-        if (!Number.isFinite(id) || !missingZones(card).some((zone) => zone.id === id)) return;
-        select.value = String(id);
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-        const menu = wrap.querySelector("[data-beta3-add-menu]");
-        if (menu) menu.dataset.open = "0";
-        queueMicrotask(() => syncAddZone(card, root));
-      });
-    }
-    const missing = missingZones(card);
-    const toggle = wrap.querySelector?.("[data-beta3-add-toggle]");
-    const menu = wrap.querySelector?.("[data-beta3-add-menu]");
-    const editable = (statusAttributes(card).order_mode || "automatic") === "custom";
-    if (toggle) toggle.disabled = !editable || missing.length === 0;
-    if (menu) {
-      const wasOpen = menu.dataset.open === "1";
-      menu.textContent = "";
-      for (const zone of missing) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "nm-beta3-add-option";
-        button.dataset.beta3ZoneId = String(zone.id);
-        button.textContent = zone.name;
-        menu.append(button);
+    
+      function bindMobileDrag(card, root) {
+        if (!root || root.dataset.beta3DragBound === "1") return;
+        root.dataset.beta3DragBound = "1";
+    
+        const handleFromEvent = (event) => {
+          const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+          return path.find((node) => node?.dataset?.beta2Drag !== undefined) || event.target?.closest?.("[data-beta2-drag]") || null;
+        };
+    
+        root.addEventListener("pointerdown", (event) => {
+          const handle = handleFromEvent(event);
+          if (!handle || !root.contains(handle)) return;
+          if (event.button !== undefined && event.button !== 0) return;
+          const row = handle.closest?.("[data-beta2-row]");
+          if (!row) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          handle.setPointerCapture?.(event.pointerId);
+          row.classList.add("nm-beta2-dragging");
+          card._beta3Drag = { pointerId: event.pointerId, handle, row, moved: false };
+        }, true);
+    
+        root.addEventListener("pointermove", (event) => {
+          const drag = card._beta3Drag;
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const scroll = root.querySelector?.("[data-beta2-scroll]");
+          if (scroll) {
+            const rect = scroll.getBoundingClientRect?.();
+            if (rect) {
+              if (event.clientY < rect.top + 54) scroll.scrollBy?.({ top: -18, behavior: "auto" });
+              else if (event.clientY > rect.bottom - 54) scroll.scrollBy?.({ top: 18, behavior: "auto" });
+            }
+          }
+          const queue = root.querySelector?.("[data-beta2-queue]");
+          if (!queue) return;
+          const rows = [...queue.querySelectorAll("[data-beta2-row]")];
+          const currentIndex = rows.indexOf(drag.row);
+          if (currentIndex < 0) return;
+          const targetIndex = dragTargetIndex(event.clientY, rows, drag.row);
+          if (targetIndex === currentIndex) return;
+          const draft = card._beta2ScheduleDraft;
+          if (!Array.isArray(draft) || currentIndex >= draft.length) return;
+          const [item] = draft.splice(currentIndex, 1);
+          draft.splice(targetIndex, 0, item);
+          const others = rows.filter((row) => row !== drag.row);
+          if (targetIndex >= others.length) queue.append(drag.row);
+          else queue.insertBefore(drag.row, others[targetIndex]);
+          updateRowIndices(root);
+          drag.moved = true;
+        }, true);
+    
+        const end = (event) => {
+          const drag = card._beta3Drag;
+          if (!drag || (event.pointerId !== undefined && drag.pointerId !== event.pointerId)) return;
+          event.preventDefault?.();
+          event.stopImmediatePropagation?.();
+          finishDrag(card, root, drag.handle);
+        };
+        root.addEventListener("pointerup", end, true);
+        root.addEventListener("pointercancel", end, true);
+        root.addEventListener("lostpointercapture", end, true);
       }
-      menu.dataset.open = wasOpen && missing.length ? "1" : "0";
-    }
-  }
-
-  function installBeta3Ui(card) {
-    if (!card?._beta2ScheduleOpen) return;
-    const root = card._modalHostEl?.querySelector?.("[data-beta2-root]");
-    if (!root) return;
-    bindMobileDrag(card, root);
-    syncAddZone(card, root);
-    if (root.dataset.beta3SyncBound !== "1") {
-      root.dataset.beta3SyncBound = "1";
-      root.addEventListener("click", () => queueMicrotask(() => syncAddZone(card, root)));
-    }
-  }
-
-  const previousRenderDialog = proto._renderDialog;
-  proto._renderDialog = function beta3RenderDialog(...args) {
-    const result = previousRenderDialog?.apply(this, args);
-    if (this._beta2ScheduleOpen) installBeta3Ui(this);
-    return result;
-  };
-
-  const previousOpenSchedule = proto._openScheduleDialog;
-  proto._openScheduleDialog = async function beta3OpenSchedule(...args) {
-    const scoped = scopedSchedulerIds(this);
-    if (scoped?.authoritative && !scoped.status) {
-      clearManagedCaches(this, scoped.deviceId);
-      this._beta2ScheduleOpen = false;
-      const original = this._config;
-      if ((original?.schedule_view_mode || "auto") !== "native") {
-        this._config = { ...(original || {}), schedule_view_mode: "native" };
-        try {
-          return await previousOpenSchedule?.apply(this, args);
-        } finally {
-          this._config = original;
+    
+      function addBeta3Styles(root) {
+        if (!root || root.querySelector?.("style[data-beta3-style]")) return;
+        const style = document.createElement("style");
+        style.dataset.beta3Style = "1";
+        style.textContent =
+          '.nm-beta3-add-wrap{position:relative;margin-top:8px;}' +
+          '.nm-beta3-add-toggle{box-sizing:border-box;width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color);color:var(--primary-text-color);font:inherit;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:8px;}' +
+          '.nm-beta3-add-toggle:disabled{opacity:.45;}' +
+          '.nm-beta3-add-menu{display:none;margin-top:6px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color);overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.16);}' +
+          '.nm-beta3-add-menu[data-open="1"]{display:block;}' +
+          '.nm-beta3-add-option{display:block;width:100%;min-height:44px;padding:9px 12px;border:0;border-bottom:1px solid var(--divider-color);background:transparent;color:var(--primary-text-color);font:inherit;text-align:left;}' +
+          '.nm-beta3-add-option:last-child{border-bottom:0;}' +
+          '.nm-beta3-add-option:active{background:var(--secondary-background-color);}' +
+          '.nm-beta2-drag{touch-action:none!important;user-select:none;-webkit-user-select:none;}' +
+          '.nm-beta2-zone{min-height:46px;}';
+        root.append(style);
+      }
+    
+      function syncAddZone(card, root) {
+        const add = root?.querySelector?.(".nm-beta2-add");
+        const select = root?.querySelector?.("[data-beta2-add-select]");
+        if (!add || !select) return;
+        addBeta3Styles(root);
+        select.style.display = "none";
+        let wrap = add.querySelector?.("[data-beta3-add-wrap]");
+        if (!wrap) {
+          wrap = document.createElement("div");
+          wrap.className = "nm-beta3-add-wrap";
+          wrap.dataset.beta3AddWrap = "1";
+          wrap.innerHTML = '<button type="button" class="nm-beta3-add-toggle" data-beta3-add-toggle><span>Add zone…</span><ha-icon icon="mdi:chevron-down"></ha-icon></button><div class="nm-beta3-add-menu" data-beta3-add-menu></div>';
+          add.append(wrap);
+          wrap.querySelector("[data-beta3-add-toggle]")?.addEventListener("click", (event) => {
+            event.preventDefault();
+            const menu = wrap.querySelector("[data-beta3-add-menu]");
+            if (!menu) return;
+            menu.dataset.open = menu.dataset.open === "1" ? "0" : "1";
+          });
+          wrap.querySelector("[data-beta3-add-menu]")?.addEventListener("click", (event) => {
+            const option = event.target?.closest?.("[data-beta3-zone-id]");
+            if (!option) return;
+            event.preventDefault();
+            const id = Number(option.dataset.beta3ZoneId);
+            if (!Number.isFinite(id) || !missingZones(card).some((zone) => zone.id === id)) return;
+            select.value = String(id);
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+            const menu = wrap.querySelector("[data-beta3-add-menu]");
+            if (menu) menu.dataset.open = "0";
+            queueMicrotask(() => syncAddZone(card, root));
+          });
+        }
+        const missing = missingZones(card);
+        const toggle = wrap.querySelector?.("[data-beta3-add-toggle]");
+        const menu = wrap.querySelector?.("[data-beta3-add-menu]");
+        const editable = (statusAttributes(card).order_mode || "automatic") === "custom";
+        if (toggle) toggle.disabled = !editable || missing.length === 0;
+        if (menu) {
+          const wasOpen = menu.dataset.open === "1";
+          menu.textContent = "";
+          for (const zone of missing) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "nm-beta3-add-option";
+            button.dataset.beta3ZoneId = String(zone.id);
+            button.textContent = zone.name;
+            menu.append(button);
+          }
+          menu.dataset.open = wasOpen && missing.length ? "1" : "0";
         }
       }
-    }
-    const result = await previousOpenSchedule?.apply(this, args);
-    if (this._beta2ScheduleOpen) installBeta3Ui(this);
-    return result;
-  };
-
-  const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (previousHass?.set) {
-    Object.defineProperty(proto, "hass", {
-      configurable: true,
-      get: previousHass.get,
-      set(value) {
-        previousHass.set.call(this, value);
-        if (this._beta2ScheduleOpen) queueMicrotask(() => installBeta3Ui(this));
-      },
-    });
+    
+      function installBeta3Ui(card) {
+        if (!card?._beta2ScheduleOpen) return;
+        const root = card._modalHostEl?.querySelector?.("[data-beta2-root]");
+        if (!root) return;
+        bindMobileDrag(card, root);
+        syncAddZone(card, root);
+        if (root.dataset.beta3SyncBound !== "1") {
+          root.dataset.beta3SyncBound = "1";
+          root.addEventListener("click", () => queueMicrotask(() => syncAddZone(card, root)));
+        }
+      }
+    
+      const previousRenderDialog = proto._renderDialog;
+      proto._renderDialog = function beta3RenderDialog(...args) {
+        const result = previousRenderDialog?.apply(this, args);
+        if (this._beta2ScheduleOpen) installBeta3Ui(this);
+        return result;
+      };
+    
+      const previousOpenSchedule = proto._openScheduleDialog;
+      proto._openScheduleDialog = async function beta3OpenSchedule(...args) {
+        const scoped = scopedSchedulerIds(this);
+        if (scoped?.authoritative && !scoped.status) {
+          clearManagedCaches(this, scoped.deviceId);
+          this._beta2ScheduleOpen = false;
+          const original = this._config;
+          if ((original?.schedule_view_mode || "auto") !== "native") {
+            this._config = { ...(original || {}), schedule_view_mode: "native" };
+            try {
+              return await previousOpenSchedule?.apply(this, args);
+            } finally {
+              this._config = original;
+            }
+          }
+        }
+        const result = await previousOpenSchedule?.apply(this, args);
+        if (this._beta2ScheduleOpen) installBeta3Ui(this);
+        return result;
+      };
+    
+      const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
+      if (previousHass?.set) {
+        Object.defineProperty(proto, "hass", {
+          configurable: true,
+          get: previousHass.get,
+          set(value) {
+            previousHass.set.call(this, value);
+            if (this._beta2ScheduleOpen) queueMicrotask(() => installBeta3Ui(this));
+          },
+        });
+      }
+    
+      proto._beta3ScopedSchedulerIds = function () { return scopedSchedulerIds(this); };
+      proto._beta3DragTargetIndex = function (clientY, rects, movingIndex = -1) {
+        const rows = (Array.isArray(rects) ? rects : []).map((rect, index) => ({
+          index,
+          getBoundingClientRect: () => rect,
+        }));
+        return dragTargetIndex(clientY, rows, rows[movingIndex]);
+      };
   }
 
-  proto._beta3ScopedSchedulerIds = function () { return scopedSchedulerIds(this); };
-  proto._beta3DragTargetIndex = function (clientY, rects, movingIndex = -1) {
-    const rows = (Array.isArray(rects) ? rects : []).map((rect, index) => ({
-      index,
-      getBoundingClientRect: () => rect,
-    }));
-    return dragTargetIndex(clientY, rows, rows[movingIndex]);
-  };
-
-})();
 
 
 // 0.3.5-beta4: flattened hot-path and phased visual render pipeline.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-
-  const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
-
-  const stateStamp = (hass, entityId) => {
-    if (!entityId) return "";
-    const state = hass?.states?.[entityId];
-    if (!state) return entityId + ":missing";
-    return [entityId, state.state, state.last_updated || "", state.last_changed || ""].join(":");
-  };
-
-  const relevantEntityIds = (card) => {
-    const resolved = card?._resolved || {};
-    const ids = [
-      resolved.mower_entity,
-      resolved.status_entity,
-      resolved.map_entity,
-      resolved.x_entity,
-      resolved.y_entity,
-      resolved.heading_entity,
-      resolved.battery_entity,
-      resolved.zone_entity,
-      resolved.schedule_entity,
-      resolved.schedule_switch_entity,
-      resolved.notification_entity,
-    ];
-    return [...new Set(ids.filter(Boolean))];
-  };
-
-  const customAreaIds = (card) => Array.isArray(card?._customAreaEntities0342)
-    ? card._customAreaEntities0342.filter(Boolean)
-    : [];
-
-  const modalOpen = (card) => Boolean(
-    card?._mowDialogOpen ||
-    card?._scheduleDialogOpen ||
-    card?._notificationDialogOpen ||
-    card?._beta5ManagedScheduleOpen ||
-    card?._beta5SettingsOpen ||
-    card?._beta6ManagedOpen ||
-    card?._beta8SettingsOpen ||
-    card?._beta2ScheduleOpen
-  );
-
-  const relevantFingerprint = (card, hass) => {
-    const stamps = relevantEntityIds(card).map((id) => stateStamp(hass, id));
-    stamps.push(
-      "resume:" + Boolean(hass?.services?.navimower?.resume),
-      "queue:" + Boolean(hass?.services?.navimower?.set_schedule_queue)
-    );
-    return stamps.join("|");
-  };
-
-  const notificationFingerprint = (card, hass) => {
-    const id = card?._resolved?.notification_entity || null;
-    return stateStamp(hass, id);
-  };
-
-  const customAreaFingerprint = (card, hass) => customAreaIds(card)
-    .map((id) => stateStamp(hass, id))
-    .join("|");
-
-  // The normal dashboard hot path no longer traverses every historical feature
-  // wrapper on each Home Assistant state update. Dialogs deliberately retain
-  // the compatibility chain while open because their native HA rows need the
-  // full hass propagation. Closed Settings/Schedule/Notifications are lazy.
-  if (previousHass?.set) {
-    Object.defineProperty(proto, "hass", {
-      configurable: true,
-      get() {
-        return this._hass;
-      },
-      set(value) {
-        if (modalOpen(this)) {
-          previousHass.set.call(this, value);
-          this._perf035RelevantFingerprint = relevantFingerprint(this, value);
-          this._perf035NotificationFingerprint = notificationFingerprint(this, value);
-          this._perf035CustomAreaFingerprint = customAreaFingerprint(this, value);
-          return;
-        }
-
-        this._hass = value;
-        if (!this._config) return;
-        if (!this._domReady) this._ensureDom();
-
-        this._resolveEntities();
-        const nextNotification = notificationFingerprint(this, value);
-        const nextCustomAreas = customAreaFingerprint(this, value);
-        const compatibilityUpdate = (
-          (nextNotification && nextNotification !== (this._perf035NotificationFingerprint || "")) ||
-          (nextCustomAreas && nextCustomAreas !== (this._perf035CustomAreaFingerprint || ""))
+  nmRuntimePatch9: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+    
+      const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
+    
+      const stateStamp = (hass, entityId) => {
+        if (!entityId) return "";
+        const state = hass?.states?.[entityId];
+        if (!state) return entityId + ":missing";
+        return [entityId, state.state, state.last_updated || "", state.last_changed || ""].join(":");
+      };
+    
+      const relevantEntityIds = (card) => {
+        const resolved = card?._resolved || {};
+        const ids = [
+          resolved.mower_entity,
+          resolved.status_entity,
+          resolved.map_entity,
+          resolved.x_entity,
+          resolved.y_entity,
+          resolved.heading_entity,
+          resolved.battery_entity,
+          resolved.zone_entity,
+          resolved.schedule_entity,
+          resolved.schedule_switch_entity,
+          resolved.notification_entity,
+        ];
+        return [...new Set(ids.filter(Boolean))];
+      };
+    
+      const customAreaIds = (card) => Array.isArray(card?._customAreaEntities0342)
+        ? card._customAreaEntities0342.filter(Boolean)
+        : [];
+    
+      const modalOpen = (card) => Boolean(
+        card?._mowDialogOpen ||
+        card?._scheduleDialogOpen ||
+        card?._notificationDialogOpen ||
+        card?._beta5ManagedScheduleOpen ||
+        card?._beta5SettingsOpen ||
+        card?._beta6ManagedOpen ||
+        card?._beta8SettingsOpen ||
+        card?._beta2ScheduleOpen
+      );
+    
+      const relevantFingerprint = (card, hass) => {
+        const stamps = relevantEntityIds(card).map((id) => stateStamp(hass, id));
+        stamps.push(
+          "resume:" + Boolean(hass?.services?.navimower?.resume),
+          "queue:" + Boolean(hass?.services?.navimower?.set_schedule_queue)
         );
-
-        // Notification-bell and legacy Custom Area fallbacks update rarely. Let
-        // their existing compatibility code run only when those exact entities
-        // changed, never for every unrelated HA event.
-        if (compatibilityUpdate) {
-          previousHass.set.call(this, value);
-          this._perf035RelevantFingerprint = relevantFingerprint(this, value);
-          this._perf035NotificationFingerprint = nextNotification;
-          this._perf035CustomAreaFingerprint = nextCustomAreas;
-          return;
+        return stamps.join("|");
+      };
+    
+      const notificationFingerprint = (card, hass) => {
+        const id = card?._resolved?.notification_entity || null;
+        return stateStamp(hass, id);
+      };
+    
+      const customAreaFingerprint = (card, hass) => customAreaIds(card)
+        .map((id) => stateStamp(hass, id))
+        .join("|");
+    
+      // The normal dashboard hot path no longer traverses every historical feature
+      // wrapper on each Home Assistant state update. Dialogs deliberately retain
+      // the compatibility chain while open because their native HA rows need the
+      // full hass propagation. Closed Settings/Schedule/Notifications are lazy.
+      if (previousHass?.set) {
+        Object.defineProperty(proto, "hass", {
+          configurable: true,
+          get() {
+            return this._hass;
+          },
+          set(value) {
+            if (modalOpen(this)) {
+              previousHass.set.call(this, value);
+              this._perf035RelevantFingerprint = relevantFingerprint(this, value);
+              this._perf035NotificationFingerprint = notificationFingerprint(this, value);
+              this._perf035CustomAreaFingerprint = customAreaFingerprint(this, value);
+              return;
+            }
+    
+            this._hass = value;
+            if (!this._config) return;
+            if (!this._domReady) this._ensureDom();
+    
+            this._resolveEntities();
+            const nextNotification = notificationFingerprint(this, value);
+            const nextCustomAreas = customAreaFingerprint(this, value);
+            const compatibilityUpdate = (
+              (nextNotification && nextNotification !== (this._perf035NotificationFingerprint || "")) ||
+              (nextCustomAreas && nextCustomAreas !== (this._perf035CustomAreaFingerprint || ""))
+            );
+    
+            // Notification-bell and legacy Custom Area fallbacks update rarely. Let
+            // their existing compatibility code run only when those exact entities
+            // changed, never for every unrelated HA event.
+            if (compatibilityUpdate) {
+              previousHass.set.call(this, value);
+              this._perf035RelevantFingerprint = relevantFingerprint(this, value);
+              this._perf035NotificationFingerprint = nextNotification;
+              this._perf035CustomAreaFingerprint = nextCustomAreas;
+              return;
+            }
+    
+            const next = relevantFingerprint(this, value);
+            const first = this._perf035RelevantFingerprint === undefined;
+            if (!first && next === this._perf035RelevantFingerprint) return;
+            this._perf035RelevantFingerprint = next;
+            this._perf035NotificationFingerprint = nextNotification;
+            this._perf035CustomAreaFingerprint = nextCustomAreas;
+    
+            this._maybeLoadMap();
+            this._updateLive(first);
+          },
+        });
+      }
+    
+      const renderPhase = (card, keys) => {
+        for (const key of keys) {
+          if (!card._pendingRender?.[key]) continue;
+          delete card._pendingRender[key];
+          if (key === "shell") card._renderShell();
+          else if (key === "history") card._renderHistory();
+          else if (key === "trail") card._renderTrail();
+          else if (key === "mower") card._renderMower();
+          else if (key === "footer") card._renderFooter();
+          else if (key === "controls") card._renderControls();
+          else if (key === "sessions") card._renderSessions();
+          else if (key === "message") card._renderMessage();
+          else if (key === "dialog") {
+            if (card._scheduleDialogOpen) card._syncScheduleDraft();
+            card._renderDialog();
+          }
         }
-
-        const next = relevantFingerprint(this, value);
-        const first = this._perf035RelevantFingerprint === undefined;
-        if (!first && next === this._perf035RelevantFingerprint) return;
-        this._perf035RelevantFingerprint = next;
-        this._perf035NotificationFingerprint = nextNotification;
-        this._perf035CustomAreaFingerprint = nextCustomAreas;
-
-        this._maybeLoadMap();
-        this._updateLive(first);
-      },
-    });
+      };
+    
+      const PHASES = Object.freeze([
+        ["dialog"],
+        // Static map geometry is already applied synchronously by _applyMapPayload.
+        // The first scheduled paint therefore adds only visible map overlays.
+        ["shell", "message", "history", "trail"],
+        ["mower"],
+        ["footer", "controls"],
+        // Session/history chips are useful but visually non-critical and come last.
+        ["sessions"],
+      ]);
+    
+      const nextPendingPhase = (card) => PHASES.find((phase) =>
+        phase.some((key) => Boolean(card._pendingRender?.[key]))
+      );
+    
+      const scheduleFrame = (card) => {
+        if (card._renderHandle !== null) return;
+        const schedule = globalThis.requestAnimationFrame || ((callback) => globalThis.setTimeout(callback, 0));
+        card._renderHandle = schedule(() => {
+          card._renderHandle = null;
+          const phase = nextPendingPhase(card);
+          if (!phase) return;
+          renderPhase(card, phase);
+          if (nextPendingPhase(card)) scheduleFrame(card);
+        });
+      };
+    
+      proto._queueRender = function phasedQueueRender(flags = {}) {
+        if (!this._pendingRender || typeof this._pendingRender !== "object") this._pendingRender = {};
+        for (const [key, value] of Object.entries(flags)) {
+          if (value) this._pendingRender[key] = true;
+        }
+        scheduleFrame(this);
+      };
+    
+      // Exposed only for deterministic regression tests and diagnostics.
+      proto._performanceRenderPhases035 = () => PHASES.map((phase) => [...phase]);
   }
 
-  const renderPhase = (card, keys) => {
-    for (const key of keys) {
-      if (!card._pendingRender?.[key]) continue;
-      delete card._pendingRender[key];
-      if (key === "shell") card._renderShell();
-      else if (key === "history") card._renderHistory();
-      else if (key === "trail") card._renderTrail();
-      else if (key === "mower") card._renderMower();
-      else if (key === "footer") card._renderFooter();
-      else if (key === "controls") card._renderControls();
-      else if (key === "sessions") card._renderSessions();
-      else if (key === "message") card._renderMessage();
-      else if (key === "dialog") {
-        if (card._scheduleDialogOpen) card._syncScheduleDraft();
-        card._renderDialog();
-      }
-    }
-  };
-
-  const PHASES = Object.freeze([
-    ["dialog"],
-    // Static map geometry is already applied synchronously by _applyMapPayload.
-    // The first scheduled paint therefore adds only visible map overlays.
-    ["shell", "message", "history", "trail"],
-    ["mower"],
-    ["footer", "controls"],
-    // Session/history chips are useful but visually non-critical and come last.
-    ["sessions"],
-  ]);
-
-  const nextPendingPhase = (card) => PHASES.find((phase) =>
-    phase.some((key) => Boolean(card._pendingRender?.[key]))
-  );
-
-  const scheduleFrame = (card) => {
-    if (card._renderHandle !== null) return;
-    const schedule = globalThis.requestAnimationFrame || ((callback) => globalThis.setTimeout(callback, 0));
-    card._renderHandle = schedule(() => {
-      card._renderHandle = null;
-      const phase = nextPendingPhase(card);
-      if (!phase) return;
-      renderPhase(card, phase);
-      if (nextPendingPhase(card)) scheduleFrame(card);
-    });
-  };
-
-  proto._queueRender = function phasedQueueRender(flags = {}) {
-    if (!this._pendingRender || typeof this._pendingRender !== "object") this._pendingRender = {};
-    for (const [key, value] of Object.entries(flags)) {
-      if (value) this._pendingRender[key] = true;
-    }
-    scheduleFrame(this);
-  };
-
-  // Exposed only for deterministic regression tests and diagnostics.
-  proto._performanceRenderPhases035 = () => PHASES.map((phase) => [...phase]);
-
-})();
 
 
 // 0.3.5-beta5: resilient mower artwork visibility.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const previousRenderMower = proto._renderMower;
+  nmRuntimePatch10: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const previousRenderMower = proto._renderMower;
+    
+      const mowerEntityState = (card) => {
+        const entityId = card?._resolved?.mower_entity ||
+          card?._resolved?.status_entity ||
+          card?._config?.entity ||
+          card?._config?.mower_entity ||
+          null;
+        return entityId ? card?._hass?.states?.[entityId] || null : null;
+      };
+    
+      const liveModel = (card) => {
+        const state = mowerEntityState(card);
+        return String(
+          state?.attributes?.model ||
+          state?.attributes?.device_model ||
+          card?._mapPayload?.frontend?.model ||
+          ""
+        ).trim();
+      };
+    
+      const syncMowerArtworkModel = (card) => {
+        const configured = String(card?._config?.mower_icon || "auto").trim().toLowerCase();
+        if (configured !== "auto") return;
+    
+        const model = liveModel(card);
+        if (model) {
+          if (card._mowerModel032 !== model || card._mowerModelResolved032 !== true) {
+            card._mowerModel032 = model;
+            card._mowerModelResolved032 = true;
+            card._mowerArtworkKey032 = null;
+            card._mowerRenderKey = null;
+          }
+          return;
+        }
+    
+        // beta4 no longer traverses the expensive device-registry compatibility
+        // chain on every closed-card update. Until a model is available, mark the
+        // lookup as resolved so the existing artwork selector uses its safe H2
+        // fallback instead of returning null and hiding the mower group.
+        if (card._mowerModelResolved032 !== true) {
+          card._mowerModelResolved032 = true;
+          card._mowerArtworkKey032 = null;
+          card._mowerRenderKey = null;
+        }
+      };
+    
+      proto._renderMower = function beta5RenderMower(...args) {
+        syncMowerArtworkModel(this);
+        return previousRenderMower?.apply(this, args);
+      };
+    
+      // Keep this helper testable without reopening the old browser registry scan.
+      proto._syncMowerArtworkModel035 = function () {
+        syncMowerArtworkModel(this);
+        return {
+          model: this._mowerModel032 || "",
+          resolved: this._mowerModelResolved032 === true,
+        };
+      };
+  }
 
-  const mowerEntityState = (card) => {
-    const entityId = card?._resolved?.mower_entity ||
-      card?._resolved?.status_entity ||
-      card?._config?.entity ||
-      card?._config?.mower_entity ||
-      null;
-    return entityId ? card?._hass?.states?.[entityId] || null : null;
-  };
-
-  const liveModel = (card) => {
-    const state = mowerEntityState(card);
-    return String(
-      state?.attributes?.model ||
-      state?.attributes?.device_model ||
-      card?._mapPayload?.frontend?.model ||
-      ""
-    ).trim();
-  };
-
-  const syncMowerArtworkModel = (card) => {
-    const configured = String(card?._config?.mower_icon || "auto").trim().toLowerCase();
-    if (configured !== "auto") return;
-
-    const model = liveModel(card);
-    if (model) {
-      if (card._mowerModel032 !== model || card._mowerModelResolved032 !== true) {
-        card._mowerModel032 = model;
-        card._mowerModelResolved032 = true;
-        card._mowerArtworkKey032 = null;
-        card._mowerRenderKey = null;
-      }
-      return;
-    }
-
-    // beta4 no longer traverses the expensive device-registry compatibility
-    // chain on every closed-card update. Until a model is available, mark the
-    // lookup as resolved so the existing artwork selector uses its safe H2
-    // fallback instead of returning null and hiding the mower group.
-    if (card._mowerModelResolved032 !== true) {
-      card._mowerModelResolved032 = true;
-      card._mowerArtworkKey032 = null;
-      card._mowerRenderKey = null;
-    }
-  };
-
-  proto._renderMower = function beta5RenderMower(...args) {
-    syncMowerArtworkModel(this);
-    return previousRenderMower?.apply(this, args);
-  };
-
-  // Keep this helper testable without reopening the old browser registry scan.
-  proto._syncMowerArtworkModel035 = function () {
-    syncMowerArtworkModel(this);
-    return {
-      model: this._mowerModel032 || "",
-      resolved: this._mowerModelResolved032 === true,
-    };
-  };
-
-})();
 
 
 // 0.3.5-beta6: polished visual editor appearance layout.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm !== "function") return;
-
-  const CUSTOM_FIELDS = [
-    "show_custom_areas",
-    "custom_area_fill_opacity",
-    "custom_area_stroke_width",
-    "custom_area_color",
-  ];
-  const COLOR_FIELDS = [
-    "map_background_color",
-    "zone_fill_color",
-    "zone_stroke_color",
-    "trail_color",
-    "off_limit_color",
-    "vf_off_color",
-    "channel_color",
-    "gate_area_color",
-    "dock_color",
-  ];
-
-  const LABELS = {
-    show_custom_areas: "Show custom areas",
-    custom_area_fill_opacity: "Fill opacity",
-    custom_area_stroke_width: "Border width",
-    custom_area_color: "Color",
-    map_background_color: "Background",
-    zone_fill_color: "Zone fill",
-    zone_stroke_color: "Zone border",
-    trail_color: "Mowed area",
-    off_limit_color: "Off-limit",
-    vf_off_color: "VF-off",
-    channel_color: "Channel",
-    gate_area_color: "Gate area",
-    dock_color: "Dock",
-  };
-
-  function walk(items, callback) {
-    for (const item of Array.isArray(items) ? items : []) {
-      callback(item);
-      if (Array.isArray(item?.schema)) walk(item.schema, callback);
-    }
+  nmRuntimePatch11: {
+    const Card = __navimowerRuntimeCard;
+    const previousGetConfigForm = Card.getConfigForm;
+      if (typeof previousGetConfigForm !== "function") break nmRuntimePatch11;
+    
+      const CUSTOM_FIELDS = [
+        "show_custom_areas",
+        "custom_area_fill_opacity",
+        "custom_area_stroke_width",
+        "custom_area_color",
+      ];
+      const COLOR_FIELDS = [
+        "map_background_color",
+        "zone_fill_color",
+        "zone_stroke_color",
+        "trail_color",
+        "off_limit_color",
+        "vf_off_color",
+        "channel_color",
+        "gate_area_color",
+        "dock_color",
+      ];
+    
+      const LABELS = {
+        show_custom_areas: "Show custom areas",
+        custom_area_fill_opacity: "Fill opacity",
+        custom_area_stroke_width: "Border width",
+        custom_area_color: "Color",
+        map_background_color: "Background",
+        zone_fill_color: "Zone fill",
+        zone_stroke_color: "Zone border",
+        trail_color: "Mowed area",
+        off_limit_color: "Off-limit",
+        vf_off_color: "VF-off",
+        channel_color: "Channel",
+        gate_area_color: "Gate area",
+        dock_color: "Dock",
+      };
+    
+      function walk(items, callback) {
+        for (const item of Array.isArray(items) ? items : []) {
+          callback(item);
+          if (Array.isArray(item?.schema)) walk(item.schema, callback);
+        }
+      }
+    
+      function find(items, name) {
+        let match = null;
+        walk(items, (item) => {
+          if (!match && item?.name === name) match = item;
+        });
+        return match;
+      }
+    
+      function collect(items, names) {
+        const wanted = new Set(names);
+        const found = new Map();
+        walk(items, (item) => {
+          if (wanted.has(item?.name) && !found.has(item.name)) found.set(item.name, item);
+        });
+        return found;
+      }
+    
+      function remove(items, names) {
+        const unwanted = new Set(names);
+        for (const item of Array.isArray(items) ? items : []) {
+          if (!Array.isArray(item?.schema)) continue;
+          item.schema = item.schema.filter((child) => !unwanted.has(child?.name));
+          remove(item.schema, names);
+        }
+      }
+    
+      function fallbackField(name) {
+        if (name === "show_custom_areas") return { name, selector: { boolean: {} } };
+        if (name === "custom_area_fill_opacity") {
+          return { name, selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } };
+        }
+        if (name === "custom_area_stroke_width") {
+          return { name, selector: { number: { min: 1, max: 12, step: 1, mode: "box" } } };
+        }
+        return { name, selector: { text: { type: "color" } } };
+      }
+    
+      function makeGrid(name, fields) {
+        return {
+          type: "grid",
+          name,
+          flatten: true,
+          // A slightly wider minimum makes the narrow Home Assistant editor fall
+          // back to one clean column instead of squeezing color labels over swatches.
+          column_min_width: "240px",
+          schema: fields,
+        };
+      }
+    
+      Card.getConfigForm = function beta6GetConfigForm(...args) {
+        const form = previousGetConfigForm.apply(this, args);
+        if (!form || !Array.isArray(form.schema)) return form;
+    
+        // Every previous visual-editor extension has already run at this point.
+        // Preserve their field definitions/selectors, but regroup the appearance
+        // controls into stable sections instead of leaving everything in one grid.
+        const captured = collect(form.schema, [...CUSTOM_FIELDS, ...COLOR_FIELDS]);
+        remove(form.schema, [...CUSTOM_FIELDS, ...COLOR_FIELDS]);
+    
+        // Defensive cleanup in case an earlier editor extension created the target
+        // sections before this patch is applied to a generated runtime.
+        form.schema = form.schema.filter((item) => !["custom_area_appearance", "map_colors"].includes(item?.name));
+    
+        const customFields = CUSTOM_FIELDS.map((name) => captured.get(name) || fallbackField(name));
+        const colorFields = COLOR_FIELDS.map((name) => captured.get(name) || fallbackField(name));
+        const customSection = {
+          type: "expandable",
+          name: "custom_area_appearance",
+          title: "Custom areas",
+          flatten: true,
+          schema: [makeGrid("custom_area_appearance_grid", customFields)],
+        };
+        const colorSection = {
+          type: "expandable",
+          name: "map_colors",
+          title: "Colors",
+          flatten: true,
+          schema: [makeGrid("map_colors_grid", colorFields)],
+        };
+    
+        const appearanceIndex = form.schema.findIndex((item) => item?.name === "appearance");
+        const insertAt = appearanceIndex >= 0 ? appearanceIndex + 1 : form.schema.length;
+        form.schema.splice(insertAt, 0, customSection, colorSection);
+    
+        const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+        form.computeLabel = (schema) => LABELS[schema?.name] || baseComputeLabel?.(schema) || schema?.name || "";
+    
+        return form;
+      };
   }
 
-  function find(items, name) {
-    let match = null;
-    walk(items, (item) => {
-      if (!match && item?.name === name) match = item;
-    });
-    return match;
-  }
-
-  function collect(items, names) {
-    const wanted = new Set(names);
-    const found = new Map();
-    walk(items, (item) => {
-      if (wanted.has(item?.name) && !found.has(item.name)) found.set(item.name, item);
-    });
-    return found;
-  }
-
-  function remove(items, names) {
-    const unwanted = new Set(names);
-    for (const item of Array.isArray(items) ? items : []) {
-      if (!Array.isArray(item?.schema)) continue;
-      item.schema = item.schema.filter((child) => !unwanted.has(child?.name));
-      remove(item.schema, names);
-    }
-  }
-
-  function fallbackField(name) {
-    if (name === "show_custom_areas") return { name, selector: { boolean: {} } };
-    if (name === "custom_area_fill_opacity") {
-      return { name, selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } };
-    }
-    if (name === "custom_area_stroke_width") {
-      return { name, selector: { number: { min: 1, max: 12, step: 1, mode: "box" } } };
-    }
-    return { name, selector: { text: { type: "color" } } };
-  }
-
-  function makeGrid(name, fields) {
-    return {
-      type: "grid",
-      name,
-      flatten: true,
-      // A slightly wider minimum makes the narrow Home Assistant editor fall
-      // back to one clean column instead of squeezing color labels over swatches.
-      column_min_width: "240px",
-      schema: fields,
-    };
-  }
-
-  Card.getConfigForm = function beta6GetConfigForm(...args) {
-    const form = previousGetConfigForm.apply(this, args);
-    if (!form || !Array.isArray(form.schema)) return form;
-
-    // Every previous visual-editor extension has already run at this point.
-    // Preserve their field definitions/selectors, but regroup the appearance
-    // controls into stable sections instead of leaving everything in one grid.
-    const captured = collect(form.schema, [...CUSTOM_FIELDS, ...COLOR_FIELDS]);
-    remove(form.schema, [...CUSTOM_FIELDS, ...COLOR_FIELDS]);
-
-    // Defensive cleanup in case an earlier editor extension created the target
-    // sections before this patch is applied to a generated runtime.
-    form.schema = form.schema.filter((item) => !["custom_area_appearance", "map_colors"].includes(item?.name));
-
-    const customFields = CUSTOM_FIELDS.map((name) => captured.get(name) || fallbackField(name));
-    const colorFields = COLOR_FIELDS.map((name) => captured.get(name) || fallbackField(name));
-    const customSection = {
-      type: "expandable",
-      name: "custom_area_appearance",
-      title: "Custom areas",
-      flatten: true,
-      schema: [makeGrid("custom_area_appearance_grid", customFields)],
-    };
-    const colorSection = {
-      type: "expandable",
-      name: "map_colors",
-      title: "Colors",
-      flatten: true,
-      schema: [makeGrid("map_colors_grid", colorFields)],
-    };
-
-    const appearanceIndex = form.schema.findIndex((item) => item?.name === "appearance");
-    const insertAt = appearanceIndex >= 0 ? appearanceIndex + 1 : form.schema.length;
-    form.schema.splice(insertAt, 0, customSection, colorSection);
-
-    const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema) => LABELS[schema?.name] || baseComputeLabel?.(schema) || schema?.name || "";
-
-    return form;
-  };
-
-})();
 
 
 // 0.3.5-beta7: non-overlapping color labels in the visual editor.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm !== "function") return;
-
-  const SWATCH_LABELS = {
-    custom_area_color: "Custom area",
-    zone_fill_color: "Zone fill",
-    zone_stroke_color: "Zone border",
-    trail_color: "Mowed area",
-    off_limit_color: "Off-limit",
-    vf_off_color: "VF-off",
-    channel_color: "Channel",
-    gate_area_color: "Gate area",
-    dock_color: "Dock",
-  };
-  const SWATCH_FIELDS = new Set(Object.keys(SWATCH_LABELS));
-
-  function walk(items, callback) {
-    for (const item of Array.isArray(items) ? items : []) {
-      callback(item);
-      if (Array.isArray(item?.schema)) walk(item.schema, callback);
-    }
+  nmRuntimePatch12: {
+    const Card = __navimowerRuntimeCard;
+    const previousGetConfigForm = Card.getConfigForm;
+      if (typeof previousGetConfigForm !== "function") break nmRuntimePatch12;
+    
+      const SWATCH_LABELS = {
+        custom_area_color: "Custom area",
+        zone_fill_color: "Zone fill",
+        zone_stroke_color: "Zone border",
+        trail_color: "Mowed area",
+        off_limit_color: "Off-limit",
+        vf_off_color: "VF-off",
+        channel_color: "Channel",
+        gate_area_color: "Gate area",
+        dock_color: "Dock",
+      };
+      const SWATCH_FIELDS = new Set(Object.keys(SWATCH_LABELS));
+    
+      function walk(items, callback) {
+        for (const item of Array.isArray(items) ? items : []) {
+          callback(item);
+          if (Array.isArray(item?.schema)) walk(item.schema, callback);
+        }
+      }
+    
+      Card.getConfigForm = function beta7GetConfigForm(...args) {
+        const form = previousGetConfigForm.apply(this, args);
+        if (!form || !Array.isArray(form.schema)) return form;
+    
+        // Home Assistant renders text[type=color] with a native color swatch. A
+        // floating field label sits on top of that swatch, which is unreadable on
+        // darker colors. Move the descriptive text into the input's start slot and
+        // leave the floating label empty. This keeps the native picker and current
+        // config value format while preventing any label/swatch overlap.
+        walk(form.schema, (field) => {
+          if (!SWATCH_FIELDS.has(field?.name)) return;
+          const text = field?.selector?.text;
+          if (!text || text.type !== "color") return;
+          field.selector = {
+            ...field.selector,
+            text: {
+              ...text,
+              prefix: SWATCH_LABELS[field.name],
+            },
+          };
+        });
+    
+        const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+        form.computeLabel = (schema, data) => {
+          if (SWATCH_FIELDS.has(schema?.name)) return "";
+          return baseComputeLabel?.(schema, data) || schema?.name || "";
+        };
+    
+        return form;
+      };
   }
 
-  Card.getConfigForm = function beta7GetConfigForm(...args) {
-    const form = previousGetConfigForm.apply(this, args);
-    if (!form || !Array.isArray(form.schema)) return form;
-
-    // Home Assistant renders text[type=color] with a native color swatch. A
-    // floating field label sits on top of that swatch, which is unreadable on
-    // darker colors. Move the descriptive text into the input's start slot and
-    // leave the floating label empty. This keeps the native picker and current
-    // config value format while preventing any label/swatch overlap.
-    walk(form.schema, (field) => {
-      if (!SWATCH_FIELDS.has(field?.name)) return;
-      const text = field?.selector?.text;
-      if (!text || text.type !== "color") return;
-      field.selector = {
-        ...field.selector,
-        text: {
-          ...text,
-          prefix: SWATCH_LABELS[field.name],
-        },
-      };
-    });
-
-    const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema, data) => {
-      if (SWATCH_FIELDS.has(schema?.name)) return "";
-      return baseComputeLabel?.(schema, data) || schema?.name || "";
-    };
-
-    return form;
-  };
-
-})();
 
 
 // 0.3.5-beta8: native-only color labels in the visual editor.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm !== "function") return;
-
-  const LABELS = {
-    custom_area_color: "Custom area color",
-    zone_fill_color: "Zone fill color",
-    zone_stroke_color: "Zone stroke color",
-    trail_color: "Trail color",
-    off_limit_color: "Off limit color",
-    vf_off_color: "VF off color",
-    channel_color: "Channel color",
-    gate_area_color: "Gate area color",
-    dock_color: "Dock color",
-  };
-  const COLOR_FIELDS = new Set(Object.keys(LABELS));
-
-  function walk(items, callback) {
-    for (const item of Array.isArray(items) ? items : []) {
-      callback(item);
-      if (Array.isArray(item?.schema)) walk(item.schema, callback);
-    }
+  nmRuntimePatch13: {
+    const Card = __navimowerRuntimeCard;
+    const previousGetConfigForm = Card.getConfigForm;
+      if (typeof previousGetConfigForm !== "function") break nmRuntimePatch13;
+    
+      const LABELS = {
+        custom_area_color: "Custom area color",
+        zone_fill_color: "Zone fill color",
+        zone_stroke_color: "Zone stroke color",
+        trail_color: "Trail color",
+        off_limit_color: "Off limit color",
+        vf_off_color: "VF off color",
+        channel_color: "Channel color",
+        gate_area_color: "Gate area color",
+        dock_color: "Dock color",
+      };
+      const COLOR_FIELDS = new Set(Object.keys(LABELS));
+    
+      function walk(items, callback) {
+        for (const item of Array.isArray(items) ? items : []) {
+          callback(item);
+          if (Array.isArray(item?.schema)) walk(item.schema, callback);
+        }
+      }
+    
+      Card.getConfigForm = function beta8GetConfigForm(...args) {
+        const form = previousGetConfigForm.apply(this, args);
+        if (!form || !Array.isArray(form.schema)) return form;
+    
+        // beta7 moved the short name into the native color input's prefix/start
+        // area. In practice that duplicates the normal small floating color label.
+        // Keep only the native label above the swatch, matching the clean Trail and
+        // Channel appearance the user preferred. Apply the same rule to custom
+        // area color as well.
+        walk(form.schema, (field) => {
+          if (!COLOR_FIELDS.has(field?.name)) return;
+          const text = field?.selector?.text;
+          if (!text || text.type !== "color") return;
+          const { prefix: _prefix, ...rest } = text;
+          field.selector = {
+            ...field.selector,
+            text: rest,
+          };
+        });
+    
+        const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+        form.computeLabel = (schema, data) => {
+          if (COLOR_FIELDS.has(schema?.name)) return LABELS[schema.name];
+          return baseComputeLabel?.(schema, data) || schema?.name || "";
+        };
+    
+        return form;
+      };
   }
 
-  Card.getConfigForm = function beta8GetConfigForm(...args) {
-    const form = previousGetConfigForm.apply(this, args);
-    if (!form || !Array.isArray(form.schema)) return form;
-
-    // beta7 moved the short name into the native color input's prefix/start
-    // area. In practice that duplicates the normal small floating color label.
-    // Keep only the native label above the swatch, matching the clean Trail and
-    // Channel appearance the user preferred. Apply the same rule to custom
-    // area color as well.
-    walk(form.schema, (field) => {
-      if (!COLOR_FIELDS.has(field?.name)) return;
-      const text = field?.selector?.text;
-      if (!text || text.type !== "color") return;
-      const { prefix: _prefix, ...rest } = text;
-      field.selector = {
-        ...field.selector,
-        text: rest,
-      };
-    });
-
-    const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema, data) => {
-      if (COLOR_FIELDS.has(schema?.name)) return LABELS[schema.name];
-      return baseComputeLabel?.(schema, data) || schema?.name || "";
-    };
-
-    return form;
-  };
-
-})();
 
 
 // 0.3.5-beta9: backend-owned current-cycle mowed-area render.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
+  nmRuntimePatch14: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+    
+      const previousRenderHistory = proto._renderHistory;
+      proto._renderHistory = function backendCurrentCycleHistory() {
+        const current = this._mapPayload?.current_cycle_render;
+        if (this._historySelectedSessionId) {
+          if (this._historyEl) this._historyEl.innerHTML = "";
+          this._renderSelectedSessionArchive?.();
+          return;
+        }
+        if (this._historyDayOffset !== null || current?.scope !== "current_cycle") {
+          return previousRenderHistory?.call(this);
+        }
+        if (!this._historyEl || !this._layout) return;
+    
+        const area = current?.mowed_area;
+        const render = area && typeof area === "object" ? {
+          version: current.render_schema_version,
+          coordinate_space: current.coordinate_space || "map_xy_m",
+          mowed_area: area,
+          travel: { path_d: "", stroke_width_m: 0 },
+          route: { path_d: "", stroke_width_m: 0 },
+        } : null;
+        const revision = String(current?.revision ?? "");
+        const renderKey = [
+          "backend-current-cycle",
+          this._mapStaticSignature,
+          revision,
+          this._config?.trail_color,
+          this._config?.trail_opacity,
+          this._layout?.scale,
+          String(area?.path_d || "").length,
+        ].join("|");
+        if (renderKey === this._historyRenderKey) return;
+        this._historyRenderKey = renderKey;
+    
+        this._historyEl.innerHTML = render && String(area?.path_d || "").trim()
+          ? archiveSvg(
+              render,
+              this._layout,
+              this._config.trail_color,
+              this._config.trail_opacity,
+              "current-cycle"
+            )
+          : "";
+      };
+    
+      const previousRenderHistoryBar = proto._renderHistoryBar;
+      proto._renderHistoryBar = function backendCurrentCycleHistoryBar(...args) {
+        const result = previousRenderHistoryBar?.apply(this, args);
+        if (this._mapPayload?.current_cycle_render?.scope === "current_cycle") {
+          this._historyBarEl
+            ?.querySelectorAll?.('[data-history-offset="today"]')
+            ?.forEach?.((button) => {
+              button.textContent = "Current cycle";
+              button.title = "Current mowing cycle since the latest confirmed reset";
+            });
+        }
+        return result;
+      };
+  }
 
-  const previousRenderHistory = proto._renderHistory;
-  proto._renderHistory = function backendCurrentCycleHistory() {
-    const current = this._mapPayload?.current_cycle_render;
-    if (this._historySelectedSessionId) {
-      if (this._historyEl) this._historyEl.innerHTML = "";
-      this._renderSelectedSessionArchive?.();
-      return;
-    }
-    if (this._historyDayOffset !== null || current?.scope !== "current_cycle") {
-      return previousRenderHistory?.call(this);
-    }
-    if (!this._historyEl || !this._layout) return;
-
-    const area = current?.mowed_area;
-    const render = area && typeof area === "object" ? {
-      version: current.render_schema_version,
-      coordinate_space: current.coordinate_space || "map_xy_m",
-      mowed_area: area,
-      travel: { path_d: "", stroke_width_m: 0 },
-      route: { path_d: "", stroke_width_m: 0 },
-    } : null;
-    const revision = String(current?.revision ?? "");
-    const renderKey = [
-      "backend-current-cycle",
-      this._mapStaticSignature,
-      revision,
-      this._config?.trail_color,
-      this._config?.trail_opacity,
-      this._layout?.scale,
-      String(area?.path_d || "").length,
-    ].join("|");
-    if (renderKey === this._historyRenderKey) return;
-    this._historyRenderKey = renderKey;
-
-    this._historyEl.innerHTML = render && String(area?.path_d || "").trim()
-      ? archiveSvg(
-          render,
-          this._layout,
-          this._config.trail_color,
-          this._config.trail_opacity,
-          "current-cycle"
-        )
-      : "";
-  };
-
-  const previousRenderHistoryBar = proto._renderHistoryBar;
-  proto._renderHistoryBar = function backendCurrentCycleHistoryBar(...args) {
-    const result = previousRenderHistoryBar?.apply(this, args);
-    if (this._mapPayload?.current_cycle_render?.scope === "current_cycle") {
-      this._historyBarEl
-        ?.querySelectorAll?.('[data-history-offset="today"]')
-        ?.forEach?.((button) => {
-          button.textContent = "Current cycle";
-          button.title = "Current mowing cycle since the latest confirmed reset";
-        });
-    }
-    return result;
-  };
-
-})();
 
 
 // 0.3.5-beta10: organized editor groups and configurable header buttons.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const BUTTON_FIELDS = [
-    "show_history_button",
-    "show_notifications_button",
-    "show_schedule_button",
-    "show_settings_button",
-  ];
-  const CUSTOM_FIELDS = [
-    "show_custom_areas",
-    "custom_area_fill_opacity",
-    "custom_area_stroke_width",
-    "custom_area_color",
-  ];
-  const MOVE_FIELDS = [...BUTTON_FIELDS, ...CUSTOM_FIELDS];
-  const LABELS = {
-    show_history_button: "Show History button",
-    show_notifications_button: "Show Notifications button",
-    show_schedule_button: "Show Schedule button",
-    show_settings_button: "Show Settings button",
-    show_custom_areas: "Show custom areas",
-    custom_area_fill_opacity: "Custom area fill opacity",
-    custom_area_stroke_width: "Custom area border width",
-    custom_area_color: "Custom area color",
-  };
-  const SAFE_SWATCH_LABELS = {
-    custom_area_color: "Custom area",
-    vf_off_color: "VF off",
-    gate_area_color: "Gate area",
-  };
-
-  const previousStub = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
-  if (previousStub) {
-    Card.getStubConfig = function beta10StubConfig(...args) {
-      return {
-        ...previousStub(...args),
-        show_history_button: true,
-        show_notifications_button: true,
-        show_schedule_button: true,
-        show_settings_button: true,
+  nmRuntimePatch15: {
+    const Card = __navimowerRuntimeCard;
+    const BUTTON_FIELDS = [
+        "show_history_button",
+        "show_notifications_button",
+        "show_schedule_button",
+        "show_settings_button",
+      ];
+      const CUSTOM_FIELDS = [
+        "show_custom_areas",
+        "custom_area_fill_opacity",
+        "custom_area_stroke_width",
+        "custom_area_color",
+      ];
+      const MOVE_FIELDS = [...BUTTON_FIELDS, ...CUSTOM_FIELDS];
+      const LABELS = {
+        show_history_button: "Show History button",
+        show_notifications_button: "Show Notifications button",
+        show_schedule_button: "Show Schedule button",
+        show_settings_button: "Show Settings button",
+        show_custom_areas: "Show custom areas",
+        custom_area_fill_opacity: "Custom area fill opacity",
+        custom_area_stroke_width: "Custom area border width",
+        custom_area_color: "Custom area color",
       };
-    };
-  }
-
-  const proto = Card.prototype;
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta10SetConfig(config) {
-      const next = { ...config };
-      for (const key of BUTTON_FIELDS) {
-        if (next[key] === undefined) next[key] = true;
+      const SAFE_SWATCH_LABELS = {
+        custom_area_color: "Custom area",
+        vf_off_color: "VF off",
+        gate_area_color: "Gate area",
+      };
+    
+      const previousStub = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
+      if (previousStub) {
+        Card.getStubConfig = function beta10StubConfig(...args) {
+          return {
+            ...previousStub(...args),
+            show_history_button: true,
+            show_notifications_button: true,
+            show_schedule_button: true,
+            show_settings_button: true,
+          };
+        };
       }
-      const result = previousSetConfig.call(this, next);
-      if (next.show_history_button === false && this._historyDayOffset !== null) {
-        this._historyDayOffset = null;
-        this._historyMenuOpen = false;
-        this._historyBarRenderKey = null;
+    
+      const proto = Card.prototype;
+      const previousSetConfig = proto.setConfig;
+      if (typeof previousSetConfig === "function") {
+        proto.setConfig = function beta10SetConfig(config) {
+          const next = { ...config };
+          for (const key of BUTTON_FIELDS) {
+            if (next[key] === undefined) next[key] = true;
+          }
+          const result = previousSetConfig.call(this, next);
+          if (next.show_history_button === false && this._historyDayOffset !== null) {
+            this._historyDayOffset = null;
+            this._historyMenuOpen = false;
+            this._historyBarRenderKey = null;
+          }
+          syncHeaderVisibility(this);
+          return result;
+        };
       }
-      syncHeaderVisibility(this);
-      return result;
-    };
-  }
-
-  function walk(items, callback, parent = null) {
-    for (const item of Array.isArray(items) ? items : []) {
-      callback(item, parent);
-      if (Array.isArray(item?.schema)) walk(item.schema, callback, item);
-    }
-  }
-
-  function collect(items, names) {
-    const wanted = new Set(names);
-    const found = new Map();
-    walk(items, (item) => {
-      if (wanted.has(item?.name) && !found.has(item.name)) found.set(item.name, item);
-    });
-    return found;
-  }
-
-  function remove(items, names) {
-    const unwanted = new Set(names);
-    for (const item of Array.isArray(items) ? items : []) {
-      if (!Array.isArray(item?.schema)) continue;
-      item.schema = item.schema.filter((child) => !unwanted.has(child?.name));
-      remove(item.schema, names);
-    }
-  }
-
-  function sectionContaining(items, fieldName) {
-    let result = null;
-    const search = (list, topSection = null) => {
-      for (const item of Array.isArray(list) ? list : []) {
-        const section = topSection || item;
-        if (item?.name === fieldName) {
-          result = section;
+    
+      function walk(items, callback, parent = null) {
+        for (const item of Array.isArray(items) ? items : []) {
+          callback(item, parent);
+          if (Array.isArray(item?.schema)) walk(item.schema, callback, item);
+        }
+      }
+    
+      function collect(items, names) {
+        const wanted = new Set(names);
+        const found = new Map();
+        walk(items, (item) => {
+          if (wanted.has(item?.name) && !found.has(item.name)) found.set(item.name, item);
+        });
+        return found;
+      }
+    
+      function remove(items, names) {
+        const unwanted = new Set(names);
+        for (const item of Array.isArray(items) ? items : []) {
+          if (!Array.isArray(item?.schema)) continue;
+          item.schema = item.schema.filter((child) => !unwanted.has(child?.name));
+          remove(item.schema, names);
+        }
+      }
+    
+      function sectionContaining(items, fieldName) {
+        let result = null;
+        const search = (list, topSection = null) => {
+          for (const item of Array.isArray(list) ? list : []) {
+            const section = topSection || item;
+            if (item?.name === fieldName) {
+              result = section;
+              return;
+            }
+            if (Array.isArray(item?.schema)) search(item.schema, section);
+            if (result) return;
+          }
+        };
+        search(items);
+        return result;
+      }
+    
+      function gridIn(section) {
+        if (!section) return null;
+        if (Array.isArray(section.schema)) {
+          const directGrid = section.schema.find((item) => item?.type === "grid" && Array.isArray(item.schema));
+          if (directGrid) return directGrid;
+          if (section.type === "grid") return section;
+        }
+        return null;
+      }
+    
+      function booleanField(name) {
+        return { name, selector: { boolean: {} } };
+      }
+    
+      function numericField(name) {
+        if (name === "custom_area_fill_opacity") {
+          return { name, selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } };
+        }
+        return { name, selector: { number: { min: 1, max: 12, step: 1, mode: "box" } } };
+      }
+    
+      const previousGetConfigForm = Card.getConfigForm;
+      if (typeof previousGetConfigForm === "function") {
+        Card.getConfigForm = function beta10GetConfigForm(...args) {
+          const form = previousGetConfigForm.apply(this, args);
+          if (!form || !Array.isArray(form.schema)) return form;
+    
+          const captured = collect(form.schema, MOVE_FIELDS);
+          remove(form.schema, MOVE_FIELDS);
+          form.schema = form.schema.filter((item) => item?.name !== "custom_area_appearance");
+    
+          const displayed = sectionContaining(form.schema, "show_zone_labels")
+            || sectionContaining(form.schema, "show_map_legend")
+            || form.schema[0];
+          const appearance = sectionContaining(form.schema, "trail_opacity")
+            || sectionContaining(form.schema, "mower_scale")
+            || form.schema.find((item) => item?.name === "appearance");
+          const colors = form.schema.find((item) => item?.name === "map_colors")
+            || sectionContaining(form.schema, "trail_color");
+    
+          const displayedGrid = gridIn(displayed);
+          const appearanceGrid = gridIn(appearance);
+          const colorsGrid = gridIn(colors);
+    
+          if (displayedGrid?.schema) {
+            displayedGrid.schema.push(
+              captured.get("show_custom_areas") || booleanField("show_custom_areas"),
+              ...BUTTON_FIELDS.map((name) => captured.get(name) || booleanField(name)),
+            );
+          }
+          if (appearanceGrid?.schema) {
+            appearanceGrid.schema.push(
+              captured.get("custom_area_fill_opacity") || numericField("custom_area_fill_opacity"),
+              captured.get("custom_area_stroke_width") || numericField("custom_area_stroke_width"),
+            );
+          }
+          if (colorsGrid?.schema) {
+            colorsGrid.schema.push(
+              captured.get("custom_area_color") || { name: "custom_area_color", selector: { text: { type: "color" } } },
+            );
+          }
+    
+          walk(form.schema, (field) => {
+            const label = SAFE_SWATCH_LABELS[field?.name];
+            if (!label) return;
+            const text = field?.selector?.text;
+            if (!text || text.type !== "color") return;
+            field.selector = {
+              ...field.selector,
+              text: { ...text, prefix: label },
+            };
+          });
+    
+          const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+          form.computeLabel = (schema, data) => {
+            if (SAFE_SWATCH_LABELS[schema?.name]) return "";
+            if (LABELS[schema?.name]) return LABELS[schema.name];
+            return baseComputeLabel?.(schema, data) || schema?.name || "";
+          };
+          return form;
+        };
+      }
+    
+      function syncHeaderVisibility(card) {
+        if (!card?._config || !card?._domReady) return;
+        const showHistory = card._config.show_history_button !== false;
+        const showNotifications = card._config.show_notifications_button !== false;
+        const showSchedule = card._config.show_schedule_button !== false;
+        const showSettings = card._config.show_settings_button !== false;
+    
+        if (!showHistory) {
+          card._historyMenuOpen = false;
+          card._historyDayOffset = null;
+          if (card._historyBarEl) {
+            card._historyBarEl.hidden = true;
+            card._historyBarEl.innerHTML = "";
+          }
+        }
+        if (card._historyButtonEl) card._historyButtonEl.style.display = showHistory ? "" : "none";
+        if (card._notificationButtonEl) card._notificationButtonEl.style.display = showNotifications ? "" : "none";
+        const notification = card.querySelector?.(".nm-notification-button");
+        if (notification) notification.style.display = showNotifications ? "" : "none";
+        if (card._scheduleButtonEl) card._scheduleButtonEl.style.display = showSchedule ? "" : "none";
+        const settings = card.querySelector?.(".nm-settings-button");
+        if (settings) settings.style.display = showSettings ? "" : "none";
+      }
+    
+      const previousEnsure = proto._ensureDom;
+      proto._ensureDom = function beta10EnsureDom(...args) {
+        const result = previousEnsure?.apply(this, args);
+        syncHeaderVisibility(this);
+        return result;
+      };
+    
+      const previousRenderShell = proto._renderShell;
+      proto._renderShell = function beta10RenderShell(...args) {
+        const result = previousRenderShell?.apply(this, args);
+        syncHeaderVisibility(this);
+        return result;
+      };
+    
+      const previousRenderHistoryBar = proto._renderHistoryBar;
+      proto._renderHistoryBar = function beta10RenderHistoryBar(...args) {
+        if (this._config?.show_history_button === false) {
+          this._historyMenuOpen = false;
+          this._historyDayOffset = null;
+          if (this._historyBarEl) {
+            this._historyBarEl.hidden = true;
+            this._historyBarEl.innerHTML = "";
+          }
+          syncHeaderVisibility(this);
           return;
         }
-        if (Array.isArray(item?.schema)) search(item.schema, section);
-        if (result) return;
-      }
-    };
-    search(items);
-    return result;
-  }
-
-  function gridIn(section) {
-    if (!section) return null;
-    if (Array.isArray(section.schema)) {
-      const directGrid = section.schema.find((item) => item?.type === "grid" && Array.isArray(item.schema));
-      if (directGrid) return directGrid;
-      if (section.type === "grid") return section;
-    }
-    return null;
-  }
-
-  function booleanField(name) {
-    return { name, selector: { boolean: {} } };
-  }
-
-  function numericField(name) {
-    if (name === "custom_area_fill_opacity") {
-      return { name, selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } };
-    }
-    return { name, selector: { number: { min: 1, max: 12, step: 1, mode: "box" } } };
-  }
-
-  const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm === "function") {
-    Card.getConfigForm = function beta10GetConfigForm(...args) {
-      const form = previousGetConfigForm.apply(this, args);
-      if (!form || !Array.isArray(form.schema)) return form;
-
-      const captured = collect(form.schema, MOVE_FIELDS);
-      remove(form.schema, MOVE_FIELDS);
-      form.schema = form.schema.filter((item) => item?.name !== "custom_area_appearance");
-
-      const displayed = sectionContaining(form.schema, "show_zone_labels")
-        || sectionContaining(form.schema, "show_map_legend")
-        || form.schema[0];
-      const appearance = sectionContaining(form.schema, "trail_opacity")
-        || sectionContaining(form.schema, "mower_scale")
-        || form.schema.find((item) => item?.name === "appearance");
-      const colors = form.schema.find((item) => item?.name === "map_colors")
-        || sectionContaining(form.schema, "trail_color");
-
-      const displayedGrid = gridIn(displayed);
-      const appearanceGrid = gridIn(appearance);
-      const colorsGrid = gridIn(colors);
-
-      if (displayedGrid?.schema) {
-        displayedGrid.schema.push(
-          captured.get("show_custom_areas") || booleanField("show_custom_areas"),
-          ...BUTTON_FIELDS.map((name) => captured.get(name) || booleanField(name)),
-        );
-      }
-      if (appearanceGrid?.schema) {
-        appearanceGrid.schema.push(
-          captured.get("custom_area_fill_opacity") || numericField("custom_area_fill_opacity"),
-          captured.get("custom_area_stroke_width") || numericField("custom_area_stroke_width"),
-        );
-      }
-      if (colorsGrid?.schema) {
-        colorsGrid.schema.push(
-          captured.get("custom_area_color") || { name: "custom_area_color", selector: { text: { type: "color" } } },
-        );
-      }
-
-      walk(form.schema, (field) => {
-        const label = SAFE_SWATCH_LABELS[field?.name];
-        if (!label) return;
-        const text = field?.selector?.text;
-        if (!text || text.type !== "color") return;
-        field.selector = {
-          ...field.selector,
-          text: { ...text, prefix: label },
-        };
-      });
-
-      const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-      form.computeLabel = (schema, data) => {
-        if (SAFE_SWATCH_LABELS[schema?.name]) return "";
-        if (LABELS[schema?.name]) return LABELS[schema.name];
-        return baseComputeLabel?.(schema, data) || schema?.name || "";
+        const result = previousRenderHistoryBar?.apply(this, args);
+        syncHeaderVisibility(this);
+        return result;
       };
-      return form;
-    };
   }
 
-  function syncHeaderVisibility(card) {
-    if (!card?._config || !card?._domReady) return;
-    const showHistory = card._config.show_history_button !== false;
-    const showNotifications = card._config.show_notifications_button !== false;
-    const showSchedule = card._config.show_schedule_button !== false;
-    const showSettings = card._config.show_settings_button !== false;
-
-    if (!showHistory) {
-      card._historyMenuOpen = false;
-      card._historyDayOffset = null;
-      if (card._historyBarEl) {
-        card._historyBarEl.hidden = true;
-        card._historyBarEl.innerHTML = "";
-      }
-    }
-    if (card._historyButtonEl) card._historyButtonEl.style.display = showHistory ? "" : "none";
-    if (card._notificationButtonEl) card._notificationButtonEl.style.display = showNotifications ? "" : "none";
-    const notification = card.querySelector?.(".nm-notification-button");
-    if (notification) notification.style.display = showNotifications ? "" : "none";
-    if (card._scheduleButtonEl) card._scheduleButtonEl.style.display = showSchedule ? "" : "none";
-    const settings = card.querySelector?.(".nm-settings-button");
-    if (settings) settings.style.display = showSettings ? "" : "none";
-  }
-
-  const previousEnsure = proto._ensureDom;
-  proto._ensureDom = function beta10EnsureDom(...args) {
-    const result = previousEnsure?.apply(this, args);
-    syncHeaderVisibility(this);
-    return result;
-  };
-
-  const previousRenderShell = proto._renderShell;
-  proto._renderShell = function beta10RenderShell(...args) {
-    const result = previousRenderShell?.apply(this, args);
-    syncHeaderVisibility(this);
-    return result;
-  };
-
-  const previousRenderHistoryBar = proto._renderHistoryBar;
-  proto._renderHistoryBar = function beta10RenderHistoryBar(...args) {
-    if (this._config?.show_history_button === false) {
-      this._historyMenuOpen = false;
-      this._historyDayOffset = null;
-      if (this._historyBarEl) {
-        this._historyBarEl.hidden = true;
-        this._historyBarEl.innerHTML = "";
-      }
-      syncHeaderVisibility(this);
-      return;
-    }
-    const result = previousRenderHistoryBar?.apply(this, args);
-    syncHeaderVisibility(this);
-    return result;
-  };
-
-})();
 
 
 // 0.3.5-beta11: real color defaults, combined schedule state and mower error pulse.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const COLOR_DEFAULTS = {
-    zone_fill_color: "#81c784",
-    zone_stroke_color: "#43a047",
-    trail_color: "#43a047",
-    off_limit_color: "#FF5A00",
-    vf_off_color: "#2F80ED",
-    channel_color: "#686868",
-    gate_area_color: "#8e24aa",
-    dock_color: "#37474f",
-    custom_area_color: "#8e24aa",
-  };
-  const COLOR_LABELS = {
-    zone_fill_color: "Zone fill color",
-    zone_stroke_color: "Zone border color",
-    trail_color: "Trail color",
-    off_limit_color: "Off limit color",
-    vf_off_color: "VF off color",
-    channel_color: "Channel color",
-    gate_area_color: "Gate area color",
-    dock_color: "Dock color",
-    custom_area_color: "Custom area color",
-  };
-  const COLOR_FIELDS = new Set(Object.keys(COLOR_DEFAULTS));
-
-  function walk(items, callback) {
-    for (const item of Array.isArray(items) ? items : []) {
-      callback(item);
-      if (Array.isArray(item?.schema)) walk(item.schema, callback);
-    }
-  }
-
-  const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm === "function") {
-    Card.getConfigForm = function beta11GetConfigForm(...args) {
-      const form = previousGetConfigForm.apply(this, args);
-      if (!form || !Array.isArray(form.schema)) return form;
-
-      walk(form.schema, (field) => {
-        if (!COLOR_FIELDS.has(field?.name)) return;
-        const text = field?.selector?.text;
-        if (!text || text.type !== "color") return;
-        field.default = COLOR_DEFAULTS[field.name];
-        const { prefix: _prefix, ...rest } = text;
-        field.selector = { ...field.selector, text: rest };
-      });
-
-      const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-      form.computeLabel = (schema, data) => {
-        if (COLOR_FIELDS.has(schema?.name)) return COLOR_LABELS[schema.name];
-        return baseComputeLabel?.(schema, data) || schema?.name || "";
+  nmRuntimePatch16: {
+    const Card = __navimowerRuntimeCard;
+    const COLOR_DEFAULTS = {
+        zone_fill_color: "#81c784",
+        zone_stroke_color: "#43a047",
+        trail_color: "#43a047",
+        off_limit_color: "#FF5A00",
+        vf_off_color: "#2F80ED",
+        channel_color: "#686868",
+        gate_area_color: "#8e24aa",
+        dock_color: "#37474f",
+        custom_area_color: "#8e24aa",
       };
-      return form;
-    };
-  }
-
-  const proto = Card.prototype;
-
-  function state(card, entityId) {
-    return entityId ? card?._hass?.states?.[entityId] || null : null;
-  }
-
-  function schedulerIds(card) {
-    const cached = card?._beta10SchedulerEntities || card?._beta6SchedulerEntities || card?._beta5SchedulerEntities || {};
-    const frontend = card?._mapPayload?.frontend?.entities || card?._mapPayload?.frontend_entities || {};
-    return {
-      status: cached.status || frontend.schedule_status || null,
-      managedSwitch: cached.managedSwitch || frontend.managed_schedule || null,
-      nativeSwitch: cached.nativeSwitch || frontend.native_schedule || card?._scheduleSwitchEntity?.() || null,
-    };
-  }
-
-  function managedScheduleEnabled(card) {
-    const ids = schedulerIds(card);
-    const status = state(card, ids.status);
-    if (typeof status?.attributes?.enabled === "boolean") return status.attributes.enabled;
-    return String(state(card, ids.managedSwitch)?.state || "").trim().toLowerCase() === "on";
-  }
-
-  function syncCombinedScheduleButton(card) {
-    const button = card?._scheduleButtonEl;
-    if (!button) return;
-    const nativeOn = card?._scheduleEnabled?.() === true;
-    const managedOn = managedScheduleEnabled(card);
-    const active = nativeOn || managedOn;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", active ? "true" : "false");
-    const parts = [];
-    if (nativeOn) parts.push("Native On");
-    if (managedOn) parts.push("Navimower On");
-    if (!parts.length) parts.push("Off");
-    button.title = "Mowing schedule · " + parts.join(" · ");
-  }
-
-  const previousRenderShell = proto._renderShell;
-  proto._renderShell = function beta11RenderShell(...args) {
-    const result = previousRenderShell?.apply(this, args);
-    syncCombinedScheduleButton(this);
-    return result;
-  };
-
-  const previousLiveSnapshot = proto._liveSnapshot;
-  if (typeof previousLiveSnapshot === "function") {
-    proto._liveSnapshot = function beta11LiveSnapshot(...args) {
-      const snapshot = previousLiveSnapshot.apply(this, args) || {};
-      const ids = schedulerIds(this);
-      const managedSwitch = state(this, ids.managedSwitch);
-      const status = state(this, ids.status);
-      const managed = managedScheduleEnabled(this);
-      return {
-        ...snapshot,
-        scheduleEnabled: Boolean(snapshot.scheduleEnabled === true || managed),
-        scheduleUpdated: [
-          snapshot.scheduleUpdated || "",
-          managedSwitch?.state || "",
-          managedSwitch?.last_updated || "",
-          status?.attributes?.enabled ?? "",
-          status?.last_updated || "",
-        ].join("|"),
+      const COLOR_LABELS = {
+        zone_fill_color: "Zone fill color",
+        zone_stroke_color: "Zone border color",
+        trail_color: "Trail color",
+        off_limit_color: "Off limit color",
+        vf_off_color: "VF off color",
+        channel_color: "Channel color",
+        gate_area_color: "Gate area color",
+        dock_color: "Dock color",
+        custom_area_color: "Custom area color",
       };
-    };
+      const COLOR_FIELDS = new Set(Object.keys(COLOR_DEFAULTS));
+    
+      function walk(items, callback) {
+        for (const item of Array.isArray(items) ? items : []) {
+          callback(item);
+          if (Array.isArray(item?.schema)) walk(item.schema, callback);
+        }
+      }
+    
+      const previousGetConfigForm = Card.getConfigForm;
+      if (typeof previousGetConfigForm === "function") {
+        Card.getConfigForm = function beta11GetConfigForm(...args) {
+          const form = previousGetConfigForm.apply(this, args);
+          if (!form || !Array.isArray(form.schema)) return form;
+    
+          walk(form.schema, (field) => {
+            if (!COLOR_FIELDS.has(field?.name)) return;
+            const text = field?.selector?.text;
+            if (!text || text.type !== "color") return;
+            field.default = COLOR_DEFAULTS[field.name];
+            const { prefix: _prefix, ...rest } = text;
+            field.selector = { ...field.selector, text: rest };
+          });
+    
+          const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+          form.computeLabel = (schema, data) => {
+            if (COLOR_FIELDS.has(schema?.name)) return COLOR_LABELS[schema.name];
+            return baseComputeLabel?.(schema, data) || schema?.name || "";
+          };
+          return form;
+        };
+      }
+    
+      const proto = Card.prototype;
+    
+      function state(card, entityId) {
+        return entityId ? card?._hass?.states?.[entityId] || null : null;
+      }
+    
+      function schedulerIds(card) {
+        const cached = card?._beta10SchedulerEntities || card?._beta6SchedulerEntities || card?._beta5SchedulerEntities || {};
+        const frontend = card?._mapPayload?.frontend?.entities || card?._mapPayload?.frontend_entities || {};
+        return {
+          status: cached.status || frontend.schedule_status || null,
+          managedSwitch: cached.managedSwitch || frontend.managed_schedule || null,
+          nativeSwitch: cached.nativeSwitch || frontend.native_schedule || card?._scheduleSwitchEntity?.() || null,
+        };
+      }
+    
+      function managedScheduleEnabled(card) {
+        const ids = schedulerIds(card);
+        const status = state(card, ids.status);
+        if (typeof status?.attributes?.enabled === "boolean") return status.attributes.enabled;
+        return String(state(card, ids.managedSwitch)?.state || "").trim().toLowerCase() === "on";
+      }
+    
+      function syncCombinedScheduleButton(card) {
+        const button = card?._scheduleButtonEl;
+        if (!button) return;
+        const nativeOn = card?._scheduleEnabled?.() === true;
+        const managedOn = managedScheduleEnabled(card);
+        const active = nativeOn || managedOn;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+        const parts = [];
+        if (nativeOn) parts.push("Native On");
+        if (managedOn) parts.push("Navimower On");
+        if (!parts.length) parts.push("Off");
+        button.title = "Mowing schedule · " + parts.join(" · ");
+      }
+    
+      const previousRenderShell = proto._renderShell;
+      proto._renderShell = function beta11RenderShell(...args) {
+        const result = previousRenderShell?.apply(this, args);
+        syncCombinedScheduleButton(this);
+        return result;
+      };
+    
+      const previousLiveSnapshot = proto._liveSnapshot;
+      if (typeof previousLiveSnapshot === "function") {
+        proto._liveSnapshot = function beta11LiveSnapshot(...args) {
+          const snapshot = previousLiveSnapshot.apply(this, args) || {};
+          const ids = schedulerIds(this);
+          const managedSwitch = state(this, ids.managedSwitch);
+          const status = state(this, ids.status);
+          const managed = managedScheduleEnabled(this);
+          return {
+            ...snapshot,
+            scheduleEnabled: Boolean(snapshot.scheduleEnabled === true || managed),
+            scheduleUpdated: [
+              snapshot.scheduleUpdated || "",
+              managedSwitch?.state || "",
+              managedSwitch?.last_updated || "",
+              status?.attributes?.enabled ?? "",
+              status?.last_updated || "",
+            ].join("|"),
+          };
+        };
+      }
+    
+      function mowerError(card) {
+        const entityId = card?._mowerEntity?.() || card?._resolved?.mower_entity || card?._config?.entity || null;
+        const mower = state(card, entityId);
+        if (!mower) return false;
+        const values = [mower.state, mower.attributes?.activity, mower.attributes?.state]
+          .map((value) => String(value || "").trim().toLowerCase());
+        return values.some((value) => value === "error" || value.includes("error"));
+      }
+    
+      function ensureErrorPulseStyle(card) {
+        if (!card || card.__beta11ErrorPulseStyle) return;
+        card.__beta11ErrorPulseStyle = true;
+        const style = document.createElement("style");
+        style.textContent = [
+          ".nm-h2-mower.nm-mower-error-pulse {",
+          "  transform-box: fill-box;",
+          "  transform-origin: center;",
+          "  animation: nm-mower-error-pulse 1.15s ease-in-out infinite;",
+          "}",
+          "@keyframes nm-mower-error-pulse {",
+          "  0%, 100% { filter: drop-shadow(0 1px 2px rgba(0,0,0,.38)) drop-shadow(0 0 0 rgba(244,67,54,0)); }",
+          "  50% { filter: drop-shadow(0 1px 2px rgba(0,0,0,.38)) drop-shadow(0 0 13px rgba(244,67,54,.95)) drop-shadow(0 0 5px rgba(244,67,54,1)); }",
+          "}",
+        ].join("\n");
+        card.appendChild(style);
+      }
+    
+      function syncMowerErrorPulse(card) {
+        ensureErrorPulseStyle(card);
+        card?._mowerGroup?.classList?.toggle("nm-mower-error-pulse", mowerError(card));
+      }
+    
+      const previousRenderMower = proto._renderMower;
+      proto._renderMower = function beta11RenderMower(...args) {
+        const result = previousRenderMower?.apply(this, args);
+        syncMowerErrorPulse(this);
+        return result;
+      };
+    
+      const previousEnsure = proto._ensureDom;
+      proto._ensureDom = function beta11EnsureDom(...args) {
+        const result = previousEnsure?.apply(this, args);
+        ensureErrorPulseStyle(this);
+        syncCombinedScheduleButton(this);
+        syncMowerErrorPulse(this);
+        return result;
+      };
   }
 
-  function mowerError(card) {
-    const entityId = card?._mowerEntity?.() || card?._resolved?.mower_entity || card?._config?.entity || null;
-    const mower = state(card, entityId);
-    if (!mower) return false;
-    const values = [mower.state, mower.attributes?.activity, mower.attributes?.state]
-      .map((value) => String(value || "").trim().toLowerCase());
-    return values.some((value) => value === "error" || value.includes("error"));
-  }
-
-  function ensureErrorPulseStyle(card) {
-    if (!card || card.__beta11ErrorPulseStyle) return;
-    card.__beta11ErrorPulseStyle = true;
-    const style = document.createElement("style");
-    style.textContent = [
-      ".nm-h2-mower.nm-mower-error-pulse {",
-      "  transform-box: fill-box;",
-      "  transform-origin: center;",
-      "  animation: nm-mower-error-pulse 1.15s ease-in-out infinite;",
-      "}",
-      "@keyframes nm-mower-error-pulse {",
-      "  0%, 100% { filter: drop-shadow(0 1px 2px rgba(0,0,0,.38)) drop-shadow(0 0 0 rgba(244,67,54,0)); }",
-      "  50% { filter: drop-shadow(0 1px 2px rgba(0,0,0,.38)) drop-shadow(0 0 13px rgba(244,67,54,.95)) drop-shadow(0 0 5px rgba(244,67,54,1)); }",
-      "}",
-    ].join("\n");
-    card.appendChild(style);
-  }
-
-  function syncMowerErrorPulse(card) {
-    ensureErrorPulseStyle(card);
-    card?._mowerGroup?.classList?.toggle("nm-mower-error-pulse", mowerError(card));
-  }
-
-  const previousRenderMower = proto._renderMower;
-  proto._renderMower = function beta11RenderMower(...args) {
-    const result = previousRenderMower?.apply(this, args);
-    syncMowerErrorPulse(this);
-    return result;
-  };
-
-  const previousEnsure = proto._ensureDom;
-  proto._ensureDom = function beta11EnsureDom(...args) {
-    const result = previousEnsure?.apply(this, args);
-    ensureErrorPulseStyle(this);
-    syncCombinedScheduleButton(this);
-    syncMowerErrorPulse(this);
-    return result;
-  };
-
-})();
 
 
 // 0.3.5-beta12: installation visual defaults and uniform stroke widths.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const VISUAL_DEFAULTS = Object.freeze({
-    map_background_color: "#ffffff",
-    map_legend_opacity: 0.10,
-    zone_label_font_size: 20,
-    zone_label_opacity: 0.75,
-    zone_fill_color: "#81c784",
-    zone_fill_opacity: 0.20,
-    zone_stroke_color: "#43a047",
-    trail_color: "#43a047",
-    trail_opacity: 0.50,
-    off_limit_color: "#FF5A00",
-    vf_off_color: "#2F80ED",
-    channel_color: "#808080",
-    gate_area_color: "#8e24aa",
-    dock_color: "#37474f",
-    custom_area_color: "#8e24aa",
-    custom_area_fill_opacity: 0.10,
-    mower_scale: 1.2,
-    dock_scale: 1.1,
-    zone_marker_scale: 1.1,
-    zone_stroke_width: 1.5,
-    off_limit_stroke_width: 1.5,
-    vf_off_stroke_width: 1.5,
-    channel_stroke_width: 1.5,
-    gate_area_stroke_width: 1.5,
-    dock_stroke_width: 1.5,
-    custom_area_stroke_width: 1.5,
-  });
-
-  const COLOR_FIELDS = new Set([
-    "map_background_color",
-    "zone_fill_color",
-    "zone_stroke_color",
-    "trail_color",
-    "off_limit_color",
-    "vf_off_color",
-    "channel_color",
-    "gate_area_color",
-    "dock_color",
-    "custom_area_color",
-  ]);
-
-  const WIDTH_FIELDS = [
-    "zone_stroke_width",
-    "off_limit_stroke_width",
-    "vf_off_stroke_width",
-    "channel_stroke_width",
-    "gate_area_stroke_width",
-    "dock_stroke_width",
-    "custom_area_stroke_width",
-  ];
-
-  const LABELS = {
-    zone_stroke_width: "Zone border width",
-    off_limit_stroke_width: "Off-limit border width",
-    vf_off_stroke_width: "VF-off border width",
-    channel_stroke_width: "Channel width",
-    gate_area_stroke_width: "Gate area border width",
-    dock_stroke_width: "Dock border width",
-    custom_area_stroke_width: "Custom area border width",
-  };
-
-  function walk(items, callback) {
-    for (const item of Array.isArray(items) ? items : []) {
-      callback(item);
-      if (Array.isArray(item?.schema)) walk(item.schema, callback);
-    }
-  }
-
-  function findByName(items, name) {
-    let match = null;
-    walk(items, (item) => {
-      if (!match && item?.name === name) match = item;
-    });
-    return match;
-  }
-
-  function widthSelector() {
-    return { number: { min: 0.5, max: 6, step: 0.5, mode: "slider" } };
-  }
-
-  const previousStub = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
-  if (previousStub) {
-    Card.getStubConfig = function beta12StubConfig(...args) {
-      return { ...previousStub(...args), ...VISUAL_DEFAULTS };
-    };
-  }
-
-  const previousGetConfigForm = Card.getConfigForm;
-  if (typeof previousGetConfigForm === "function") {
-    Card.getConfigForm = function beta12GetConfigForm(...args) {
-      const form = previousGetConfigForm.apply(this, args);
-      if (!form || !Array.isArray(form.schema)) return form;
-
-      walk(form.schema, (field) => {
-        if (Object.prototype.hasOwnProperty.call(VISUAL_DEFAULTS, field?.name)) {
-          field.default = VISUAL_DEFAULTS[field.name];
-        }
-        if (COLOR_FIELDS.has(field?.name)) {
-          field.selector = {
-            ...field.selector,
-            text: { ...(field?.selector?.text || {}), type: "color" },
-          };
-        }
-        if (WIDTH_FIELDS.includes(field?.name)) {
-          field.selector = widthSelector();
-        }
+  nmRuntimePatch17: {
+    const Card = __navimowerRuntimeCard;
+    const VISUAL_DEFAULTS = Object.freeze({
+        map_background_color: "#ffffff",
+        map_legend_opacity: 0.10,
+        zone_label_font_size: 20,
+        zone_label_opacity: 0.75,
+        zone_fill_color: "#81c784",
+        zone_fill_opacity: 0.20,
+        zone_stroke_color: "#43a047",
+        trail_color: "#43a047",
+        trail_opacity: 0.50,
+        off_limit_color: "#FF5A00",
+        vf_off_color: "#2F80ED",
+        channel_color: "#808080",
+        gate_area_color: "#8e24aa",
+        dock_color: "#37474f",
+        custom_area_color: "#8e24aa",
+        custom_area_fill_opacity: 0.10,
+        mower_scale: 1.2,
+        dock_scale: 1.1,
+        zone_marker_scale: 1.1,
+        zone_stroke_width: 1.5,
+        off_limit_stroke_width: 1.5,
+        vf_off_stroke_width: 1.5,
+        channel_stroke_width: 1.5,
+        gate_area_stroke_width: 1.5,
+        dock_stroke_width: 1.5,
+        custom_area_stroke_width: 1.5,
       });
-
-      const appearance = findByName(form.schema, "appearance");
-      const appearanceGrid = findByName(appearance?.schema || [], "appearance_grid")
-        || (Array.isArray(appearance?.schema) ? appearance.schema.find((item) => item?.type === "grid") : null);
-      if (appearanceGrid?.schema) {
-        for (const name of WIDTH_FIELDS) {
-          if (!findByName(form.schema, name)) {
-            appearanceGrid.schema.push({ name, default: VISUAL_DEFAULTS[name], selector: widthSelector() });
-          }
+    
+      const COLOR_FIELDS = new Set([
+        "map_background_color",
+        "zone_fill_color",
+        "zone_stroke_color",
+        "trail_color",
+        "off_limit_color",
+        "vf_off_color",
+        "channel_color",
+        "gate_area_color",
+        "dock_color",
+        "custom_area_color",
+      ]);
+    
+      const WIDTH_FIELDS = [
+        "zone_stroke_width",
+        "off_limit_stroke_width",
+        "vf_off_stroke_width",
+        "channel_stroke_width",
+        "gate_area_stroke_width",
+        "dock_stroke_width",
+        "custom_area_stroke_width",
+      ];
+    
+      const LABELS = {
+        zone_stroke_width: "Zone border width",
+        off_limit_stroke_width: "Off-limit border width",
+        vf_off_stroke_width: "VF-off border width",
+        channel_stroke_width: "Channel width",
+        gate_area_stroke_width: "Gate area border width",
+        dock_stroke_width: "Dock border width",
+        custom_area_stroke_width: "Custom area border width",
+      };
+    
+      function walk(items, callback) {
+        for (const item of Array.isArray(items) ? items : []) {
+          callback(item);
+          if (Array.isArray(item?.schema)) walk(item.schema, callback);
         }
       }
-
-      const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-      form.computeLabel = (schema, data) => LABELS[schema?.name] || baseComputeLabel?.(schema, data) || schema?.name || "";
-      return form;
-    };
-  }
-
-  const proto = Card.prototype;
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta12SetConfig(config) {
-      const next = { ...(config || {}) };
-      for (const [key, value] of Object.entries(VISUAL_DEFAULTS)) {
-        if (next[key] === undefined || next[key] === null || next[key] === "") next[key] = value;
+    
+      function findByName(items, name) {
+        let match = null;
+        walk(items, (item) => {
+          if (!match && item?.name === name) match = item;
+        });
+        return match;
       }
-      return previousSetConfig.call(this, next);
-    };
-  }
-
-  function finiteWidth(value, fallback = 1.5) {
-    const parsed = Number(value);
-    return Math.min(6, Math.max(0.5, Number.isFinite(parsed) ? parsed : fallback));
-  }
-
-  function directChildrenByTag(root, tagName) {
-    if (!root?.children) return [];
-    const expected = String(tagName).toLowerCase();
-    return Array.from(root.children).filter((element) => String(element?.tagName || "").toLowerCase() === expected);
-  }
-
-  function syncStrokeWidths(card) {
-    const details = card?._detailsEl;
-    const config = card?._config;
-    if (!details || !config) return;
-
-    const zoneWidth = finiteWidth(config.zone_stroke_width);
-    const offLimitWidth = finiteWidth(config.off_limit_stroke_width);
-    const vfOffWidth = finiteWidth(config.vf_off_stroke_width);
-    const channelWidth = finiteWidth(config.channel_stroke_width);
-    const gateWidth = finiteWidth(config.gate_area_stroke_width);
-    const dockWidth = finiteWidth(config.dock_stroke_width);
-
-    for (const line of directChildrenByTag(details, "line")) {
-      line.setAttribute("stroke-width", String(zoneWidth));
-    }
-
-    const polygons = directChildrenByTag(details, "polygon");
-    const offLimitCount = Array.isArray(card?._layout?.offLimits) ? card._layout.offLimits.length : 0;
-    const vfOffCount = config.show_vf_off_areas === false || !Array.isArray(card?._layout?.vfOff) ? 0 : card._layout.vfOff.length;
-    polygons.slice(0, offLimitCount).forEach((element) => element.setAttribute("stroke-width", String(offLimitWidth)));
-    polygons.slice(offLimitCount, offLimitCount + vfOffCount).forEach((element) => element.setAttribute("stroke-width", String(vfOffWidth)));
-
-    for (const polyline of directChildrenByTag(details, "polyline")) {
-      polyline.setAttribute("stroke-width", String(channelWidth));
-    }
-    for (const rect of directChildrenByTag(details, "rect")) {
-      rect.setAttribute("stroke-width", String(gateWidth));
-    }
-
-    const dock = details.querySelector?.(".nm-dock-marker");
-    dock?.querySelectorAll?.("[stroke]")?.forEach?.((element) => {
-      if (String(element.getAttribute("stroke") || "").toLowerCase() !== "none") {
-        element.setAttribute("stroke-width", String(dockWidth));
+    
+      function widthSelector() {
+        return { number: { min: 0.5, max: 6, step: 0.5, mode: "slider" } };
       }
-    });
+    
+      const previousStub = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
+      if (previousStub) {
+        Card.getStubConfig = function beta12StubConfig(...args) {
+          return { ...previousStub(...args), ...VISUAL_DEFAULTS };
+        };
+      }
+    
+      const previousGetConfigForm = Card.getConfigForm;
+      if (typeof previousGetConfigForm === "function") {
+        Card.getConfigForm = function beta12GetConfigForm(...args) {
+          const form = previousGetConfigForm.apply(this, args);
+          if (!form || !Array.isArray(form.schema)) return form;
+    
+          walk(form.schema, (field) => {
+            if (Object.prototype.hasOwnProperty.call(VISUAL_DEFAULTS, field?.name)) {
+              field.default = VISUAL_DEFAULTS[field.name];
+            }
+            if (COLOR_FIELDS.has(field?.name)) {
+              field.selector = {
+                ...field.selector,
+                text: { ...(field?.selector?.text || {}), type: "color" },
+              };
+            }
+            if (WIDTH_FIELDS.includes(field?.name)) {
+              field.selector = widthSelector();
+            }
+          });
+    
+          const appearance = findByName(form.schema, "appearance");
+          const appearanceGrid = findByName(appearance?.schema || [], "appearance_grid")
+            || (Array.isArray(appearance?.schema) ? appearance.schema.find((item) => item?.type === "grid") : null);
+          if (appearanceGrid?.schema) {
+            for (const name of WIDTH_FIELDS) {
+              if (!findByName(form.schema, name)) {
+                appearanceGrid.schema.push({ name, default: VISUAL_DEFAULTS[name], selector: widthSelector() });
+              }
+            }
+          }
+    
+          const baseComputeLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+          form.computeLabel = (schema, data) => LABELS[schema?.name] || baseComputeLabel?.(schema, data) || schema?.name || "";
+          return form;
+        };
+      }
+    
+      const proto = Card.prototype;
+      const previousSetConfig = proto.setConfig;
+      if (typeof previousSetConfig === "function") {
+        proto.setConfig = function beta12SetConfig(config) {
+          const next = { ...(config || {}) };
+          for (const [key, value] of Object.entries(VISUAL_DEFAULTS)) {
+            if (next[key] === undefined || next[key] === null || next[key] === "") next[key] = value;
+          }
+          return previousSetConfig.call(this, next);
+        };
+      }
+    
+      function finiteWidth(value, fallback = 1.5) {
+        const parsed = Number(value);
+        return Math.min(6, Math.max(0.5, Number.isFinite(parsed) ? parsed : fallback));
+      }
+    
+      function directChildrenByTag(root, tagName) {
+        if (!root?.children) return [];
+        const expected = String(tagName).toLowerCase();
+        return Array.from(root.children).filter((element) => String(element?.tagName || "").toLowerCase() === expected);
+      }
+    
+      function syncStrokeWidths(card) {
+        const details = card?._detailsEl;
+        const config = card?._config;
+        if (!details || !config) return;
+    
+        const zoneWidth = finiteWidth(config.zone_stroke_width);
+        const offLimitWidth = finiteWidth(config.off_limit_stroke_width);
+        const vfOffWidth = finiteWidth(config.vf_off_stroke_width);
+        const channelWidth = finiteWidth(config.channel_stroke_width);
+        const gateWidth = finiteWidth(config.gate_area_stroke_width);
+        const dockWidth = finiteWidth(config.dock_stroke_width);
+    
+        for (const line of directChildrenByTag(details, "line")) {
+          line.setAttribute("stroke-width", String(zoneWidth));
+        }
+    
+        const polygons = directChildrenByTag(details, "polygon");
+        const offLimitCount = Array.isArray(card?._layout?.offLimits) ? card._layout.offLimits.length : 0;
+        const vfOffCount = config.show_vf_off_areas === false || !Array.isArray(card?._layout?.vfOff) ? 0 : card._layout.vfOff.length;
+        polygons.slice(0, offLimitCount).forEach((element) => element.setAttribute("stroke-width", String(offLimitWidth)));
+        polygons.slice(offLimitCount, offLimitCount + vfOffCount).forEach((element) => element.setAttribute("stroke-width", String(vfOffWidth)));
+    
+        for (const polyline of directChildrenByTag(details, "polyline")) {
+          polyline.setAttribute("stroke-width", String(channelWidth));
+        }
+        for (const rect of directChildrenByTag(details, "rect")) {
+          rect.setAttribute("stroke-width", String(gateWidth));
+        }
+    
+        const dock = details.querySelector?.(".nm-dock-marker");
+        dock?.querySelectorAll?.("[stroke]")?.forEach?.((element) => {
+          if (String(element.getAttribute("stroke") || "").toLowerCase() !== "none") {
+            element.setAttribute("stroke-width", String(dockWidth));
+          }
+        });
+      }
+    
+      const previousStaticCacheKey = proto._staticCacheKey;
+      if (typeof previousStaticCacheKey === "function") {
+        proto._staticCacheKey = function beta12StaticCacheKey(...args) {
+          const base = previousStaticCacheKey.apply(this, args);
+          return [base, ...WIDTH_FIELDS.map((name) => this?._config?.[name] ?? VISUAL_DEFAULTS[name])].join("|");
+        };
+      }
+    
+      const previousApplyStaticLayers = proto._applyStaticLayers;
+      if (typeof previousApplyStaticLayers === "function") {
+        proto._applyStaticLayers = function beta12ApplyStaticLayers(...args) {
+          const result = previousApplyStaticLayers.apply(this, args);
+          syncStrokeWidths(this);
+          return result;
+        };
+      }
+    
+      const previousRenderStatic = proto._renderStatic;
+      if (typeof previousRenderStatic === "function") {
+        proto._renderStatic = function beta12RenderStatic(...args) {
+          const result = previousRenderStatic.apply(this, args);
+          syncStrokeWidths(this);
+          return result;
+        };
+      }
   }
 
-  const previousStaticCacheKey = proto._staticCacheKey;
-  if (typeof previousStaticCacheKey === "function") {
-    proto._staticCacheKey = function beta12StaticCacheKey(...args) {
-      const base = previousStaticCacheKey.apply(this, args);
-      return [base, ...WIDTH_FIELDS.map((name) => this?._config?.[name] ?? VISUAL_DEFAULTS[name])].join("|");
-    };
-  }
-
-  const previousApplyStaticLayers = proto._applyStaticLayers;
-  if (typeof previousApplyStaticLayers === "function") {
-    proto._applyStaticLayers = function beta12ApplyStaticLayers(...args) {
-      const result = previousApplyStaticLayers.apply(this, args);
-      syncStrokeWidths(this);
-      return result;
-    };
-  }
-
-  const previousRenderStatic = proto._renderStatic;
-  if (typeof previousRenderStatic === "function") {
-    proto._renderStatic = function beta12RenderStatic(...args) {
-      const result = previousRenderStatic.apply(this, args);
-      syncStrokeWidths(this);
-      return result;
-    };
-  }
-
-})();
 
 
 // 0.3.5-beta13: legend visibility follows map toggles and managed schedule gets an enable switch.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-
-  function hasCustomAreas(card) {
-    const apiAreas = Array.isArray(card?._mapPayload?.custom_areas) ? card._mapPayload.custom_areas : [];
-    const entityAreas = Array.isArray(card?._customAreaEntities0342) ? card._customAreaEntities0342 : [];
-    return apiAreas.length > 0 || entityAreas.length > 0;
-  }
-
-  // The core legend receives existence flags, but visibility is a card setting.
-  // Keep the legend in lock-step with what the map is actually allowed to draw.
-  proto._legend = function beta13Legend(hasGateAreas, hasChannels) {
-    const rows = [
-      [this._config.trail_color, "Mowed"],
-      [this._config.off_limit_color, "Off-limit"],
-    ];
-    if (this._config.show_vf_off_areas !== false) rows.push([this._config.vf_off_color, "VF-off"]);
-    if (hasChannels && this._config.show_channels !== false) rows.push([this._config.channel_color, "Channel"]);
-    if (hasGateAreas && this._config.show_gate_areas !== false) rows.push([this._config.gate_area_color, "Gate area"]);
-    if (this._config.show_custom_areas !== false && hasCustomAreas(this)) rows.push([this._config.custom_area_color, "Custom area"]);
-
-    const fontSize = 19;
-    const rowHeight = 30;
-    const height = rows.length * rowHeight + 18;
-    const opacity = clamp(finiteNumber(this._config.map_legend_opacity, 0.58), 0, 1);
-    let result = '<g><rect x="14" y="14" width="158" height="' + height + '" rx="10" fill="var(--card-background-color, #fff)" fill-opacity="' + opacity.toFixed(2) + '" stroke="#9e9e9e" stroke-opacity=".25"/>';
-    rows.forEach(([color, label], index) => {
-      const y = 33 + index * rowHeight;
-      result += '<rect x="28" y="' + (y - 10) + '" width="18" height="18" rx="3" fill="' + escapeHtml(color) + '"/>';
-      result += '<text x="56" y="' + (y + 5) + '" font-family="sans-serif" font-size="' + fontSize + '" font-weight="600" fill="var(--primary-text-color, #263238)">' + escapeHtml(label) + '</text>';
-    });
-    return result + '</g>';
-  };
-
-  const previousStaticCacheKey = proto._staticCacheKey;
-  if (typeof previousStaticCacheKey === "function") {
-    proto._staticCacheKey = function beta13StaticCacheKey(...args) {
-      const base = previousStaticCacheKey.apply(this, args);
-      const customCount = (Array.isArray(this?._mapPayload?.custom_areas) ? this._mapPayload.custom_areas.length : 0)
-        + (Array.isArray(this?._customAreaEntities0342) ? this._customAreaEntities0342.length : 0);
-      return [base, this?._config?.show_custom_areas !== false, this?._config?.custom_area_color || "", customCount].join("|");
-    };
-  }
-
-  function managedSwitchId(card) {
-    return card?._beta2SchedulerIds?.managedSwitch
-      || card?._beta10SchedulerEntities?.managedSwitch
-      || card?._beta6SchedulerEntities?.managedSwitch
-      || card?._beta5SchedulerEntities?.managedSwitch
-      || null;
-  }
-
-  function injectScheduleToggle(card) {
-    if (!card?._beta6ManagedOpen && !card?._beta2ScheduleOpen) return;
-    const root = card._modalHostEl?.querySelector?.("[data-beta11-root], [data-beta2-root]");
-    if (!root || root.querySelector("[data-beta13-schedule-enable]")) return;
-
-    const scroller = root.querySelector("[data-beta11-scroll], [data-beta2-scroll]");
-    if (!scroller) return;
-    const entityId = managedSwitchId(card);
-    const entity = entityId ? card._hass?.states?.[entityId] : null;
-    const enabled = String(entity?.state || "").toLowerCase() === "on";
-    const available = Boolean(entityId && entity && entity.state !== "unavailable" && entity.state !== "unknown");
-
-    const section = document.createElement("section");
-    section.className = root.matches("[data-beta11-root]") ? "nm-beta11-section nm-beta13-enable-section" : "nm-beta2-section nm-beta13-enable-section";
-    section.setAttribute("data-beta13-schedule-enable", "");
-    section.innerHTML =
-      '<style>' +
-        '.nm-beta13-enable-section{padding-top:10px!important;padding-bottom:8px!important;border-bottom:1px solid var(--divider-color);}' +
-        '.nm-beta13-enable-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px;}' +
-        '.nm-beta13-enable-copy{min-width:0;}' +
-        '.nm-beta13-enable-title{font-weight:650;}' +
-        '.nm-beta13-enable-state{margin-top:2px;color:var(--secondary-text-color);font-size:.9em;}' +
-      '</style>' +
-      '<div class="nm-beta13-enable-row">' +
-        '<div class="nm-beta13-enable-copy"><div class="nm-beta13-enable-title">Schedule</div><div class="nm-beta13-enable-state" data-beta13-enable-state>' + (available ? (enabled ? 'On' : 'Off') : 'Unavailable') + '</div></div>' +
-        '<ha-switch data-beta13-enable-switch' + (available ? '' : ' disabled') + '></ha-switch>' +
-      '</div>';
-
-    scroller.prepend(section);
-    const toggle = section.querySelector("[data-beta13-enable-switch]");
-    if (toggle) toggle.checked = enabled;
-    toggle?.addEventListener("change", async () => {
-      if (!entityId || !available) return;
-      const requested = Boolean(toggle.checked);
-      const stateLabel = section.querySelector("[data-beta13-enable-state]");
-      toggle.disabled = true;
-      if (stateLabel) stateLabel.textContent = requested ? "Turning on…" : "Turning off…";
-      try {
-        await card._hass.callService("switch", requested ? "turn_on" : "turn_off", { entity_id: entityId });
-        if (stateLabel) stateLabel.textContent = requested ? "On" : "Off";
-      } catch (error) {
-        console.warn("[Navimower Map Card] schedule toggle failed", error);
-        toggle.checked = !requested;
-        if (stateLabel) stateLabel.textContent = !requested ? "On" : "Off";
-      } finally {
-        toggle.disabled = false;
+  nmRuntimePatch18: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+    
+      function hasCustomAreas(card) {
+        const apiAreas = Array.isArray(card?._mapPayload?.custom_areas) ? card._mapPayload.custom_areas : [];
+        const entityAreas = Array.isArray(card?._customAreaEntities0342) ? card._customAreaEntities0342 : [];
+        return apiAreas.length > 0 || entityAreas.length > 0;
       }
-    });
-  }
-
-  const previousRenderDialog = proto._renderDialog;
-  if (typeof previousRenderDialog === "function") {
-    proto._renderDialog = function beta13RenderDialog(...args) {
-      const result = previousRenderDialog.apply(this, args);
-      injectScheduleToggle(this);
-      return result;
-    };
-  }
-
-  const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (previousHass?.set) {
-    Object.defineProperty(proto, "hass", {
-      configurable: true,
-      get: previousHass.get,
-      set(value) {
-        previousHass.set.call(this, value);
-        const root = this._modalHostEl?.querySelector?.("[data-beta13-schedule-enable]");
-        if (!root) return;
-        const entityId = managedSwitchId(this);
-        const entity = entityId ? this._hass?.states?.[entityId] : null;
+    
+      // The core legend receives existence flags, but visibility is a card setting.
+      // Keep the legend in lock-step with what the map is actually allowed to draw.
+      proto._legend = function beta13Legend(hasGateAreas, hasChannels) {
+        const rows = [
+          [this._config.trail_color, "Mowed"],
+          [this._config.off_limit_color, "Off-limit"],
+        ];
+        if (this._config.show_vf_off_areas !== false) rows.push([this._config.vf_off_color, "VF-off"]);
+        if (hasChannels && this._config.show_channels !== false) rows.push([this._config.channel_color, "Channel"]);
+        if (hasGateAreas && this._config.show_gate_areas !== false) rows.push([this._config.gate_area_color, "Gate area"]);
+        if (this._config.show_custom_areas !== false && hasCustomAreas(this)) rows.push([this._config.custom_area_color, "Custom area"]);
+    
+        const fontSize = 19;
+        const rowHeight = 30;
+        const height = rows.length * rowHeight + 18;
+        const opacity = clamp(finiteNumber(this._config.map_legend_opacity, 0.58), 0, 1);
+        let result = '<g><rect x="14" y="14" width="158" height="' + height + '" rx="10" fill="var(--card-background-color, #fff)" fill-opacity="' + opacity.toFixed(2) + '" stroke="#9e9e9e" stroke-opacity=".25"/>';
+        rows.forEach(([color, label], index) => {
+          const y = 33 + index * rowHeight;
+          result += '<rect x="28" y="' + (y - 10) + '" width="18" height="18" rx="3" fill="' + escapeHtml(color) + '"/>';
+          result += '<text x="56" y="' + (y + 5) + '" font-family="sans-serif" font-size="' + fontSize + '" font-weight="600" fill="var(--primary-text-color, #263238)">' + escapeHtml(label) + '</text>';
+        });
+        return result + '</g>';
+      };
+    
+      const previousStaticCacheKey = proto._staticCacheKey;
+      if (typeof previousStaticCacheKey === "function") {
+        proto._staticCacheKey = function beta13StaticCacheKey(...args) {
+          const base = previousStaticCacheKey.apply(this, args);
+          const customCount = (Array.isArray(this?._mapPayload?.custom_areas) ? this._mapPayload.custom_areas.length : 0)
+            + (Array.isArray(this?._customAreaEntities0342) ? this._customAreaEntities0342.length : 0);
+          return [base, this?._config?.show_custom_areas !== false, this?._config?.custom_area_color || "", customCount].join("|");
+        };
+      }
+    
+      function managedSwitchId(card) {
+        return card?._beta2SchedulerIds?.managedSwitch
+          || card?._beta10SchedulerEntities?.managedSwitch
+          || card?._beta6SchedulerEntities?.managedSwitch
+          || card?._beta5SchedulerEntities?.managedSwitch
+          || null;
+      }
+    
+      function injectScheduleToggle(card) {
+        if (!card?._beta6ManagedOpen && !card?._beta2ScheduleOpen) return;
+        const root = card._modalHostEl?.querySelector?.("[data-beta11-root], [data-beta2-root]");
+        if (!root || root.querySelector("[data-beta13-schedule-enable]")) return;
+    
+        const scroller = root.querySelector("[data-beta11-scroll], [data-beta2-scroll]");
+        if (!scroller) return;
+        const entityId = managedSwitchId(card);
+        const entity = entityId ? card._hass?.states?.[entityId] : null;
         const enabled = String(entity?.state || "").toLowerCase() === "on";
-        const toggle = root.querySelector?.("[data-beta13-enable-switch]");
-        const label = root.querySelector?.("[data-beta13-enable-state]");
-        if (toggle && !toggle.disabled) toggle.checked = enabled;
-        if (label && toggle && !toggle.disabled) label.textContent = entity ? (enabled ? "On" : "Off") : "Unavailable";
-      },
-    });
+        const available = Boolean(entityId && entity && entity.state !== "unavailable" && entity.state !== "unknown");
+    
+        const section = document.createElement("section");
+        section.className = root.matches("[data-beta11-root]") ? "nm-beta11-section nm-beta13-enable-section" : "nm-beta2-section nm-beta13-enable-section";
+        section.setAttribute("data-beta13-schedule-enable", "");
+        section.innerHTML =
+          '<style>' +
+            '.nm-beta13-enable-section{padding-top:10px!important;padding-bottom:8px!important;border-bottom:1px solid var(--divider-color);}' +
+            '.nm-beta13-enable-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px;}' +
+            '.nm-beta13-enable-copy{min-width:0;}' +
+            '.nm-beta13-enable-title{font-weight:650;}' +
+            '.nm-beta13-enable-state{margin-top:2px;color:var(--secondary-text-color);font-size:.9em;}' +
+          '</style>' +
+          '<div class="nm-beta13-enable-row">' +
+            '<div class="nm-beta13-enable-copy"><div class="nm-beta13-enable-title">Schedule</div><div class="nm-beta13-enable-state" data-beta13-enable-state>' + (available ? (enabled ? 'On' : 'Off') : 'Unavailable') + '</div></div>' +
+            '<ha-switch data-beta13-enable-switch' + (available ? '' : ' disabled') + '></ha-switch>' +
+          '</div>';
+    
+        scroller.prepend(section);
+        const toggle = section.querySelector("[data-beta13-enable-switch]");
+        if (toggle) toggle.checked = enabled;
+        toggle?.addEventListener("change", async () => {
+          if (!entityId || !available) return;
+          const requested = Boolean(toggle.checked);
+          const stateLabel = section.querySelector("[data-beta13-enable-state]");
+          toggle.disabled = true;
+          if (stateLabel) stateLabel.textContent = requested ? "Turning on…" : "Turning off…";
+          try {
+            await card._hass.callService("switch", requested ? "turn_on" : "turn_off", { entity_id: entityId });
+            if (stateLabel) stateLabel.textContent = requested ? "On" : "Off";
+          } catch (error) {
+            console.warn("[Navimower Map Card] schedule toggle failed", error);
+            toggle.checked = !requested;
+            if (stateLabel) stateLabel.textContent = !requested ? "On" : "Off";
+          } finally {
+            toggle.disabled = false;
+          }
+        });
+      }
+    
+      const previousRenderDialog = proto._renderDialog;
+      if (typeof previousRenderDialog === "function") {
+        proto._renderDialog = function beta13RenderDialog(...args) {
+          const result = previousRenderDialog.apply(this, args);
+          injectScheduleToggle(this);
+          return result;
+        };
+      }
+    
+      const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
+      if (previousHass?.set) {
+        Object.defineProperty(proto, "hass", {
+          configurable: true,
+          get: previousHass.get,
+          set(value) {
+            previousHass.set.call(this, value);
+            const root = this._modalHostEl?.querySelector?.("[data-beta13-schedule-enable]");
+            if (!root) return;
+            const entityId = managedSwitchId(this);
+            const entity = entityId ? this._hass?.states?.[entityId] : null;
+            const enabled = String(entity?.state || "").toLowerCase() === "on";
+            const toggle = root.querySelector?.("[data-beta13-enable-switch]");
+            const label = root.querySelector?.("[data-beta13-enable-state]");
+            if (toggle && !toggle.disabled) toggle.checked = enabled;
+            if (label && toggle && !toggle.disabled) label.textContent = entity ? (enabled ? "On" : "Off") : "Unavailable";
+          },
+        });
+      }
   }
 
-})();
 
 
 // 0.3.5-beta14: consistent card-dialog backdrop closing and schedule header alignment.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-
-  function attachBackdropClose(root, closeSelector, markerName) {
-    if (!root || root[markerName]) return;
-    root[markerName] = true;
-    root.addEventListener("click", (event) => {
-      if (event.target !== root) return;
-      root.querySelector(closeSelector)?.click();
-    });
+  nmRuntimePatch19: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+    
+      function attachBackdropClose(root, closeSelector, markerName) {
+        if (!root || root[markerName]) return;
+        root[markerName] = true;
+        root.addEventListener("click", (event) => {
+          if (event.target !== root) return;
+          root.querySelector(closeSelector)?.click();
+        });
+      }
+    
+      function polishSettings(card) {
+        const root = card?._modalHostEl?.querySelector?.("[data-beta8-settings-root]");
+        attachBackdropClose(root, "[data-beta8-settings-close]", "__navimowerBeta14SettingsBackdrop");
+      }
+    
+      function polishSchedule(card) {
+        const root = card?._modalHostEl?.querySelector?.("[data-beta11-root], [data-beta2-root]");
+        if (!root) return;
+    
+        const head = root.querySelector(".nm-schedule-dialog-head");
+        const copy = head?.firstElementChild;
+        const close = head?.querySelector(".nm-schedule-close");
+        if (head) head.style.alignItems = "flex-start";
+        if (copy && copy !== close) {
+          copy.style.flex = "1 1 auto";
+          copy.style.minWidth = "0";
+        }
+        if (close) {
+          close.style.marginLeft = "auto";
+          close.style.flex = "0 0 auto";
+        }
+    
+        attachBackdropClose(root, "[data-beta11-close], [data-beta2-close]", "__navimowerBeta14ScheduleBackdrop");
+      }
+    
+      function polishDialogs(card) {
+        polishSettings(card);
+        polishSchedule(card);
+      }
+    
+      const previousRenderDialog = proto._renderDialog;
+      if (typeof previousRenderDialog === "function") {
+        proto._renderDialog = function beta14RenderDialog(...args) {
+          const result = previousRenderDialog.apply(this, args);
+          polishDialogs(this);
+          globalThis.queueMicrotask?.(() => polishDialogs(this));
+          return result;
+        };
+      }
+    
+      const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
+      if (previousHass?.set) {
+        Object.defineProperty(proto, "hass", {
+          configurable: true,
+          get: previousHass.get,
+          set(value) {
+            previousHass.set.call(this, value);
+            polishDialogs(this);
+            globalThis.queueMicrotask?.(() => polishDialogs(this));
+          },
+        });
+      }
   }
 
-  function polishSettings(card) {
-    const root = card?._modalHostEl?.querySelector?.("[data-beta8-settings-root]");
-    attachBackdropClose(root, "[data-beta8-settings-close]", "__navimowerBeta14SettingsBackdrop");
-  }
-
-  function polishSchedule(card) {
-    const root = card?._modalHostEl?.querySelector?.("[data-beta11-root], [data-beta2-root]");
-    if (!root) return;
-
-    const head = root.querySelector(".nm-schedule-dialog-head");
-    const copy = head?.firstElementChild;
-    const close = head?.querySelector(".nm-schedule-close");
-    if (head) head.style.alignItems = "flex-start";
-    if (copy && copy !== close) {
-      copy.style.flex = "1 1 auto";
-      copy.style.minWidth = "0";
-    }
-    if (close) {
-      close.style.marginLeft = "auto";
-      close.style.flex = "0 0 auto";
-    }
-
-    attachBackdropClose(root, "[data-beta11-close], [data-beta2-close]", "__navimowerBeta14ScheduleBackdrop");
-  }
-
-  function polishDialogs(card) {
-    polishSettings(card);
-    polishSchedule(card);
-  }
-
-  const previousRenderDialog = proto._renderDialog;
-  if (typeof previousRenderDialog === "function") {
-    proto._renderDialog = function beta14RenderDialog(...args) {
-      const result = previousRenderDialog.apply(this, args);
-      polishDialogs(this);
-      globalThis.queueMicrotask?.(() => polishDialogs(this));
-      return result;
-    };
-  }
-
-  const previousHass = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (previousHass?.set) {
-    Object.defineProperty(proto, "hass", {
-      configurable: true,
-      get: previousHass.get,
-      set(value) {
-        previousHass.set.call(this, value);
-        polishDialogs(this);
-        globalThis.queueMicrotask?.(() => polishDialogs(this));
-      },
-    });
-  }
-
-})();
 
 // 0.3.6-beta1: opt-in multi-mower site view.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  const SITE_REFRESH_MS = 60_000;
-  const MAP_REFRESH_ACTIVE_MS = 5_000;
-  const MAP_REFRESH_IDLE_MS = 30_000;
-  const SESSION_REFRESH_MS = 30_000;
-  const MULTI_REQUEST_CONCURRENCY = 2;
-  const MULTI_RENDER_RETRY_MS = 30_000;
-  const MULTI_RENDER_CACHE_LIMIT = 96;
-
-  const esc = (value) => String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-
-  const finite036 = (value, fallback = null) => {
-    const number = Number(value);
-    return Number.isFinite(number) ? number : fallback;
-  };
-
-  const clamp036 = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, finite036(value, minimum)));
-
-  const asBool036 = (value, fallback = false) => {
-    if (value === undefined || value === null || value === "") return fallback;
-    if (typeof value === "boolean") return value;
-    const text = String(value).trim().toLowerCase();
-    if (["true", "1", "yes", "on"].includes(text)) return true;
-    if (["false", "0", "no", "off"].includes(text)) return false;
-    return fallback;
-  };
-
-  const state036 = (card, entityId) => entityId ? card?._hass?.states?.[entityId] || null : null;
-  const entityValue036 = (card, entityId) => {
-    const value = state036(card, entityId)?.state;
-    if (value === undefined || value === null || ["unknown", "unavailable"].includes(String(value).toLowerCase())) return null;
-    return finite036(value, null);
-  };
-
-  const date036 = (value) => {
-    if (value instanceof Date && Number.isFinite(value.getTime())) return value;
-    if (value === undefined || value === null || value === "") return null;
-    if (typeof value === "number" || /^\d+(?:\.\d+)?$/.test(String(value).trim())) {
-      let stamp = Number(value);
-      if (!Number.isFinite(stamp) || stamp <= 0) return null;
-      if (stamp < 10_000_000_000) stamp *= 1000;
-      const parsed = new Date(stamp);
-      return Number.isFinite(parsed.getTime()) ? parsed : null;
-    }
-    const parsed = new Date(value);
-    return Number.isFinite(parsed.getTime()) ? parsed : null;
-  };
-
-  const sessionId036 = (session) => String(session?.id ?? session?.session_id ?? "");
-
-  const dateKeyInZone036 = (value, timeZone) => {
-    const date = date036(value);
-    if (!date) return null;
-    try {
-      const parts = new Intl.DateTimeFormat("en", {
-        timeZone: timeZone || undefined,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit"
-      }).formatToParts(date);
-      const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-      return values.year + "-" + values.month + "-" + values.day;
-    } catch (_error) {
-      const local = new Date(date);
-      local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
-      return local.toISOString().slice(0, 10);
-    }
-  };
-
-  const selectedDayKey036 = (card, offset) => {
-    const timeZone = card?._hass?.config?.time_zone || card?._hass?.locale?.time_zone || undefined;
-    const todayKey = dateKeyInZone036(new Date(), timeZone);
-    if (!todayKey) return null;
-    const [year, month, day] = todayKey.split("-").map(Number);
-    const selected = new Date(Date.UTC(year, month - 1, day - Math.max(0, Number(offset) || 0)));
-    return selected.toISOString().slice(0, 10);
-  };
-
-  const sessionsForDay036 = (card, sessions, offset) => {
-    const timeZone = card?._hass?.config?.time_zone || card?._hass?.locale?.time_zone || undefined;
-    const selected = selectedDayKey036(card, offset);
-    if (!selected) return [];
-    return (Array.isArray(sessions) ? sessions : []).filter((session) => {
-      const from = date036(session?.started_at ?? session?.start ?? session?.start_time ?? session?.started_at_ms);
-      const to = date036(session?.ended_at ?? session?.end ?? session?.end_time ?? session?.ended_at_ms) || (session?.active ? new Date() : from);
-      const fromKey = dateKeyInZone036(from, timeZone);
-      const toKey = dateKeyInZone036(to, timeZone);
-      return Boolean(fromKey && toKey && fromKey <= selected && toKey >= selected);
-    });
-  };
-
-  const apiPath036 = (path) => String(path || "").replace(/^\/api\//, "").replace(/^\/+/, "");
-
-  const addLightweightQuery036 = (path) => {
-    const text = String(path || "");
-    if (!text) return text;
-    const separator = text.includes("?") ? "&" : "?";
-    return text + separator + "include_sessions=0&include_" + "daily" + "_trails=0&include_current_cycle=0";
-  };
-
-  const anchorEntry036 = (card) => {
-    const direct = card?._mapPayload?.frontend?.entry_id;
-    if (direct) return String(direct);
-    let path = null;
-    try { path = card?._apiPath?.(); } catch (_error) { path = null; }
-    const match = String(path || "").match(/\/api\/navimower\/map\/([^/?#]+)/);
-    return match ? decodeURIComponent(match[1]) : null;
-  };
-
-  const sitePath036 = (card) => {
-    const fromPayload = card?._mapPayload?.frontend?.site_api_path || card?._mapPayload?.site_api_path;
-    if (fromPayload) return String(fromPayload);
-    const entryId = anchorEntry036(card);
-    return entryId ? "/api/navimower/site/" + encodeURIComponent(entryId) : null;
-  };
-
-  const preferenceKey036 = (card) => {
-    const identity = anchorEntry036(card) || card?._resolved?.mower_entity || card?._config?.entity;
-    return identity ? "navimower-map-card:multi-mower:" + identity : null;
-  };
-
-  const ensurePreference036 = (card) => {
-    card._multi036PreferenceKey = preferenceKey036(card);
-    card._multi036PreferenceLoaded = true;
-    card._multi036Requested = asBool036(card?._config?.multi_mower, false);
-  };
-
-  const savePreference036 = (_card) => {};
-
-  const siteAvailable036 = (card) => Boolean(card?._multi036Site?.multi_mower && card?._multi036Site?.member_order === "west_to_east" && (card._multi036Site?.members || []).length >= 2);
-  const multiActive036 = (card) => {
-    ensurePreference036(card);
-    return Boolean(card?._multi036Requested && siteAvailable036(card));
-  };
-
-  const memberFrontend036 = (member) => member?.frontend || {};
-  const memberEntities036 = (member) => memberFrontend036(member)?.entities || {};
-  const memberDevice036 = (member) => memberFrontend036(member)?.device_id || null;
-  const memberMapPath036 = (member) => memberFrontend036(member)?.map_api_path || member?.map_api_path || null;
-  const memberSessionsPath036 = (member) => memberFrontend036(member)?.sessions_api_path || null;
-  const memberRenderTemplate036 = (member) => memberFrontend036(member)?.session_render_api_path_template || null;
-
-  const memberById036 = (card, entryId) => (card?._multi036Site?.members || []).find((member) => String(member?.entry_id) === String(entryId)) || null;
-
-  const memberState036 = (card, entryId) => {
-    if (!(card._multi036Members instanceof Map)) card._multi036Members = new Map();
-    const key = String(entryId);
-    if (!card._multi036Members.has(key)) card._multi036Members.set(key, { map: null, sessions: [], mapAt: 0, sessionsAt: 0, error: null, command: null });
-    return card._multi036Members.get(key);
-  };
-
-  const resetSchedulerCaches036 = (card) => {
-    for (const key of [
-      "_beta5SchedulerEntities", "_beta6SchedulerEntities", "_beta10SchedulerEntities",
-      "_beta10ScheduleDeviceId", "_beta10SchedulerDiscoveryAt", "_beta10SchedulerDiscoveryKey",
-      "_beta2SchedulerIds", "_beta2SchedulerEntities", "_beta2ScheduleStatus", "_beta2ScheduleDraft"
-    ]) card[key] = null;
-  };
-
-  const setDialogMember036 = (card, member) => {
-    card._multi036DialogMember = member || null;
-    resetSchedulerCaches036(card);
-  };
-
-  const originalMowerEntity036 = proto._mowerEntity;
-  if (typeof originalMowerEntity036 === "function") {
-    proto._mowerEntity = function multi036MowerEntity(...args) {
-      const member = this._multi036DialogMember || this._multi036ActionMember;
-      const entityId = memberEntities036(member)?.mower;
-      return entityId || originalMowerEntity036.apply(this, args);
-    };
-  }
-
-  const originalMowerDevice036 = proto._mowerDeviceId;
-  if (typeof originalMowerDevice036 === "function") {
-    proto._mowerDeviceId = function multi036MowerDevice(...args) {
-      const member = this._multi036DialogMember || this._multi036ActionMember;
-      return memberDevice036(member) || originalMowerDevice036.apply(this, args);
-    };
-  }
-
-  const originalApiPath036 = proto._apiPath;
-  if (typeof originalApiPath036 === "function") {
-    proto._apiPath = function multi036ApiPath(...args) {
-      const member = this._multi036DialogMember || this._multi036ActionMember;
-      return memberMapPath036(member) || originalApiPath036.apply(this, args);
-    };
-  }
-
-  const originalScheduleEntity036 = proto._scheduleEntity;
-  if (typeof originalScheduleEntity036 === "function") {
-    proto._scheduleEntity = function multi036ScheduleEntity(...args) {
-      const member = this._multi036DialogMember;
-      if (member) return memberEntities036(member)?.native_schedule_data || null;
-      return originalScheduleEntity036.apply(this, args);
-    };
-  }
-
-  const originalScheduleSwitchEntity036 = proto._scheduleSwitchEntity;
-  if (typeof originalScheduleSwitchEntity036 === "function") {
-    proto._scheduleSwitchEntity = function multi036ScheduleSwitchEntity(...args) {
-      const member = this._multi036DialogMember;
-      if (member) return memberEntities036(member)?.native_schedule || null;
-      return originalScheduleSwitchEntity036.apply(this, args);
-    };
-  }
-
-  const originalAvailableZones036 = proto._availableMowZones;
-  if (typeof originalAvailableZones036 === "function") {
-    proto._availableMowZones = function multi036AvailableZones(...args) {
-      const member = this._multi036DialogMember;
-      if (!member) return originalAvailableZones036.apply(this, args);
-      const payload = memberState036(this, member.entry_id).map;
-      const zones = Array.isArray(payload?.map?.zones) ? payload.map.zones : [];
-      return zones
-        .filter((zone) => zone && zone.id !== undefined && zone.id !== null)
-        .map((zone) => ({ id: Number(zone.id), name: zone.name || "Zone " + zone.id }))
-        .filter((zone) => Number.isFinite(zone.id));
-    };
-  }
-
-  const normalizeSite036 = (payload) => {
-    const site = payload && typeof payload === "object" ? { ...payload } : {};
-    const members = (Array.isArray(site.members) ? site.members : []).filter((member) => member && member.entry_id);
-    members.sort((left, right) => {
-      const a = finite036(left.display_order, finite036(left.site_center?.east, 0));
-      const b = finite036(right.display_order, finite036(right.site_center?.east, 0));
-      return a - b || String(left.entry_id).localeCompare(String(right.entry_id));
-    });
-    site.members = members;
-    return site;
-  };
-
-  const callApi036 = async (card, path) => {
-    if (!path || !card?._hass?.callApi) return null;
-    return await card._hass.callApi("GET", apiPath036(path));
-  };
-
-  const currentGeneration036 = (card) => Number(card?._multi036Generation || 0);
-
-  const generationMatches036 = (card, generation) =>
-    currentGeneration036(card) === Number(generation);
-
-  const runLimited036 = async (items, limit, worker) => {
-    const queue = [...(items || [])];
-    const count = Math.max(1, Math.min(Number(limit) || 1, queue.length || 1));
-    await Promise.all(Array.from({ length: count }, async () => {
-      while (queue.length) {
-        const item = queue.shift();
-        await worker(item);
-      }
-    }));
-  };
-
-  const scheduleIdle036 = (callback) => {
-    if (typeof globalThis.requestIdleCallback === "function") {
-      return globalThis.requestIdleCallback(() => callback(), { timeout: 800 });
-    }
-    return globalThis.setTimeout(callback, 0);
-  };
-
-  const currentCyclePath036 = (path) => {
-    const clean = String(path || "").split(/[?#]/, 1)[0];
-    return clean ? clean + "?current_cycle_only=1" : null;
-  };
-
-  const cacheMultiRender036 = (card, key, render) => {
-    if (!(card._multi036RenderCache instanceof Map)) card._multi036RenderCache = new Map();
-    card._multi036RenderCache.delete(key);
-    card._multi036RenderCache.set(key, render);
-    while (card._multi036RenderCache.size > MULTI_RENDER_CACHE_LIMIT) {
-      card._multi036RenderCache.delete(card._multi036RenderCache.keys().next().value);
-    }
-  };
-
-  async function refreshMemberCurrentCycle036(card, member, generation) {
-    const state = memberState036(card, member.entry_id);
-    if (card._zoneArtifactsHandled?.(state.map, member.entry_id)) return;
-    const sourceKey = state.map?.vendor_trail_debug?.current_cycle_key;
-    if ((state.map?.current_cycle_render && (sourceKey == null || state.currentCycleSourceKey === sourceKey)) || state.currentCycleLoading) return;
-    if (state.currentCycleRetryAt && Date.now() < state.currentCycleRetryAt) return;
-    const path = currentCyclePath036(memberMapPath036(member));
-    if (!path || !card?._hass?.callApi) return;
-    state.currentCycleLoading = true;
-    try {
-      const payload = await callApi036(card, path);
-      if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return;
-      const render = payload?.current_cycle_render;
-      if (card._zoneArtifactsHandled?.(state.map, member.entry_id)) return;
-      if (state.map?.vendor_trail_debug?.current_cycle_key !== sourceKey) return;
-      if (render?.scope === "current_cycle" && state.map) {
-        state.map = { ...state.map, current_cycle_render: render };
-        state.currentCycleSourceKey = sourceKey;
-        state.currentCycleRetryAt = 0;
-        renderMultiMap036(card, true);
-      }
-    } catch (error) {
-      if (generationMatches036(card, generation)) {
-        state.currentCycleRetryAt = Date.now() + MULTI_RENDER_RETRY_MS;
-        console.debug("[Navimower Map Card] Deferred current-cycle render unavailable", member.entry_id, error);
-      }
-    } finally {
-      if (generationMatches036(card, generation)) state.currentCycleLoading = false;
-    }
-  }
-
-  async function loadSite036(card, force = false) {
-    if (!card?._hass?.callApi || card._multi036SiteLoading) return;
-    const path = sitePath036(card);
-    if (!path) return;
-    const now = Date.now();
-    if (!force && card._multi036Site && now - finite036(card._multi036SiteAt, 0) < SITE_REFRESH_MS) return;
-    const generation = currentGeneration036(card);
-    card._multi036SiteLoading = true;
-    try {
-      const payload = await callApi036(card, path);
-      if (!generationMatches036(card, generation)) return;
-      card._multi036Site = normalizeSite036(payload);
-      card._multi036SiteAt = now;
-      card._multi036SiteError = null;
-      for (const member of card._multi036Site.members || []) memberState036(card, member.entry_id);
-      syncMultiButton036(card);
-      applyMultiMode036(card);
-      if (multiActive036(card)) await refreshMembers036(card, true);
-      queueMicrotask(() => card._syncOsmUnderlay036?.());
-    } catch (error) {
-      card._multi036SiteError = error;
-      if (!card._multi036Site) card._multi036Site = null;
-      syncMultiButton036(card);
-      applyMultiMode036(card);
-      console.debug("[Navimower Map Card] Multi-mower Site API unavailable", error);
-    } finally {
-      card._multi036SiteLoading = false;
-    }
-  }
-
-  const memberIsActive036 = (card, member) => {
-    const mower = state036(card, memberEntities036(member)?.mower);
-    const value = String(mower?.state || "").toLowerCase();
-    return ["mowing", "paused", "returning", "starting", "edgecut", "edge_cutting"].includes(value);
-  };
-
-  async function refreshMemberMap036(card, member, force, generation = currentGeneration036(card)) {
-    const state = memberState036(card, member.entry_id);
-    const anchorEntry = anchorEntry036(card);
-    if (String(member.entry_id) === String(anchorEntry) && card._mapPayload) {
-      if (!generationMatches036(card, generation)) return;
-      state.map = card._mapPayload;
-      state.mapAt = Date.now();
-      state.error = null;
-      renderMultiMap036(card);
-      void refreshMemberCurrentCycle036(card, member, generation);
-      return;
-    }
-    const interval = memberIsActive036(card, member) ? MAP_REFRESH_ACTIVE_MS : MAP_REFRESH_IDLE_MS;
-    if (!force && state.map && Date.now() - state.mapAt < interval) return;
-    const path = memberMapPath036(member);
-    if (!path) return;
-    try {
-      const payload = await callApi036(card, addLightweightQuery036(path));
-      if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return;
-      if (payload) {
-        const current = state.map?.current_cycle_render;
-        state.map = payload;
-        if (current && !payload.current_cycle_render && payload.vendor_trail_debug?.store_version === 1) {
-          state.map = { ...payload, current_cycle_render: current };
-        }
-      }
-      state.mapAt = Date.now();
-      state.error = null;
-      renderMultiMap036(card);
-      void refreshMemberCurrentCycle036(card, member, generation);
-    } catch (error) {
-      if (generationMatches036(card, generation)) state.error = error;
-    }
-  }
-
-  async function refreshMemberSessions036(card, member, force, generation = currentGeneration036(card)) {
-    const state = memberState036(card, member.entry_id);
-    if (!force && state.sessionsAt && Date.now() - state.sessionsAt < SESSION_REFRESH_MS) return;
-    const path = memberSessionsPath036(member);
-    if (!path) return;
-    try {
-      const payload = await callApi036(card, path);
-      if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return;
-      state.sessions = (Array.isArray(payload?.sessions) ? payload.sessions : [])
-        .filter((session) => session && sessionId036(session))
-        .map((session) => ({ ...session }))
-        .sort((left, right) => (date036(left.started_at ?? left.started_at_ms)?.getTime() || 0) - (date036(right.started_at ?? right.started_at_ms)?.getTime() || 0));
-      state.renderTemplate = payload?.session_render_api_path_template || memberRenderTemplate036(member);
-      state.sessionsAt = Date.now();
-      state.sessionsError = null;
-    } catch (error) {
-      if (generationMatches036(card, generation)) state.sessionsError = error;
-    }
-  }
-
-  function scheduleMemberDetails036(card, members, force, generation) {
-    if (card._multi036DeferredQueued || card._multi036DeferredLoading) return;
-    card._multi036DeferredQueued = true;
-    scheduleIdle036(async () => {
-      card._multi036DeferredQueued = false;
-      if (!generationMatches036(card, generation) || !multiActive036(card)) return;
-      card._multi036DeferredLoading = true;
-      try {
-        await runLimited036(
-          members,
-          MULTI_REQUEST_CONCURRENCY,
-          (member) => refreshMemberSessions036(card, member, force, generation),
-        );
-        if (!generationMatches036(card, generation)) return;
-        card._multi036SessionsRenderKey = null;
-        renderMultiSessions036(card);
-        if (card._historyDayOffset !== null && card._historyDayOffset !== undefined) {
-          await ensureHistoryRenders036(card);
-        }
-      } finally {
-        if (generationMatches036(card, generation)) card._multi036DeferredLoading = false;
-      }
-    });
-  }
-
-  async function refreshMembers036(card, force = false) {
-    if (!multiActive036(card) || card._multi036MembersLoading) return;
-    const generation = currentGeneration036(card);
-    const anchor = anchorEntry036(card);
-    const members = [...(card._multi036Site?.members || [])].sort((left, right) => {
-      const leftRank = memberIsActive036(card, left) ? 0 : String(left.entry_id) === String(anchor) ? 1 : 2;
-      const rightRank = memberIsActive036(card, right) ? 0 : String(right.entry_id) === String(anchor) ? 1 : 2;
-      return leftRank - rightRank || finite036(left.display_order, 0) - finite036(right.display_order, 0);
-    });
-    card._multi036MembersLoading = true;
-    try {
-      await runLimited036(
-        members,
-        MULTI_REQUEST_CONCURRENCY,
-        async (member) => {
-          await refreshMemberMap036(card, member, force, generation);
-          if (generationMatches036(card, generation)) {
-            renderMultiMap036(card);
-            renderMultiControls036(card);
-          }
-        },
-      );
-      if (generationMatches036(card, generation)) renderMulti036(card);
-    } finally {
-      if (generationMatches036(card, generation)) card._multi036MembersLoading = false;
-    }
-    if (generationMatches036(card, generation)) {
-      scheduleMemberDetails036(card, members, force, generation);
-    }
-  }
-
-  const sessionRenderEndpoint036 = (card, member, sessionId) => {
-    const state = memberState036(card, member.entry_id);
-    const template = state.renderTemplate || memberRenderTemplate036(member);
-    if (template) return String(template).replace("{session_id}", encodeURIComponent(String(sessionId)));
-    return "/api/navimower/session-render/" + encodeURIComponent(String(member.entry_id)) + "/" + encodeURIComponent(String(sessionId));
-  };
-
-  async function getSessionRender036(card, member, session) {
-    if (!(card._multi036RenderCache instanceof Map)) card._multi036RenderCache = new Map();
-    if (!(card._multi036RenderFailures instanceof Map)) card._multi036RenderFailures = new Map();
-    const id = sessionId036(session);
-    if (!id) return null;
-    const key = String(member.entry_id) + ":" + id;
-    if (card._multi036RenderCache.has(key)) return card._multi036RenderCache.get(key);
-    const failedAt = Number(card._multi036RenderFailures.get(key) || 0);
-    if (failedAt && Date.now() - failedAt < MULTI_RENDER_RETRY_MS) return null;
-    const generation = currentGeneration036(card);
-    try {
-      const payload = await callApi036(card, sessionRenderEndpoint036(card, member, id));
-      if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return null;
-      const render = payload?.render || payload;
-      if (render && (String(render?.mowed_area?.path_d || "").trim() || String(render?.travel?.path_d || "").trim())) {
-        cacheMultiRender036(card, key, render);
-        card._multi036RenderFailures.delete(key);
-        return render;
-      }
-    } catch (error) {
-      if (generationMatches036(card, generation)) {
-        card._multi036RenderFailures.set(key, Date.now());
-        console.debug("[Navimower Map Card] Multi-mower session render unavailable", key, error);
-      }
-    }
-    return null;
-  }
-
-  async function ensureHistoryRenders036(card) {
-    if (!multiActive036(card) || card._historyDayOffset === null || card._historyDayOffset === undefined) return;
-    const offset = Math.max(0, Number(card._historyDayOffset) || 0);
-    const key = String(offset) + "|" + (card._multi036Site?.members || []).map((member) => {
-      const state = memberState036(card, member.entry_id);
-      return String(member.entry_id) + ":" + state.sessionsAt;
-    }).join("|");
-    if (card._multi036HistoryRenderKey === key || card._multi036HistoryRenderLoading) return;
-    card._multi036HistoryRenderLoading = true;
-    try {
-      const tasks = (card._multi036Site?.members || []).flatMap((member) => {
-        const sessions = sessionsForDay036(card, memberState036(card, member.entry_id).sessions, offset);
-        return sessions.map((session) => ({ member, session }));
-      });
-      await runLimited036(
-        tasks,
-        MULTI_REQUEST_CONCURRENCY,
-        ({ member, session }) => getSessionRender036(card, member, session),
-      );
-      card._multi036HistoryRenderKey = key;
-    } finally {
-      card._multi036HistoryRenderLoading = false;
-      renderMultiMap036(card, true);
-    }
-  }
-
-  const bounds036 = (site) => {
-    const direct = site?.combined_svg_bounds;
-    if (direct && [direct.min_x, direct.min_y, direct.max_x, direct.max_y].every((value) => Number.isFinite(Number(value)))) return direct;
-    const items = (site?.members || []).map((member) => member?.svg_bounds).filter((item) => item && [item.min_x, item.min_y, item.max_x, item.max_y].every((value) => Number.isFinite(Number(value))));
-    if (!items.length) return null;
-    return {
-      min_x: Math.min(...items.map((item) => Number(item.min_x))),
-      min_y: Math.min(...items.map((item) => Number(item.min_y))),
-      max_x: Math.max(...items.map((item) => Number(item.max_x))),
-      max_y: Math.max(...items.map((item) => Number(item.max_y)))
-    };
-  };
-
-  const siteLayout036 = (site) => {
-    const box = bounds036(site);
-    if (!box) return null;
-    const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
-    const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
-    const padding = 55;
-    const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
-    const drawnWidth = width * scale;
-    const drawnHeight = height * scale;
-    const offsetX = (1000 - drawnWidth) / 2 - Number(box.min_x) * scale;
-    const offsetY = (1000 - drawnHeight) / 2 - Number(box.min_y) * scale;
-    return { scale, offsetX, offsetY, bounds: box };
-  };
-
-  const memberMatrix036 = (member, layout) => {
-    const matrix = Array.isArray(member?.svg_matrix) && member.svg_matrix.length >= 6 ? member.svg_matrix.map(Number) : null;
-    if (!matrix || matrix.some((value) => !Number.isFinite(value)) || !layout) return null;
-    const s = layout.scale;
-    return [
-      s * matrix[0], s * matrix[1], s * matrix[2], s * matrix[3],
-      s * matrix[4] + layout.offsetX, s * matrix[5] + layout.offsetY
-    ];
-  };
-
-  const matrixString036 = (matrix) => "matrix(" + matrix.map((value) => Number(value).toFixed(8)).join(" ") + ")";
-
-  const transformPoint036 = (matrix, x, y) => [
-    matrix[0] * x + matrix[2] * y + matrix[4],
-    matrix[1] * x + matrix[3] * y + matrix[5]
-  ];
-
-  const rawPoints036 = (points) => (Array.isArray(points) ? points : [])
-    .filter((point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])))
-    .map((point) => Number(point[0]).toFixed(4) + "," + Number(point[1]).toFixed(4))
-    .join(" ");
-
-  const memberIconKey036 = (member) => {
-    const configured = String(member?.mower_icon || "").trim().toLowerCase();
-    if (configured && typeof MOWER_ICON_SPECS_032 !== "undefined" && MOWER_ICON_SPECS_032[configured]) return configured;
-    const model = String(member?.model || member?.vehicle_type || "");
-    if (typeof autoMowerIcon032 === "function") return autoMowerIcon032(model) || "h2";
-    return "h2";
-  };
-
-  const mowerMarkup036 = (card, member, matrix) => {
-    const entities = memberEntities036(member);
-    const x = entityValue036(card, entities.position_x);
-    const y = entityValue036(card, entities.position_y);
-    if (x === null || y === null || !matrix) return "";
-    const heading = entityValue036(card, entities.heading);
-    const key = memberIconKey036(member);
-    const spec = typeof MOWER_ICON_SPECS_032 !== "undefined" ? MOWER_ICON_SPECS_032[key] || MOWER_ICON_SPECS_032.h2 : null;
-    if (!spec) return "";
-    const zoom = Math.max(1, finite036(card?._view?.scale, 1));
-    const screen = transformPoint036(matrix, x, y);
-    const siteRotation = Math.atan2(matrix[1], matrix[0]) * 180 / Math.PI;
-    const degrees = siteRotation + (Number.isFinite(heading) ? 90 - heading : 90);
-    const scale = 58.83 / spec.height * clamp036(card?._config?.mower_scale, 0.5, 2.5) / zoom;
-    const mowerState = String(state036(card, entities.mower)?.state || "").toLowerCase();
-    const errorClass = ["error", "blocked", "unavailable"].includes(mowerState) ? " nm-multi-mower-error" : "";
-    const liveKey = [x.toFixed(3), y.toFixed(3), Number.isFinite(heading) ? heading.toFixed(4) : "", mowerState, zoom.toFixed(3)].join(":");
-    return "<g class=\"nm-multi-mower" + errorClass + "\" data-multi-mower-entry=\"" + esc(member.entry_id) + "\" data-multi-live-key=\"" + esc(liveKey) + "\" transform=\"translate(" + screen[0].toFixed(2) + " " + screen[1].toFixed(2) + ") rotate(" + degrees.toFixed(2) + ") scale(" + scale.toFixed(6) + ") translate(" + (-spec.width / 2).toFixed(2) + " " + (-spec.height / 2).toFixed(2) + ")\">" + spec.markup + "</g>";
-  };
-
-  const normalizeLiveTrailSegments036 = (value) => {
-    if (!Array.isArray(value) || !value.length) return [];
-    const pointLike = (point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1]));
-    const clean = (segment) => (Array.isArray(segment) ? segment : [])
-      .filter(pointLike)
-      .map((point) => [Number(point[0]), Number(point[1])]);
-    if (value.every(pointLike)) {
-      const segment = clean(value);
-      return segment.length >= 2 ? [segment] : [];
-    }
-    return value.map(clean).filter((segment) => segment.length >= 2);
-  };
-
-  const liveTrailSegments036 = (card, member, payload) => {
-    if (String(member?.entry_id) === String(anchorEntry036(card)) && typeof card?._activeTrailSegments === "function") {
-      const local = normalizeLiveTrailSegments036(card._activeTrailSegments());
-      if (local.length || payload?.vendor_trail_debug?.backend_tail_authoritative) return local;
-    }
-    return normalizeLiveTrailSegments036(payload?.trail_segments);
-  };
-
-  const liveTrailSignature036 = (card, member, payload) => liveTrailSegments036(card, member, payload)
-    .map((segment) => {
-      const last = segment.at(-1) || [];
-      return segment.length + ":" + Number(last[0] || 0).toFixed(3) + "," + Number(last[1] || 0).toFixed(3);
-    })
-    .join(";");
-
-  const memberTrailWidthMeters036 = (member) => {
-    if (typeof renderedTrailWidthMeters034 === "function") return renderedTrailWidthMeters034(member?.model || member?.vehicle_type || "");
-    return 0.25;
-  };
-
-  const renderArchive036 = (render, color, opacity, cssClass = "") => {
-    if (!render) return "";
-    const area = String(render?.mowed_area?.path_d || "").trim();
-    const travel = String(render?.travel?.path_d || "").trim();
-    const route = String(render?.route?.path_d || "").trim();
-    const width = Math.max(0.02, finite036(render?.travel?.stroke_width_m, finite036(render?.route?.stroke_width_m, 0.08)));
-    const parts = [];
-    if (area) parts.push("<path class=\"nm-multi-session-area\" d=\"" + esc(area) + "\" fill=\"" + esc(color) + "\" fill-rule=\"evenodd\" clip-rule=\"evenodd\"/>");
-    if (travel) parts.push("<path d=\"" + esc(travel) + "\" fill=\"none\" stroke=\"" + esc(color) + "\" stroke-width=\"" + width.toFixed(3) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
-    if (route) parts.push("<path d=\"" + esc(route) + "\" fill=\"none\" stroke=\"" + esc(color) + "\" stroke-width=\"" + width.toFixed(3) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
-    return parts.length ? "<g class=\"nm-multi-session-render " + esc(cssClass) + "\" opacity=\"" + clamp036(opacity, 0, 1).toFixed(2) + "\">" + parts.join("") + "</g>" : "";
-  };
-
-  const zoneLabelItem036 = (card, member, matrix, zone, coverageMap, payload) => {
-    const polygon = Array.isArray(zone?.polygon) ? zone.polygon : [];
-    const valid = polygon.filter((point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
-    if (valid.length < 3 || !matrix) return null;
-    const screenPolygon = valid.map((point) => transformPoint036(matrix, Number(point[0]), Number(point[1])));
-    const anchorX = screenPolygon.reduce((sum, point) => sum + Number(point[0]), 0) / screenPolygon.length;
-    const anchorY = screenPolygon.reduce((sum, point) => sum + Number(point[1]), 0) / screenPolygon.length;
-    const zoneId = Number(zone?.id);
-    const state = (payload?.zone_states || []).find((item) => Number(item?.id ?? item?.zone_id) === zoneId) || {};
-    const rawDetails = payload?.zone_details || payload?.zone_history || [];
-    const detail = Array.isArray(rawDetails)
-      ? rawDetails.find((item) => Number(item?.id ?? item?.zone_id) === zoneId) || {}
-      : rawDetails && typeof rawDetails === "object" ? rawDetails[String(zoneId)] || {} : {};
-    const coverage = coverageMap.get(zoneId) || {};
-    const pct = finite036(state?.coverage_pct ?? state?.progress ?? detail?.progress ?? detail?.percentage ?? coverage?.pct ?? coverage?.percentage, null);
-    const name = String(state?.name || zone?.name || coverage?.name || detail?.name || "Zone " + zone?.id);
-    const value = pct === null ? name : name + " · " + Math.round(pct) + "%";
-    const area = typeof card?._polygonArea === "function" ? Math.abs(card._polygonArea(screenPolygon)) : 0;
-    return { anchorX, anchorY, value, polygon: screenPolygon, area, memberEntryId: member?.entry_id, zoneId };
-  };
-
-  const renderMultiZoneLabels036 = (card, items, legendVisible) => {
-    const sourceItems = (Array.isArray(items) ? items : []).filter(Boolean);
-    if (!sourceItems.length || typeof card?._pill !== "function") return "";
-    const obstacles = [];
-    if (legendVisible) {
-      const legendScale = clamp036(card?._config?.map_legend_scale, 0.5, 2);
-      obstacles.push({ left: 8, right: 22 + 158 * legendScale, top: 8, bottom: 22 + 112 * legendScale });
-    }
-    let arranged = sourceItems;
-    if (card?._config?.avoid_zone_label_overlap === false || typeof card?._layoutZoneLabels !== "function") {
-      arranged = sourceItems.map((item) => ({ ...item, cx: item.anchorX, cy: item.anchorY, ...(card._pillMetrics?.(item.value) || {}), moved: false }));
-    } else {
-      arranged = card._layoutZoneLabels(sourceItems, obstacles);
-    }
-    const output = [];
-    for (const item of arranged) {
-      const leader = typeof card?._zoneLabelLeader === "function" ? card._zoneLabelLeader(item) : "";
-      if (leader) output.push(leader);
-      const token = multiZoneToken036(item.memberEntryId, item.zoneId);
-      output.push(card._pill(item.cx, item.cy, item.value, token));
-    }
-    return output.join("");
-  };
-  const multiZoneToken036 = (entryId, zoneId) => "multi:" + encodeURIComponent(String(entryId || "")) + ":" + encodeURIComponent(String(zoneId ?? ""));
-
-  const parseMultiZoneToken036 = (value) => {
-    const text = String(value || "");
-    if (!text.startsWith("multi:")) return null;
-    const separator = text.indexOf(":", 6);
-    if (separator < 0) return null;
-    try {
-      return {
-        entryId: decodeURIComponent(text.slice(6, separator)),
-        zoneId: decodeURIComponent(text.slice(separator + 1)),
+  nmRuntimePatch20: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const SITE_REFRESH_MS = 60_000;
+      const MAP_REFRESH_ACTIVE_MS = 5_000;
+      const MAP_REFRESH_IDLE_MS = 30_000;
+      const SESSION_REFRESH_MS = 30_000;
+      const MULTI_REQUEST_CONCURRENCY = 2;
+      const MULTI_RENDER_RETRY_MS = 30_000;
+      const MULTI_RENDER_CACHE_LIMIT = 96;
+    
+      const esc = (value) => String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    
+      const finite036 = (value, fallback = null) => {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : fallback;
       };
-    } catch (_error) {
-      return null;
-    }
-  };
-
-  const firstZoneValue036 = (...values) => values.find((value) => value !== undefined && value !== null && value !== "");
-
-  const memberZoneDetails036 = (card, member, zoneId) => {
-    const payload = memberState036(card, member?.entry_id).map || {};
-    const map = payload?.map || {};
-    const numericZoneId = Number(zoneId);
-    const zone = (map?.zones || []).find((item) => Number(item?.id) === numericZoneId) || {};
-    const coverage = (payload?.coverage?.zones || []).find((item) => Number(item?.id) === numericZoneId) || {};
-    const state = (payload?.zone_states || []).find((item) => Number(item?.id ?? item?.zone_id) === numericZoneId) || {};
-    const rawDetails = payload?.zone_details || payload?.zone_history || [];
-    const detail = Array.isArray(rawDetails)
-      ? rawDetails.find((item) => Number(item?.id ?? item?.zone_id) === numericZoneId) || {}
-      : rawDetails && typeof rawDetails === "object" ? rawDetails[String(numericZoneId)] || {} : {};
-    const history = detail?.history && typeof detail.history === "object" ? detail.history : {};
-    const progress = finite036(firstZoneValue036(state.coverage_pct, state.progress, detail.progress, detail.percentage, coverage.pct, coverage.percentage), null);
-    const lastMowed = firstZoneValue036(state.last_mowed_at, detail.last_mowed_at, detail.last_mowed, detail.last_mow_time, history.last_mowed_at, coverage.last_mowed_at, zone.last_mowed_at);
-    const lastCompleted = firstZoneValue036(state.last_completed_at, detail.last_completed_at, detail.last_completed, detail.completed_at, history.last_completed_at, coverage.last_completed_at, zone.last_completed_at);
-    const rawHeight = firstZoneValue036(state.cutting_height_mm, detail.cutting_height_mm, detail.cut_height_mm, detail.cutting_height, detail.cut_height, coverage.cutting_height_mm, zone.cutting_height_mm, zone?.boundary?.height_set);
-    const heightNumber = finite036(rawHeight, null);
-    const cuttingHeight = heightNumber !== null && heightNumber >= 10 && heightNumber <= 100 ? heightNumber : null;
-    return {
-      name: String(state.name || zone.name || coverage.name || detail.name || "Zone " + zoneId),
-      progress,
-      lastMowed,
-      lastCompleted,
-      cuttingHeight,
-    };
-  };
-
-  const originalOpenZoneInfo036 = proto._openZoneInfo;
-  if (typeof originalOpenZoneInfo036 === "function") {
-    proto._openZoneInfo = function multi036OpenZoneInfo(zoneId) {
-      const parsed = parseMultiZoneToken036(zoneId);
-      if (!parsed || !multiActive036(this)) return originalOpenZoneInfo036.call(this, zoneId);
-      const member = memberById036(this, parsed.entryId);
-      if (!member || !this._zoneInfoEl || !this._zoneInfoTitleEl || !this._zoneInfoGridEl) return;
-      const details = memberZoneDetails036(this, member, parsed.zoneId);
-      const formatStamp = (value) => typeof this._formatZoneTimestamp === "function" ? this._formatZoneTimestamp(value) : (date036(value)?.toLocaleString() || "Not available");
-      const rows = [
-        ["Mower", displayName036(member)],
-        ["Progress", details.progress === null ? "Not available" : Math.round(details.progress) + "%"],
-        ["Last mowed", formatStamp(details.lastMowed)],
-        ["Last completed", formatStamp(details.lastCompleted)],
-      ];
-      if (details.cuttingHeight !== null) rows.push(["Cutting height", Math.round(details.cuttingHeight) + " mm"]);
-      this._selectedZoneId = String(zoneId);
-      this._zoneInfoTitleEl.textContent = details.name;
-      this._zoneInfoGridEl.innerHTML = rows.map(([label, value]) => "<span>" + esc(label) + "</span><strong>" + esc(value) + "</strong>").join("");
-      this._zoneInfoEl.hidden = false;
-    };
-  }
-
-  const updateMultiMowers036 = (card, site, layout, liveSignature) => {
-    if (!card?._multi036Layer || card._multi036LiveRenderKey === liveSignature) return;
-    const existing = new Map(
-      [...card._multi036Layer.querySelectorAll?.("[data-multi-mower-entry]") || []]
-        .map((element) => [String(element.dataset.multiMowerEntry || ""), element]),
-    );
-    for (const member of site?.members || []) {
-      const matrix = memberMatrix036(member, layout);
-      const markup = matrix ? mowerMarkup036(card, member, matrix) : "";
-      const current = existing.get(String(member.entry_id));
-      if (!markup) {
-        current?.remove?.();
-        continue;
-      }
-      const holder = document.createElementNS(SVG_NS, "g");
-      holder.innerHTML = markup;
-      const next = holder.firstElementChild;
-      if (!next) continue;
-      if (current) {
-        if (current.dataset.multiLiveKey !== next.dataset.multiLiveKey) current.replaceWith(next);
-      } else {
-        card._multi036Layer.appendChild(next);
-      }
-    }
-    card._multi036LiveRenderKey = liveSignature;
-  };
-
-  function renderMultiMap036(card, force = false) {
-    ensureMultiUi036(card);
-    const layer = card._multi036Layer;
-    if (!layer) return;
-    if (!multiActive036(card)) {
-      layer.style.display = "none";
-      return;
-    }
-    layer.style.display = "";
-    const site = card._multi036Site;
-    const layout = siteLayout036(site);
-    if (!layout) {
-      layer.innerHTML = "<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"var(--secondary-background-color)\"/><text x=\"500\" y=\"500\" text-anchor=\"middle\" fill=\"var(--secondary-text-color)\">Waiting for validated multi-mower map bounds…</text>";
-      return;
-    }
-
-    const liveSignature = (site.members || []).map((member) => {
-      const entities = memberEntities036(member);
-      return [member.entry_id, state036(card, entities.position_x)?.state, state036(card, entities.position_y)?.state, state036(card, entities.heading)?.state, state036(card, entities.mower)?.state].join(":");
-    }).join("|");
-    const mapSignature = (site.members || []).map((member) => {
-      const payload = memberState036(card, member.entry_id).map;
-      card._zoneArtifactsHandled?.(payload, member.entry_id);
-      return [member.entry_id, payload?.map?.revision, card._zoneArtifactsMode?.(member.entry_id), payload?.current_cycle_render?.revision, payload?.trail_revision, liveTrailSignature036(card, member, payload)].join(":");
-    }).join("|");
-    const key = [mapSignature, card._historyDayOffset, card._multi036SelectedSessionKey, card?._view?.scale, card?._config?.show_zone_labels, card?._config?.avoid_zone_label_overlap, card?._config?.zone_label_font_size, card?._config?.zone_label_opacity, card?._config?.map_legend_scale, card?._config?.show_channels, card?._config?.show_vf_off_areas, card?._config?.show_gate_areas, card?._config?.show_custom_areas, card?._config?.map_background_color, card?._config?.trail_color, card?._config?.trail_opacity].join("|");
-    if (key === card._multi036MapRenderKey) {
-      updateMultiMowers036(card, site, layout, liveSignature);
-      card._drawZoneArtifactMembers?.();
-      return;
-    }
-    card._multi036MapRenderKey = key;
-
-    const c = card._config || {};
-    const background = String(c.map_background_color || "").trim() || "var(--secondary-background-color)";
-    const zoneFill = c.zone_fill_color || "#81c784";
-    const zoneStroke = c.zone_stroke_color || "#43a047";
-    const zoneFillOpacity = clamp036(c.zone_fill_opacity, 0, 1);
-    const zoneStrokeWidth = clamp036(c.zone_stroke_width, 0.5, 12);
-    const trailColor = c.trail_color || "#43a047";
-    const trailOpacity = clamp036(c.trail_opacity, 0, 1);
-    const legendScale = clamp036(c.map_legend_scale, 0.5, 2);
-    const mapUnderlayActive036 = ["openstreetmap", "estonia_orthophoto", "estonia_hybrid", "google_satellite"].includes(String(card?._config?.map_underlay || "none").toLowerCase());
-    const parts = ["<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"" + (mapUnderlayActive036 ? "transparent" : esc(background)) + "\"/>"];
-    const zoneLabelItems = [];
-    const dockMarkers = [];
-    const rootMowers = [];
-
-    for (const member of site.members || []) {
-      const memberState = memberState036(card, member.entry_id);
-      const payload = memberState.map;
-      const map = payload?.map || {};
-      const matrix = memberMatrix036(member, layout);
-      if (!matrix || !payload) continue;
-      const local = [];
-      const coverageMap = new Map((payload?.coverage?.zones || []).map((item) => [Number(item.id), item]));
-
-      for (const zone of map.zones || []) {
-        const points = rawPoints036(zone?.polygon);
-        if (!points) continue;
-        local.push("<polygon points=\"" + points + "\" fill=\"" + esc(zoneFill) + "\" fill-opacity=\"" + zoneFillOpacity.toFixed(2) + "\" stroke=\"" + esc(zoneStroke) + "\" stroke-width=\"" + zoneStrokeWidth.toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
-        if (c.show_zone_labels !== false) zoneLabelItems.push(zoneLabelItem036(card, member, matrix, zone, coverageMap, payload));
-      }
-
-      if (card._nmBeta8Clients?.has?.(String(member.entry_id))) local.push('<g data-nm-artifacts-entry="' + esc(member.entry_id) + '" pointer-events="none"></g>');
-      if (!card._multi036SelectedSessionKey && (card._historyDayOffset === null || card._historyDayOffset === undefined)) {
-        const current = payload?.current_cycle_render;
-        if (!card._zoneArtifactsHandled?.(payload, member.entry_id) && current?.scope === "current_cycle") {
-          local.push(renderArchive036({ mowed_area: current.mowed_area, travel: { path_d: "" }, route: { path_d: "" } }, trailColor, trailOpacity, "nm-multi-current-cycle"));
+    
+      const clamp036 = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, finite036(value, minimum)));
+    
+      const asBool036 = (value, fallback = false) => {
+        if (value === undefined || value === null || value === "") return fallback;
+        if (typeof value === "boolean") return value;
+        const text = String(value).trim().toLowerCase();
+        if (["true", "1", "yes", "on"].includes(text)) return true;
+        if (["false", "0", "no", "off"].includes(text)) return false;
+        return fallback;
+      };
+    
+      const state036 = (card, entityId) => entityId ? card?._hass?.states?.[entityId] || null : null;
+      const entityValue036 = (card, entityId) => {
+        const value = state036(card, entityId)?.state;
+        if (value === undefined || value === null || ["unknown", "unavailable"].includes(String(value).toLowerCase())) return null;
+        return finite036(value, null);
+      };
+    
+      const date036 = (value) => {
+        if (value instanceof Date && Number.isFinite(value.getTime())) return value;
+        if (value === undefined || value === null || value === "") return null;
+        if (typeof value === "number" || /^\d+(?:\.\d+)?$/.test(String(value).trim())) {
+          let stamp = Number(value);
+          if (!Number.isFinite(stamp) || stamp <= 0) return null;
+          if (stamp < 10_000_000_000) stamp *= 1000;
+          const parsed = new Date(stamp);
+          return Number.isFinite(parsed.getTime()) ? parsed : null;
         }
-        const liveTrailWidth = memberTrailWidthMeters036(member);
-        for (const segment of liveTrailSegments036(card, member, payload)) {
-          const points = rawPoints036(segment);
-          if (points) local.push("<polyline class=\"nm-multi-live-trail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+        const parsed = new Date(value);
+        return Number.isFinite(parsed.getTime()) ? parsed : null;
+      };
+    
+      const sessionId036 = (session) => String(session?.id ?? session?.session_id ?? "");
+    
+      const dateKeyInZone036 = (value, timeZone) => {
+        const date = date036(value);
+        if (!date) return null;
+        try {
+          const parts = new Intl.DateTimeFormat("en", {
+            timeZone: timeZone || undefined,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+          }).formatToParts(date);
+          const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+          return values.year + "-" + values.month + "-" + values.day;
+        } catch (_error) {
+          const local = new Date(date);
+          local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+          return local.toISOString().slice(0, 10);
         }
-      } else if (!card._multi036SelectedSessionKey) {
-        const sessions = sessionsForDay036(card, memberState.sessions, card._historyDayOffset);
-        for (const session of sessions) {
-          const cacheKey = String(member.entry_id) + ":" + sessionId036(session);
-          const render = card._multi036RenderCache?.get?.(cacheKey);
-          if (render) local.push(renderArchive036(render, trailColor, trailOpacity, "nm-multi-history-session"));
-        }
+      };
+    
+      const selectedDayKey036 = (card, offset) => {
+        const timeZone = card?._hass?.config?.time_zone || card?._hass?.locale?.time_zone || undefined;
+        const todayKey = dateKeyInZone036(new Date(), timeZone);
+        if (!todayKey) return null;
+        const [year, month, day] = todayKey.split("-").map(Number);
+        const selected = new Date(Date.UTC(year, month - 1, day - Math.max(0, Number(offset) || 0)));
+        return selected.toISOString().slice(0, 10);
+      };
+    
+      const sessionsForDay036 = (card, sessions, offset) => {
+        const timeZone = card?._hass?.config?.time_zone || card?._hass?.locale?.time_zone || undefined;
+        const selected = selectedDayKey036(card, offset);
+        if (!selected) return [];
+        return (Array.isArray(sessions) ? sessions : []).filter((session) => {
+          const from = date036(session?.started_at ?? session?.start ?? session?.start_time ?? session?.started_at_ms);
+          const to = date036(session?.ended_at ?? session?.end ?? session?.end_time ?? session?.ended_at_ms) || (session?.active ? new Date() : from);
+          const fromKey = dateKeyInZone036(from, timeZone);
+          const toKey = dateKeyInZone036(to, timeZone);
+          return Boolean(fromKey && toKey && fromKey <= selected && toKey >= selected);
+        });
+      };
+    
+      const apiPath036 = (path) => String(path || "").replace(/^\/api\//, "").replace(/^\/+/, "");
+    
+      const addLightweightQuery036 = (path) => {
+        const text = String(path || "");
+        if (!text) return text;
+        const separator = text.includes("?") ? "&" : "?";
+        return text + separator + "include_sessions=0&include_" + "daily" + "_trails=0&include_current_cycle=0";
+      };
+    
+      const anchorEntry036 = (card) => {
+        const direct = card?._mapPayload?.frontend?.entry_id;
+        if (direct) return String(direct);
+        let path = null;
+        try { path = card?._apiPath?.(); } catch (_error) { path = null; }
+        const match = String(path || "").match(/\/api\/navimower\/map\/([^/?#]+)/);
+        return match ? decodeURIComponent(match[1]) : null;
+      };
+    
+      const sitePath036 = (card) => {
+        const fromPayload = card?._mapPayload?.frontend?.site_api_path || card?._mapPayload?.site_api_path;
+        if (fromPayload) return String(fromPayload);
+        const entryId = anchorEntry036(card);
+        return entryId ? "/api/navimower/site/" + encodeURIComponent(entryId) : null;
+      };
+    
+      const preferenceKey036 = (card) => {
+        const identity = anchorEntry036(card) || card?._resolved?.mower_entity || card?._config?.entity;
+        return identity ? "navimower-map-card:multi-mower:" + identity : null;
+      };
+    
+      const ensurePreference036 = (card) => {
+        card._multi036PreferenceKey = preferenceKey036(card);
+        card._multi036PreferenceLoaded = true;
+        card._multi036Requested = asBool036(card?._config?.multi_mower, false);
+      };
+    
+      const savePreference036 = (_card) => {};
+    
+      const siteAvailable036 = (card) => Boolean(card?._multi036Site?.multi_mower && card?._multi036Site?.member_order === "west_to_east" && (card._multi036Site?.members || []).length >= 2);
+      const multiActive036 = (card) => {
+        ensurePreference036(card);
+        return Boolean(card?._multi036Requested && siteAvailable036(card));
+      };
+    
+      const memberFrontend036 = (member) => member?.frontend || {};
+      const memberEntities036 = (member) => memberFrontend036(member)?.entities || {};
+      const memberDevice036 = (member) => memberFrontend036(member)?.device_id || null;
+      const memberMapPath036 = (member) => memberFrontend036(member)?.map_api_path || member?.map_api_path || null;
+      const memberSessionsPath036 = (member) => memberFrontend036(member)?.sessions_api_path || null;
+      const memberRenderTemplate036 = (member) => memberFrontend036(member)?.session_render_api_path_template || null;
+    
+      const memberById036 = (card, entryId) => (card?._multi036Site?.members || []).find((member) => String(member?.entry_id) === String(entryId)) || null;
+    
+      const memberState036 = (card, entryId) => {
+        if (!(card._multi036Members instanceof Map)) card._multi036Members = new Map();
+        const key = String(entryId);
+        if (!card._multi036Members.has(key)) card._multi036Members.set(key, { map: null, sessions: [], mapAt: 0, sessionsAt: 0, error: null, command: null });
+        return card._multi036Members.get(key);
+      };
+    
+      const resetSchedulerCaches036 = (card) => {
+        for (const key of [
+          "_beta5SchedulerEntities", "_beta6SchedulerEntities", "_beta10SchedulerEntities",
+          "_beta10ScheduleDeviceId", "_beta10SchedulerDiscoveryAt", "_beta10SchedulerDiscoveryKey",
+          "_beta2SchedulerIds", "_beta2SchedulerEntities", "_beta2ScheduleStatus", "_beta2ScheduleDraft"
+        ]) card[key] = null;
+      };
+    
+      const setDialogMember036 = (card, member) => {
+        card._multi036DialogMember = member || null;
+        resetSchedulerCaches036(card);
+      };
+    
+      const originalMowerEntity036 = proto._mowerEntity;
+      if (typeof originalMowerEntity036 === "function") {
+        proto._mowerEntity = function multi036MowerEntity(...args) {
+          const member = this._multi036DialogMember || this._multi036ActionMember;
+          const entityId = memberEntities036(member)?.mower;
+          return entityId || originalMowerEntity036.apply(this, args);
+        };
       }
-
-      for (const polygon of map.off_limit_areas || []) {
-        const points = rawPoints036(polygon);
-        if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\" fill-opacity=\".08\" stroke=\"" + esc(c.off_limit_color || "#FF5A00") + "\" stroke-width=\"" + clamp036(c.off_limit_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+    
+      const originalMowerDevice036 = proto._mowerDeviceId;
+      if (typeof originalMowerDevice036 === "function") {
+        proto._mowerDeviceId = function multi036MowerDevice(...args) {
+          const member = this._multi036DialogMember || this._multi036ActionMember;
+          return memberDevice036(member) || originalMowerDevice036.apply(this, args);
+        };
       }
-      if (c.show_vf_off_areas !== false) {
-        for (const polygon of map.vf_off_areas || []) {
-          const points = rawPoints036(polygon);
-          if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.vf_off_color || "#2F80ED") + "\" fill-opacity=\".06\" stroke=\"" + esc(c.vf_off_color || "#2F80ED") + "\" stroke-width=\"" + clamp036(c.vf_off_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
-        }
+    
+      const originalApiPath036 = proto._apiPath;
+      if (typeof originalApiPath036 === "function") {
+        proto._apiPath = function multi036ApiPath(...args) {
+          const member = this._multi036DialogMember || this._multi036ActionMember;
+          return memberMapPath036(member) || originalApiPath036.apply(this, args);
+        };
       }
-      if (c.show_channels !== false) {
-        for (const channel of map.channels || []) {
-          const points = rawPoints036(channel?.points);
-          if (points) local.push("<polyline points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(c.channel_color || "#808080") + "\" stroke-width=\"" + clamp036(c.channel_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-opacity=\".58\" stroke-linecap=\"round\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
-        }
+    
+      const originalScheduleEntity036 = proto._scheduleEntity;
+      if (typeof originalScheduleEntity036 === "function") {
+        proto._scheduleEntity = function multi036ScheduleEntity(...args) {
+          const member = this._multi036DialogMember;
+          if (member) return memberEntities036(member)?.native_schedule_data || null;
+          return originalScheduleEntity036.apply(this, args);
+        };
       }
-      if (c.show_gate_areas !== false) {
-        for (const gate of payload?.gate_areas || []) {
-          const polygon = rawPoints036(gate?.polygon);
-          if (polygon && (Array.isArray(gate?.polygon) ? gate.polygon.length : 0) >= 3) {
-            local.push("<polygon points=\"" + polygon + "\" fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
-            continue;
+    
+      const originalScheduleSwitchEntity036 = proto._scheduleSwitchEntity;
+      if (typeof originalScheduleSwitchEntity036 === "function") {
+        proto._scheduleSwitchEntity = function multi036ScheduleSwitchEntity(...args) {
+          const member = this._multi036DialogMember;
+          if (member) return memberEntities036(member)?.native_schedule || null;
+          return originalScheduleSwitchEntity036.apply(this, args);
+        };
+      }
+    
+      const originalAvailableZones036 = proto._availableMowZones;
+      if (typeof originalAvailableZones036 === "function") {
+        proto._availableMowZones = function multi036AvailableZones(...args) {
+          const member = this._multi036DialogMember;
+          if (!member) return originalAvailableZones036.apply(this, args);
+          const payload = memberState036(this, member.entry_id).map;
+          const zones = Array.isArray(payload?.map?.zones) ? payload.map.zones : [];
+          return zones
+            .filter((zone) => zone && zone.id !== undefined && zone.id !== null)
+            .map((zone) => ({ id: Number(zone.id), name: zone.name || "Zone " + zone.id }))
+            .filter((zone) => Number.isFinite(zone.id));
+        };
+      }
+    
+      const normalizeSite036 = (payload) => {
+        const site = payload && typeof payload === "object" ? { ...payload } : {};
+        const members = (Array.isArray(site.members) ? site.members : []).filter((member) => member && member.entry_id);
+        members.sort((left, right) => {
+          const a = finite036(left.display_order, finite036(left.site_center?.east, 0));
+          const b = finite036(right.display_order, finite036(right.site_center?.east, 0));
+          return a - b || String(left.entry_id).localeCompare(String(right.entry_id));
+        });
+        site.members = members;
+        return site;
+      };
+    
+      const callApi036 = async (card, path) => {
+        if (!path || !card?._hass?.callApi) return null;
+        return await card._hass.callApi("GET", apiPath036(path));
+      };
+    
+      const currentGeneration036 = (card) => Number(card?._multi036Generation || 0);
+    
+      const generationMatches036 = (card, generation) =>
+        currentGeneration036(card) === Number(generation);
+    
+      const runLimited036 = async (items, limit, worker) => {
+        const queue = [...(items || [])];
+        const count = Math.max(1, Math.min(Number(limit) || 1, queue.length || 1));
+        await Promise.all(Array.from({ length: count }, async () => {
+          while (queue.length) {
+            const item = queue.shift();
+            await worker(item);
           }
-          const x1 = finite036(gate?.x_min, null), x2 = finite036(gate?.x_max, null), y1 = finite036(gate?.y_min, null), y2 = finite036(gate?.y_max, null);
-          if ([x1, x2, y1, y2].every((value) => value !== null)) local.push("<rect x=\"" + Math.min(x1, x2).toFixed(4) + "\" y=\"" + Math.min(y1, y2).toFixed(4) + "\" width=\"" + Math.abs(x2 - x1).toFixed(4) + "\" height=\"" + Math.abs(y2 - y1).toFixed(4) + "\" fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+        }));
+      };
+    
+      const scheduleIdle036 = (callback) => {
+        if (typeof globalThis.requestIdleCallback === "function") {
+          return globalThis.requestIdleCallback(() => callback(), { timeout: 800 });
+        }
+        return globalThis.setTimeout(callback, 0);
+      };
+    
+      const currentCyclePath036 = (path) => {
+        const clean = String(path || "").split(/[?#]/, 1)[0];
+        return clean ? clean + "?current_cycle_only=1" : null;
+      };
+    
+      const cacheMultiRender036 = (card, key, render) => {
+        if (!(card._multi036RenderCache instanceof Map)) card._multi036RenderCache = new Map();
+        card._multi036RenderCache.delete(key);
+        card._multi036RenderCache.set(key, render);
+        while (card._multi036RenderCache.size > MULTI_RENDER_CACHE_LIMIT) {
+          card._multi036RenderCache.delete(card._multi036RenderCache.keys().next().value);
+        }
+      };
+    
+      async function refreshMemberCurrentCycle036(card, member, generation) {
+        const state = memberState036(card, member.entry_id);
+        if (card._zoneArtifactsHandled?.(state.map, member.entry_id)) return;
+        const sourceKey = state.map?.vendor_trail_debug?.current_cycle_key;
+        if ((state.map?.current_cycle_render && (sourceKey == null || state.currentCycleSourceKey === sourceKey)) || state.currentCycleLoading) return;
+        if (state.currentCycleRetryAt && Date.now() < state.currentCycleRetryAt) return;
+        const path = currentCyclePath036(memberMapPath036(member));
+        if (!path || !card?._hass?.callApi) return;
+        state.currentCycleLoading = true;
+        try {
+          const payload = await callApi036(card, path);
+          if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return;
+          const render = payload?.current_cycle_render;
+          if (card._zoneArtifactsHandled?.(state.map, member.entry_id)) return;
+          if (state.map?.vendor_trail_debug?.current_cycle_key !== sourceKey) return;
+          if (render?.scope === "current_cycle" && state.map) {
+            state.map = { ...state.map, current_cycle_render: render };
+            state.currentCycleSourceKey = sourceKey;
+            state.currentCycleRetryAt = 0;
+            renderMultiMap036(card, true);
+          }
+        } catch (error) {
+          if (generationMatches036(card, generation)) {
+            state.currentCycleRetryAt = Date.now() + MULTI_RENDER_RETRY_MS;
+            console.debug("[Navimower Map Card] Deferred current-cycle render unavailable", member.entry_id, error);
+          }
+        } finally {
+          if (generationMatches036(card, generation)) state.currentCycleLoading = false;
         }
       }
-      if (c.show_custom_areas !== false) {
-        for (const area of payload?.custom_areas || []) {
-          const points = rawPoints036(area?.polygon);
-          if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.custom_area_color || "#8e24aa") + "\" fill-opacity=\"" + clamp036(c.custom_area_fill_opacity, 0, 1).toFixed(2) + "\" stroke=\"" + esc(c.custom_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.custom_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
-        }
-      }
-
-      const selectedKey = card._multi036SelectedSessionKey;
-      if (selectedKey && selectedKey.startsWith(String(member.entry_id) + ":")) {
-        const selectedRender = card._multi036RenderCache?.get?.(selectedKey);
-        if (selectedRender) local.push(renderArchive036(selectedRender, trailColor, 1, "nm-multi-selected-session"));
-      }
-
-      const mower = mowerMarkup036(card, member, matrix);
-      if (mower) rootMowers.push(mower);
-
-      const station = map.station;
-      if (station && Number.isFinite(Number(station.x)) && Number.isFinite(Number(station.y))) {
-        const screen = transformPoint036(matrix, Number(station.x), Number(station.y));
-        if (typeof card._station === "function") dockMarkers.push(card._station(screen[0], screen[1]));
-      }
-
-      parts.push("<g class=\"nm-multi-member-map\" data-entry-id=\"" + esc(member.entry_id) + "\" transform=\"" + matrixString036(matrix) + "\">" + local.join("") + "</g>");
-    }
-
-    if (c.show_zone_labels !== false) parts.push(renderMultiZoneLabels036(card, zoneLabelItems, c.show_map_legend !== false));
-    parts.push(dockMarkers.join(""));
-    parts.push(rootMowers.join(""));
-
-    if (c.show_map_legend !== false) {
-      parts.push("<g class=\"nm-multi-map-legend\" transform=\"translate(14 14) scale(" + legendScale.toFixed(2) + ")\"><rect width=\"158\" height=\"112\" rx=\"10\" fill=\"var(--card-background-color,#fff)\" fill-opacity=\"" + clamp036(c.map_legend_opacity, 0, 1).toFixed(2) + "\"/><circle cx=\"14\" cy=\"20\" r=\"5\" fill=\"" + esc(zoneFill) + "\"/><text x=\"28\" y=\"24\" font-size=\"13\" fill=\"var(--primary-text-color)\">Zones</text><circle cx=\"14\" cy=\"46\" r=\"5\" fill=\"" + esc(trailColor) + "\"/><text x=\"28\" y=\"50\" font-size=\"13\" fill=\"var(--primary-text-color)\">Mowed</text><circle cx=\"14\" cy=\"72\" r=\"5\" fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\"/><text x=\"28\" y=\"76\" font-size=\"13\" fill=\"var(--primary-text-color)\">Off-limit</text><circle cx=\"14\" cy=\"98\" r=\"5\" fill=\"" + esc(c.channel_color || "#808080") + "\"/><text x=\"28\" y=\"102\" font-size=\"13\" fill=\"var(--primary-text-color)\">Channel</text></g>");
-    }
-
-    if (card._applyZoneArtifactMultiMarkup) card._applyZoneArtifactMultiMarkup(layer, parts.join(""));
-    else layer.innerHTML = parts.join("");
-    card._drawZoneArtifactMembers?.();
-    card._multi036LiveRenderKey = liveSignature;
-  }
-
-  const displayName036 = (member) => String(member?.name || member?.model || "Mower");
-
-  const cleanMemberText036 = (value) => {
-    if (value === undefined || value === null) return null;
-    const text = String(value).trim();
-    return !text || ["unknown", "unavailable", "none"].includes(text.toLowerCase()) ? null : text;
-  };
-
-  const memberMeta036 = (card, member, mower) => {
-    const c = card?._config || {};
-    const entities = memberEntities036(member);
-    const items = [];
-    const status = cleanMemberText036(mower?.state);
-    if (c.show_status !== false && status) items.push('<span class="nm-multi-meta-status">' + esc(status) + '</span>');
-    items.push('<span class="nm-multi-meta-spacer"></span>');
-    const zone = cleanMemberText036(state036(card, entities.current_physical_zone)?.state);
-    if (c.show_zone !== false && zone) items.push('<span class="nm-multi-meta-item nm-multi-meta-zone"><ha-icon icon="mdi:map-marker-radius"></ha-icon><span>' + esc(zone) + '</span></span>');
-    const batteryState = state036(card, entities.battery);
-    const battery = finite036(batteryState?.state, null);
-    if (c.show_battery !== false && battery !== null) items.push('<span class="nm-multi-meta-item nm-multi-meta-battery"><ha-icon icon="mdi:battery"></ha-icon><span>' + Math.round(battery) + '%</span></span>');
-    if (c.show_position === true) {
-      const x = entityValue036(card, entities.position_x);
-      const y = entityValue036(card, entities.position_y);
-      if (x !== null && y !== null) items.push('<span class="nm-multi-meta-item nm-multi-meta-position"><ha-icon icon="mdi:crosshairs-gps"></ha-icon><span>' + x.toFixed(1) + ', ' + y.toFixed(1) + '</span></span>');
-    }
-    const meaningful = items.some((item) => !item.includes("nm-multi-meta-spacer"));
-    return meaningful ? "<div class=\"nm-multi-member-meta\">" + items.join("") + "</div>" : "";
-  };
-
-  function renderMultiControls036(card) {
-    ensureMultiUi036(card);
-    const host = card._multi036Controls;
-    if (!host) return;
-    if (!multiActive036(card)) {
-      host.hidden = true;
-      return;
-    }
-    host.hidden = false;
-    const members = card._multi036Site?.members || [];
-    const controlsKey = [
-      card?._config?.show_status,
-      card?._config?.show_zone,
-      card?._config?.show_battery,
-      card?._config?.show_position,
-      ...members.map((member) => {
-        const entities = memberEntities036(member);
-        return [
-          member.entry_id,
-          state036(card, entities.mower)?.state,
-          state036(card, entities.mower)?.last_updated,
-          state036(card, entities.current_physical_zone)?.state,
-          state036(card, entities.battery)?.state,
-          state036(card, entities.managed_schedule)?.state,
-          state036(card, entities.native_schedule)?.state,
-          JSON.stringify(memberState036(card, member.entry_id).command || null),
-        ].join(":");
-      })
-    ].join("|");
-    if (controlsKey === card._multi036ControlsRenderKey) return;
-    card._multi036ControlsRenderKey = controlsKey;
-    host.style.setProperty("--nm-multi-columns", String(Math.max(1, members.length)));
-    host.innerHTML = members.map((member) => {
-      const entities = memberEntities036(member);
-      const mower = state036(card, entities.mower);
-      const unavailable = !mower || ["unknown", "unavailable"].includes(String(mower.state || "").toLowerCase());
-      const managedOn = String(state036(card, entities.managed_schedule)?.state || "").toLowerCase() === "on";
-      const nativeOn = String(state036(card, entities.native_schedule)?.state || "").toLowerCase() === "on";
-      const scheduleOn = managedOn || nativeOn;
-      const canResume = typeof shouldOfferResume === "function" ? shouldOfferResume(card._hass, mower) : ["paused", "returning"].includes(String(mower?.state || "").toLowerCase());
-      const status = memberState036(card, member.entry_id).command;
-      const meta = memberMeta036(card, member, mower);
-      return "<section class=\"nm-multi-control-member\" data-entry-id=\"" + esc(member.entry_id) + "\"><button type=\"button\" class=\"nm-multi-schedule" + (scheduleOn ? " active" : "") + "\" data-multi-schedule=\"" + esc(member.entry_id) + "\" title=\"Open " + esc(displayName036(member)) + " schedule\"><span>" + esc(displayName036(member)) + "</span><ha-icon icon=\"mdi:calendar-clock\"></ha-icon></button>" + meta + "<div class=\"nm-multi-command-grid\"><button type=\"button\" data-multi-command=\"mow\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:play\"></ha-icon><span>Mow</span></button>" + (canResume ? "<button type=\"button\" data-multi-command=\"resume\" data-entry-id=\"" + esc(member.entry_id) + "\"><ha-icon icon=\"mdi:play-circle-outline\"></ha-icon><span>Resume</span></button>" : "") + "<button type=\"button\" data-multi-command=\"pause\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:pause\"></ha-icon><span>Pause</span></button><button type=\"button\" data-multi-command=\"dock\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:home-map-marker\"></ha-icon><span>Home</span></button></div>" + (status ? "<div class=\"nm-multi-command-status " + esc(status.kind || "") + "\">" + esc(status.text || "") + "</div>" : "") + "</section>";
-    }).join("");
-  }
-  async function runMemberCommand036(card, member, command) {
-    if (!member || !card?._hass?.callService) return;
-    const state = memberState036(card, member.entry_id);
-    const entities = memberEntities036(member);
-    card._multi036ActionMember = member;
-    state.command = { kind: "saving", text: command === "dock" ? "Returning home…" : command === "pause" ? "Pausing…" : "Resuming…" };
-    renderMultiControls036(card);
-    try {
-      if (command === "resume") {
-        const deviceId = memberDevice036(member);
-        await card._hass.callService("navimower", "resume", deviceId ? { device_id: deviceId } : {});
-      } else {
-        const entityId = entities.mower;
-        if (!entityId) throw new Error("Mower entity is unavailable");
-        await card._hass.callService("lawn_mower", command, { entity_id: entityId });
-      }
-      state.command = { kind: "saved", text: command === "dock" ? "Home command sent" : command === "pause" ? "Pause command sent" : "Resume command sent" };
-    } catch (error) {
-      state.command = { kind: "error", text: "Command failed" };
-      console.error("[Navimower Map Card] Multi-mower command failed", command, error);
-    } finally {
-      card._multi036ActionMember = null;
-      renderMultiControls036(card);
-    }
-  }
-
-  const clearDialogFlags036 = (card) => {
-    card._notificationDialogOpen = false;
-    card._beta5SettingsOpen = false;
-    card._beta6SettingsOpen = false;
-  };
-
-  const memberSchedulerIds036 = (card, member) => {
-    const frontend = member?.frontend || {};
-    const entities = frontend?.entities || {};
-    return {
-      status: entities.schedule_status || null,
-      managedSwitch: entities.managed_schedule || null,
-      nativeSwitch: entities.native_schedule || null,
-      nativeData: entities.native_schedule_data || null,
-      start: entities.schedule_start || null,
-      end: entities.schedule_end || null,
-      deviceId: frontend.device_id || null,
-      configEntryId: member?.entry_id || null,
-      source: "multi_site_frontend",
-      authoritative: true,
-    };
-  };
-
-  const primeMemberScheduler036 = (card, member) => {
-    const ids = memberSchedulerIds036(card, member);
-    card._beta2SchedulerIds = ids;
-    card._beta10SchedulerEntities = ids;
-    card._beta6SchedulerEntities = ids;
-    card._beta5SchedulerEntities = ids;
-    card._beta10ScheduleDeviceId = ids.deviceId || null;
-    return ids;
-  };
-
-  async function openMemberSchedule036(card, member) {
-    if (!member) return;
-    setDialogMember036(card, member);
-    clearDialogFlags036(card);
-    const ids = primeMemberScheduler036(card, member);
-    const managedStatusPresent = Boolean(ids.status && state036(card, ids.status));
-    if (!managedStatusPresent && card._config) {
-      const hadMode = Object.prototype.hasOwnProperty.call(card._config, "schedule_view_mode");
-      const previousMode = card._config.schedule_view_mode;
-      card._config.schedule_view_mode = "native";
-      try {
-        await card._openScheduleDialog?.();
-      } catch (error) {
-        console.error("[Navimower Map Card] Multi-mower native schedule open failed", error);
-      } finally {
-        if (hadMode) card._config.schedule_view_mode = previousMode;
-        else delete card._config.schedule_view_mode;
-      }
-      return;
-    }
-    try {
-      await card._openScheduleDialog?.();
-    } catch (error) {
-      console.error("[Navimower Map Card] Multi-mower schedule open failed", error);
-    }
-  }
-  function openMemberMow036(card, member) {
-    if (!member) return;
-    setDialogMember036(card, member);
-    clearDialogFlags036(card);
-    card._mowSequence = [];
-    card._mowReset = true;
-    card._onMowPressed?.();
-  }
-
-  const sessionLabel036 = (card, session) => {
-    const start = date036(session?.started_at ?? session?.started_at_ms);
-    const end = date036(session?.ended_at ?? session?.ended_at_ms);
-    if (typeof card._formatSessionTime === "function") return card._formatSessionTime(start, end, Boolean(session?.active), new Date());
-    if (!start) return session?.active ? "Current session" : "Mowing session";
-    const options = { hour: "2-digit", minute: "2-digit" };
-    return start.toLocaleTimeString([], options) + "–" + (end ? end.toLocaleTimeString([], options) : "…");
-  };
-
-  function renderMultiSessions036(card) {
-    ensureMultiUi036(card);
-    if (!card._sessionsEl) return;
-    if (!multiActive036(card)) return;
-    if (card?._config?.show_session_legend === false) {
-      card._sessionsEl.style.display = "none";
-      return;
-    }
-    const offset = card._historyDayOffset === null || card._historyDayOffset === undefined ? 0 : Math.max(0, Number(card._historyDayOffset) || 0);
-    const sessionsKey = [offset, card._multi036SelectedSessionKey, ...(card._multi036Site?.members || []).map((member) => String(member.entry_id) + ":" + memberState036(card, member.entry_id).sessionsAt + ":" + memberState036(card, member.entry_id).sessions.length)].join("|");
-    if (sessionsKey === card._multi036SessionsRenderKey) return;
-    card._multi036SessionsRenderKey = sessionsKey;
-    const groups = (card._multi036Site?.members || []).map((member) => {
-      const sessions = sessionsForDay036(card, memberState036(card, member.entry_id).sessions, offset);
-      const rows = sessions.length ? sessions.map((session) => {
-        const id = sessionId036(session);
-        const key = String(member.entry_id) + ":" + id;
-        const selected = card._multi036SelectedSessionKey === key;
-        return "<button type=\"button\" class=\"nm-session nm-multi-session" + (selected ? " nm-session-pulsing" : "") + "\" data-multi-session-key=\"" + esc(key) + "\" data-entry-id=\"" + esc(member.entry_id) + "\" data-session-id-multi=\"" + esc(id) + "\" title=\"Show this session on the map\"><span class=\"nm-session-dot\" style=\"background:" + esc(card?._config?.trail_color || "#43a047") + ";opacity:" + clamp036(card?._config?.trail_opacity, 0, 1).toFixed(2) + "\"></span><span>" + esc(sessionLabel036(card, session)) + "</span></button>";
-      }).join("") : "<span class=\"nm-multi-session-empty\">No sessions</span>";
-      return "<section class=\"nm-multi-session-group\"><div class=\"nm-multi-session-heading\">" + esc(displayName036(member)) + "</div><div class=\"nm-multi-session-rows\">" + rows + "</div></section>";
-    }).join("");
-    card._sessionsEl.classList.add("nm-multi-sessions-active");
-    card._sessionsEl.innerHTML = groups;
-    card._sessionsEl.style.display = "grid";
-  }
-
-  async function selectSession036(card, entryId, sessionId, key) {
-    const member = memberById036(card, entryId);
-    if (!member) return;
-    const state = memberState036(card, entryId);
-    const session = state.sessions.find((item) => sessionId036(item) === String(sessionId));
-    if (!session) return;
-    const generation = currentGeneration036(card);
-    const requestKey = String(key);
-    card._multi036PendingSelectionKey = requestKey;
-    await getSessionRender036(card, member, session);
-    if (
-      !generationMatches036(card, generation)
-      || card._multi036PendingSelectionKey !== requestKey
-      || !memberById036(card, entryId)
-    ) return;
-    card._multi036SelectedSessionKey = requestKey;
-    card._multi036MapRenderKey = null;
-    card._multi036SessionsRenderKey = null;
-    renderMultiSessions036(card);
-    renderMultiMap036(card, true);
-    if (card._multi036PulseTimer) clearTimeout(card._multi036PulseTimer);
-    card._multi036PulseTimer = null;
-  }
-
-  const notificationItems036 = (card) => {
-    const rows = [];
-    for (const member of card?._multi036Site?.members || []) {
-      const entityId = memberEntities036(member)?.notification;
-      const source = state036(card, entityId);
-      let items = [];
-      if (typeof notificationItemsFromState === "function") items = notificationItemsFromState(source);
-      else if (source && !["unknown", "unavailable", "no notifications"].includes(String(source.state || "").toLowerCase())) items = [{ ...source.attributes, title: source.state }];
-      for (const item of items || []) rows.push({ ...item, member, notification_entity: entityId });
-    }
-    return rows.sort((left, right) => (date036(right.created_at ?? right.addtime)?.getTime() || 0) - (date036(left.created_at ?? left.addtime)?.getTime() || 0));
-  };
-
-  function syncMultiNotificationBell036(card) {
-    if (!multiActive036(card)) return;
-    const button = card?._notificationButtonEl || card?.querySelector?.(".nm-notification-button");
-    if (!button) return;
-    const unread = notificationItems036(card).some((item) => item.read === false);
-    button.classList.toggle("unread", unread);
-    button.setAttribute("aria-label", unread ? "Open unread notifications" : "Open notifications");
-    button.title = unread ? "Unread notifications · all mowers" : "Notifications · all mowers";
-    button.querySelector?.("ha-icon")?.setAttribute("icon", unread ? "mdi:bell-badge-outline" : "mdi:bell-outline");
-  }
-
-  function renderMultiNotifications036(card) {
-    if (!multiActive036(card) || !card?._modalHostEl || !card._notificationDialogOpen) return;
-    const items = notificationItems036(card);
-    const pageSize = typeof notificationPageSize === "function" ? notificationPageSize(card._config || {}) : Math.max(1, Math.min(10, Number(card?._config?.notification_page_size) || 3));
-    const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
-    card._multi036NotificationPage = Math.max(0, Math.min(pageCount - 1, Number(card._multi036NotificationPage) || 0));
-    const pageItems = items.slice(card._multi036NotificationPage * pageSize, card._multi036NotificationPage * pageSize + pageSize);
-    const unread = items.some((item) => item.read === false);
-    const body = pageItems.length ? pageItems.map((item) => {
-      const member = item.member;
-      const stamp = typeof formatNotificationTimestamp === "function" ? formatNotificationTimestamp(item.created_at ?? item.addtime, card._hass) : (date036(item.created_at ?? item.addtime)?.toLocaleString() || "Time unavailable");
-      const id = String(item.message_id ?? item.messageId ?? item.id ?? "");
-      const code = item.notification_code ?? item.error_code ?? item.event_code ?? item.code ?? null;
-      return "<article class=\"nm-notification-item" + (item.read === false ? " unread" : "") + "\"><div class=\"nm-notification-meta\"><span class=\"nm-notification-dot\"></span><span class=\"nm-multi-notification-mower\">" + esc(displayName036(member)) + "</span><span class=\"nm-notification-time\">" + esc(stamp) + "</span>" + (code ? "<span class=\"nm-notification-code\">" + esc(code) + "</span>" : "") + "</div><div class=\"nm-notification-item-title\">" + esc(item.title || "Notification") + "</div>" + (item.content ? "<div class=\"nm-notification-content\">" + esc(item.content) + "</div>" : "") + (item.read === false && id ? "<button type=\"button\" class=\"nm-notification-mark-read\" data-multi-notification-read=\"" + esc(id) + "\" data-entry-id=\"" + esc(member.entry_id) + "\">Mark as read</button>" : "") + "</article>";
-    }).join("") : "<div class=\"nm-notification-empty\">No notifications available.</div>";
-    const pager = pageCount > 1 ? "<div class=\"nm-notification-pager\"><button type=\"button\" data-multi-notification-page=\"previous\"" + (card._multi036NotificationPage <= 0 ? " disabled" : "") + ">Previous</button><span class=\"nm-notification-page-label\">" + (card._multi036NotificationPage + 1) + " / " + pageCount + "</span><button type=\"button\" data-multi-notification-page=\"next\"" + (card._multi036NotificationPage >= pageCount - 1 ? " disabled" : "") + ">Next</button></div>" : "";
-    card._modalHostEl.innerHTML = "<div class=\"nm-backdrop nm-notification-backdrop\"><div class=\"nm-dialog nm-notification-dialog\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Notifications\"><div class=\"nm-notification-head\"><div class=\"nm-notification-title\">Notifications</div>" + (unread ? "<button type=\"button\" class=\"nm-notification-mark-all\" data-multi-notification-all>Mark all as read</button>" : "<span></span>") + "<button type=\"button\" class=\"nm-notification-close\" aria-label=\"Close notifications\"><ha-icon icon=\"mdi:close\"></ha-icon></button></div><div class=\"nm-notification-body\">" + body + "</div>" + pager + "</div></div>";
-    const backdrop = card._modalHostEl.querySelector?.(".nm-notification-backdrop");
-    backdrop?.addEventListener("click", (event) => { if (event.target === backdrop) card._closeNotificationDialog?.(); });
-    card._modalHostEl.querySelector?.(".nm-notification-close")?.addEventListener("click", () => card._closeNotificationDialog?.());
-    card._modalHostEl.querySelectorAll?.("[data-multi-notification-page]").forEach((button) => button.addEventListener("click", () => {
-      if (button.disabled) return;
-      card._multi036NotificationPage += button.dataset.multiNotificationPage === "next" ? 1 : -1;
-      renderMultiNotifications036(card);
-    }));
-    card._modalHostEl.querySelectorAll?.("[data-multi-notification-read]").forEach((button) => button.addEventListener("click", async () => {
-      const member = memberById036(card, button.dataset.entryId);
-      const deviceId = memberDevice036(member);
-      if (!deviceId) return;
-      button.disabled = true;
-      try { await card._hass.callService("navimower", "mark_notification_read", { device_id: deviceId, message_id: button.dataset.multiNotificationRead }); } catch (error) { console.error("[Navimower Map Card] Multi-mower mark read failed", error); }
-    }));
-    card._modalHostEl.querySelector?.("[data-multi-notification-all]")?.addEventListener("click", async (event) => {
-      event.currentTarget.disabled = true;
-      const members = (card._multi036Site?.members || []).filter((member) => notificationItems036(card).some((item) => item.member?.entry_id === member.entry_id && item.read === false));
-      await Promise.allSettled(members.map((member) => {
-        const deviceId = memberDevice036(member);
-        return deviceId ? card._hass.callService("navimower", "mark_all_notifications_read", { device_id: deviceId }) : Promise.resolve();
-      }));
-    });
-  }
-
-  function syncMultiButton036(card) {
-    const button = card._multi036Button || card.querySelector?.(".nm-multi-button");
-    if (!button) return;
-    button.hidden = true;
-    button.remove?.();
-    card._multi036Button = button;
-  }
-
-  const hideCoreLayer036 = (element, hide) => {
-    if (!element) return;
-    if (hide) {
-      if (element.dataset.multi036Display === undefined) element.dataset.multi036Display = element.style.display || "";
-      element.style.display = "none";
-    } else if (element.dataset.multi036Display !== undefined) {
-      element.style.display = element.dataset.multi036Display;
-      delete element.dataset.multi036Display;
-    }
-  };
-
-  function applyMultiMode036(card) {
-    ensureMultiUi036(card);
-    const active = multiActive036(card);
-    if (card._multi036ModeApplied === active) {
-      if (active) {
-        hideCoreLayer036(card._scheduleButtonEl, true);
-        hideCoreLayer036(card._footerEl, true);
-        renderMulti036(card);
-      }
-      return;
-    }
-    card._multi036ModeApplied = active;
-    const coreLayers = [card._baseEl, card._historyEl, card._trailEl, card._highlightEl, card._detailsEl, card._labelsEl, card._dynamicEl, card._uiEl];
-    coreLayers.forEach((element) => hideCoreLayer036(element, active));
-    hideCoreLayer036(card._controlsEl, active);
-    hideCoreLayer036(card._commandStatusEl, active);
-    hideCoreLayer036(card._footerEl, active);
-    hideCoreLayer036(card._scheduleButtonEl, active);
-    if (card._multi036Layer) card._multi036Layer.style.display = active ? "" : "none";
-    if (card._multi036Controls) card._multi036Controls.hidden = !active;
-    if (!active) {
-      card._multi036DialogMember = null;
-      card._multi036SelectedSessionKey = null;
-      card._sessionsEl?.classList?.remove?.("nm-multi-sessions-active");
-      card._renderShell?.();
-      card._renderHistory?.();
-      card._renderTrail?.();
-      card._renderMower?.();
-      card._renderFooter?.();
-      card._renderControls?.();
-      card._renderSessions?.();
-      return;
-    }
-    card._historyRenderKey = null;
-    card._sessionsRenderKey = null;
-    card._multi036MapRenderKey = null;
-    card._view = { scale: Math.max(1, finite036(card?._config?.initial_zoom, 1)), cx: 500, cy: 500 };
-    card._initialViewApplied = true;
-    card._applyViewBox?.();
-    void refreshMembers036(card, true);
-    renderMulti036(card);
-  }
-
-  function renderMulti036(card) {
-    if (!multiActive036(card)) return;
-    renderMultiMap036(card);
-    renderMultiControls036(card);
-    renderMultiSessions036(card);
-    syncMultiNotificationBell036(card);
-  }
-
-  function ensureMultiUi036(card) {
-    if (!card?._domReady || typeof document === "undefined") return;
-    if (!card._multi036Button) {
-      const header = card.querySelector?.(".nm-header");
-      if (header) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "nm-multi-button";
-        button.hidden = true;
-        button.setAttribute("aria-label", "Toggle multi mower map");
-        button.setAttribute("aria-pressed", "false");
-        button.innerHTML = "<span>Multi</span><ha-icon icon=\"mdi:robot-mower-outline\"></ha-icon>";
-        const notification = header.querySelector?.(".nm-notification-button");
-        const schedule = header.querySelector?.(".nm-schedule-button");
-        if (notification) notification.before(button);
-        else if (schedule) schedule.before(button);
-        else header.appendChild(button);
-        button.addEventListener("click", () => {
-          if (!siteAvailable036(card)) return;
-          ensurePreference036(card);
-          card._multi036Requested = !card._multi036Requested;
-          savePreference036(card);
+    
+      async function loadSite036(card, force = false) {
+        if (!card?._hass?.callApi || card._multi036SiteLoading) return;
+        const path = sitePath036(card);
+        if (!path) return;
+        const now = Date.now();
+        if (!force && card._multi036Site && now - finite036(card._multi036SiteAt, 0) < SITE_REFRESH_MS) return;
+        const generation = currentGeneration036(card);
+        card._multi036SiteLoading = true;
+        try {
+          const payload = await callApi036(card, path);
+          if (!generationMatches036(card, generation)) return;
+          card._multi036Site = normalizeSite036(payload);
+          card._multi036SiteAt = now;
+          card._multi036SiteError = null;
+          for (const member of card._multi036Site.members || []) memberState036(card, member.entry_id);
           syncMultiButton036(card);
           applyMultiMode036(card);
-        });
-        card._multi036Button = button;
+          if (multiActive036(card)) await refreshMembers036(card, true);
+          queueMicrotask(() => card._syncOsmUnderlay036?.());
+        } catch (error) {
+          card._multi036SiteError = error;
+          if (!card._multi036Site) card._multi036Site = null;
+          syncMultiButton036(card);
+          applyMultiMode036(card);
+          console.debug("[Navimower Map Card] Multi-mower Site API unavailable", error);
+        } finally {
+          card._multi036SiteLoading = false;
+        }
       }
-    }
-    if (!card._multi036Layer && card._svgEl) {
-      const layer = document.createElementNS(SVG_NS, "g");
-      layer.setAttribute("class", "nm-multi-layer");
-      layer.style.display = "none";
-      card._svgEl.appendChild(layer);
-      card._multi036Layer = layer;
-    }
-    if (!card._multi036Controls && card._controlsEl) {
-      const controls = document.createElement("div");
-      controls.className = "nm-multi-controls";
-      controls.hidden = true;
-      card._controlsEl.before(controls);
-      controls.addEventListener("click", (event) => {
-        const scheduleButton = event.target?.closest?.("[data-multi-schedule]");
-        if (scheduleButton) {
-          const member = memberById036(card, scheduleButton.dataset.multiSchedule);
-          void openMemberSchedule036(card, member);
+    
+      const memberIsActive036 = (card, member) => {
+        const mower = state036(card, memberEntities036(member)?.mower);
+        const value = String(mower?.state || "").toLowerCase();
+        return ["mowing", "paused", "returning", "starting", "edgecut", "edge_cutting"].includes(value);
+      };
+    
+      async function refreshMemberMap036(card, member, force, generation = currentGeneration036(card)) {
+        const state = memberState036(card, member.entry_id);
+        const anchorEntry = anchorEntry036(card);
+        if (String(member.entry_id) === String(anchorEntry) && card._mapPayload) {
+          if (!generationMatches036(card, generation)) return;
+          state.map = card._mapPayload;
+          state.mapAt = Date.now();
+          state.error = null;
+          renderMultiMap036(card);
+          void refreshMemberCurrentCycle036(card, member, generation);
           return;
         }
-        const button = event.target?.closest?.("[data-multi-command]");
-        if (!button || button.disabled) return;
-        const member = memberById036(card, button.dataset.entryId);
-        const command = button.dataset.multiCommand;
-        if (command === "mow") openMemberMow036(card, member);
-        else void runMemberCommand036(card, member, command);
-      });
-      card._multi036Controls = controls;
-    }
-    if (card._sessionsEl && !card._sessionsEl.__multi036Click) {
-      card._sessionsEl.__multi036Click = true;
-      card._sessionsEl.addEventListener("click", (event) => {
-        const button = event.target?.closest?.("[data-multi-session-key]");
-        if (!button || !multiActive036(card)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        void selectSession036(card, button.dataset.entryId, button.dataset.sessionIdMulti, button.dataset.multiSessionKey);
-      }, true);
-    }
-    if (!card._multi036Styles) {
-      const style = document.createElement("style");
-      style.dataset.multiMower036 = "true";
-      style.textContent = [
-        ".nm-multi-button{height:34px;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:0;border-radius:18px;background:transparent;color:var(--secondary-text-color);font:inherit;font-size:.82rem;font-weight:650;cursor:pointer}",
-        ".nm-multi-button[hidden]{display:none}.nm-multi-button.active{color:#FF5A00;background:color-mix(in srgb,#FF5A00 10%,transparent)}.nm-multi-button ha-icon{--mdc-icon-size:20px}",
-        ".nm-multi-controls{display:grid;grid-template-columns:repeat(var(--nm-multi-columns,2),minmax(0,1fr));gap:10px;margin:10px 2px 0}.nm-multi-controls[hidden]{display:none}",
-        ".nm-multi-control-member{min-width:0;padding:9px;border:1px solid var(--divider-color);border-radius:11px;background:color-mix(in srgb,var(--secondary-background-color) 65%,transparent)}",
-        ".nm-multi-schedule{width:100%;min-height:32px;display:flex;align-items:center;justify-content:space-between;gap:7px;border:0;border-radius:9px;padding:5px 8px;color:var(--primary-text-color);background:transparent;font:inherit;font-weight:700;cursor:pointer}.nm-multi-schedule.active{color:#FF5A00}.nm-multi-schedule ha-icon{--mdc-icon-size:20px}",
-        ".nm-multi-member-meta{display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;padding:2px 8px 7px;color:var(--secondary-text-color);font-size:.76rem}.nm-multi-meta-status{text-transform:capitalize}.nm-multi-meta-spacer{flex:1 1 auto}.nm-multi-meta-item{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}.nm-multi-meta-item ha-icon{--mdc-icon-size:15px}",
-        ".nm-multi-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.nm-multi-command-grid button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;padding:7px 8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit;font-size:.84rem;font-weight:650;cursor:pointer}.nm-multi-command-grid button:disabled{opacity:.45;cursor:default}.nm-multi-command-grid ha-icon{--mdc-icon-size:19px}",
-        ".nm-multi-command-status{padding:6px 4px 0;text-align:center;color:var(--secondary-text-color);font-size:.74rem}.nm-multi-command-status.error{color:var(--error-color,#db4437)}",
-        ".nm-sessions.nm-multi-sessions-active{grid-template-columns:1fr!important;gap:7px!important;width:100%}.nm-multi-session-group{display:grid;grid-template-columns:minmax(80px,auto) 1fr;align-items:start;gap:8px 12px;width:100%}.nm-multi-session-heading{padding-top:2px;color:var(--secondary-text-color);font-size:.76rem;font-weight:750}.nm-multi-session-rows{display:flex;flex-wrap:wrap;gap:5px 10px;min-width:0}.nm-multi-session-empty{color:var(--secondary-text-color);font-size:.8rem;opacity:.7}",
-        ".nm-multi-selected-session .nm-multi-session-area{animation:nm-multi-session-pulse 600ms ease-in-out 3 forwards}@keyframes nm-multi-session-pulse{0%,100%{opacity:.1}50%{opacity:1;filter:drop-shadow(0 0 7px var(--nm-highlight-color,#43a047))}}",
-        ".nm-multi-mower-error{filter:drop-shadow(0 0 7px var(--error-color,#db4437))}.nm-multi-notification-mower{flex:0 0 auto;padding:1px 6px;border-radius:10px;background:var(--secondary-background-color);color:var(--primary-text-color);font-weight:700}",
-        "@media(max-width:620px){.nm-multi-controls{grid-template-columns:1fr}.nm-multi-session-group{grid-template-columns:1fr;gap:2px}.nm-multi-session-heading{padding-left:4px}.nm-multi-command-grid button span{font-size:.8rem}}"
-      ].join("\n");
-      card.appendChild(style);
-      card._multi036Styles = style;
-    }
-  }
-
-  const originalStub036 = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
-  Card.getStubConfig = function multi036StubConfig() {
-    return { ...(originalStub036?.() || {}), multi_mower: false };
-  };
-
-  const originalForm036 = typeof Card.getConfigForm === "function" ? Card.getConfigForm.bind(Card) : null;
-  Card.getConfigForm = function multi036ConfigForm() {
-    const form = originalForm036?.() || { schema: [] };
-    const walk = (node) => {
-      if (!node) return false;
-      if (Array.isArray(node)) {
-        const index = node.findIndex((item) => item?.name === "entity");
-        if (index >= 0 && !node.some((item) => item?.name === "multi_mower")) {
-          node.splice(index + 1, 0, { name: "multi_mower", selector: { boolean: {} } });
-          return true;
-        }
-        for (const item of node) if (walk(item)) return true;
-      } else if (typeof node === "object") {
-        for (const value of Object.values(node)) if (walk(value)) return true;
-      }
-      return false;
-    };
-    walk(form.schema);
-    const label = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema) => schema?.name === "multi_mower" ? "Multi mower" : label?.(schema) || schema?.name || "";
-    return form;
-  };
-
-  const originalSetConfig036 = proto.setConfig;
-  if (typeof originalSetConfig036 === "function") {
-    proto.setConfig = function multi036SetConfig(config) {
-      const previousIdentity = this?._config?.entity;
-      const result = originalSetConfig036.call(this, { ...(config || {}), multi_mower: asBool036(config?.multi_mower, false) });
-      if (previousIdentity !== this?._config?.entity) {
-        this._multi036Generation = currentGeneration036(this) + 1;
-        this._multi036PreferenceLoaded = false;
-        this._multi036Site = null;
-        this._multi036Members = new Map();
-        this._multi036RenderCache = new Map();
-        this._multi036RenderFailures = new Map();
-        this._multi036PendingSelectionKey = null;
-        this._multi036MapRenderKey = null;
-        this._multi036LiveRenderKey = null;
-        this._multi036ControlsRenderKey = null;
-        this._multi036SessionsRenderKey = null;
-      }
-      ensurePreference036(this);
-      syncMultiButton036(this);
-      applyMultiMode036(this);
-      return result;
-    };
-  }
-
-  const originalEnsureDom036 = proto._ensureDom;
-  if (typeof originalEnsureDom036 === "function") {
-    proto._ensureDom = function multi036EnsureDom(...args) {
-      const result = originalEnsureDom036.apply(this, args);
-      ensureMultiUi036(this);
-      syncMultiButton036(this);
-      return result;
-    };
-  }
-
-  const originalMaybeLoadMap036 = proto._maybeLoadMap;
-  if (typeof originalMaybeLoadMap036 === "function") {
-    proto._maybeLoadMap = async function multi036MaybeLoadMap(...args) {
-      const result = await originalMaybeLoadMap036.apply(this, args);
-      if (this._mapPayload) {
-        const anchor = anchorEntry036(this);
-        const member = anchor ? memberById036(this, anchor) : null;
-        if (member) {
-          const state = memberState036(this, anchor);
-          state.map = this._mapPayload;
-          state.mapAt = Date.now();
-        }
-      }
-      await loadSite036(this, false);
-      if (multiActive036(this)) await refreshMembers036(this, false);
-      return result;
-    };
-  }
-
-  const originalRenderShell036 = proto._renderShell;
-  if (typeof originalRenderShell036 === "function") {
-    proto._renderShell = function multi036RenderShell(...args) {
-      const result = originalRenderShell036.apply(this, args);
-      ensureMultiUi036(this);
-      syncMultiButton036(this);
-      applyMultiMode036(this);
-      syncMultiNotificationBell036(this);
-      return result;
-    };
-  }
-
-  const originalRenderFooter036 = proto._renderFooter;
-  if (typeof originalRenderFooter036 === "function") {
-    proto._renderFooter = function multi036RenderFooter(...args) {
-      if (multiActive036(this)) {
-        if (this._footerEl) {
-          this._footerEl.innerHTML = "";
-          this._footerEl.style.display = "none";
-        }
-        return;
-      }
-      return originalRenderFooter036.apply(this, args);
-    };
-  }
-
-  const originalRenderControls036 = proto._renderControls;
-  if (typeof originalRenderControls036 === "function") {
-    proto._renderControls = function multi036RenderControls(...args) {
-      if (multiActive036(this)) {
-        renderMultiControls036(this);
-        return;
-      }
-      return originalRenderControls036.apply(this, args);
-    };
-  }
-
-  const originalRenderSessions036 = proto._renderSessions;
-  if (typeof originalRenderSessions036 === "function") {
-    proto._renderSessions = function multi036RenderSessions(...args) {
-      if (multiActive036(this)) {
-        renderMultiSessions036(this);
-        void ensureHistoryRenders036(this);
-        return;
-      }
-      this._sessionsEl?.classList?.remove?.("nm-multi-sessions-active");
-      return originalRenderSessions036.apply(this, args);
-    };
-  }
-
-  const originalRenderHistory036 = proto._renderHistory;
-  if (typeof originalRenderHistory036 === "function") {
-    proto._renderHistory = function multi036RenderHistory(...args) {
-      if (multiActive036(this)) {
-        void ensureHistoryRenders036(this);
-        renderMultiMap036(this, true);
-        return;
-      }
-      return originalRenderHistory036.apply(this, args);
-    };
-  }
-
-  const originalApplyView036 = proto._applyViewBox;
-  if (typeof originalApplyView036 === "function") {
-    proto._applyViewBox = function multi036ApplyView(...args) {
-      const result = originalApplyView036.apply(this, args);
-      if (multiActive036(this)) renderMultiMap036(this, true);
-      return result;
-    };
-  }
-
-  const originalOpenNotification036 = proto._openNotificationDialog;
-  if (typeof originalOpenNotification036 === "function") {
-    proto._openNotificationDialog = function multi036OpenNotification(...args) {
-      if (!multiActive036(this)) return originalOpenNotification036.apply(this, args);
-      this._mowDialogOpen = false;
-      this._scheduleDialogOpen = false;
-      this._beta6ManagedOpen = false;
-      this._beta2ScheduleOpen = false;
-      this._notificationDialogOpen = true;
-      this._multi036NotificationPage = 0;
-      renderMultiNotifications036(this);
-      syncMultiNotificationBell036(this);
-    };
-  }
-
-  const originalRenderDialog036 = proto._renderDialog;
-  if (typeof originalRenderDialog036 === "function") {
-    proto._renderDialog = function multi036RenderDialog(...args) {
-      if (multiActive036(this) && this._notificationDialogOpen) {
-        renderMultiNotifications036(this);
-        return;
-      }
-      return originalRenderDialog036.apply(this, args);
-    };
-  }
-
-  const hassDescriptor036 = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (hassDescriptor036?.set) {
-    Object.defineProperty(proto, "hass", {
-      configurable: true,
-      get: hassDescriptor036.get,
-      set(value) {
-        hassDescriptor036.set.call(this, value);
-        ensureMultiUi036(this);
-        ensurePreference036(this);
-        syncMultiButton036(this);
-        void loadSite036(this, false);
-        if (multiActive036(this)) {
-          const active = (this._multi036Site?.members || []).some((member) => memberIsActive036(this, member));
-          const interval = active ? MAP_REFRESH_ACTIVE_MS : MAP_REFRESH_IDLE_MS;
-          if (!this._multi036LastMemberRefresh || Date.now() - this._multi036LastMemberRefresh >= interval) {
-            this._multi036LastMemberRefresh = Date.now();
-            void refreshMembers036(this, false);
+        const interval = memberIsActive036(card, member) ? MAP_REFRESH_ACTIVE_MS : MAP_REFRESH_IDLE_MS;
+        if (!force && state.map && Date.now() - state.mapAt < interval) return;
+        const path = memberMapPath036(member);
+        if (!path) return;
+        try {
+          const payload = await callApi036(card, addLightweightQuery036(path));
+          if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return;
+          if (payload) {
+            const current = state.map?.current_cycle_render;
+            state.map = payload;
+            if (current && !payload.current_cycle_render && payload.vendor_trail_debug?.store_version === 1) {
+              state.map = { ...payload, current_cycle_render: current };
+            }
           }
-          renderMulti036(this);
-          hideCoreLayer036(this._scheduleButtonEl, true);
-          if (this._notificationDialogOpen) renderMultiNotifications036(this);
+          state.mapAt = Date.now();
+          state.error = null;
+          renderMultiMap036(card);
+          void refreshMemberCurrentCycle036(card, member, generation);
+        } catch (error) {
+          if (generationMatches036(card, generation)) state.error = error;
         }
       }
-    });
+    
+      async function refreshMemberSessions036(card, member, force, generation = currentGeneration036(card)) {
+        const state = memberState036(card, member.entry_id);
+        if (!force && state.sessionsAt && Date.now() - state.sessionsAt < SESSION_REFRESH_MS) return;
+        const path = memberSessionsPath036(member);
+        if (!path) return;
+        try {
+          const payload = await callApi036(card, path);
+          if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return;
+          state.sessions = (Array.isArray(payload?.sessions) ? payload.sessions : [])
+            .filter((session) => session && sessionId036(session))
+            .map((session) => ({ ...session }))
+            .sort((left, right) => (date036(left.started_at ?? left.started_at_ms)?.getTime() || 0) - (date036(right.started_at ?? right.started_at_ms)?.getTime() || 0));
+          state.renderTemplate = payload?.session_render_api_path_template || memberRenderTemplate036(member);
+          state.sessionsAt = Date.now();
+          state.sessionsError = null;
+        } catch (error) {
+          if (generationMatches036(card, generation)) state.sessionsError = error;
+        }
+      }
+    
+      function scheduleMemberDetails036(card, members, force, generation) {
+        if (card._multi036DeferredQueued || card._multi036DeferredLoading) return;
+        card._multi036DeferredQueued = true;
+        scheduleIdle036(async () => {
+          card._multi036DeferredQueued = false;
+          if (!generationMatches036(card, generation) || !multiActive036(card)) return;
+          card._multi036DeferredLoading = true;
+          try {
+            await runLimited036(
+              members,
+              MULTI_REQUEST_CONCURRENCY,
+              (member) => refreshMemberSessions036(card, member, force, generation),
+            );
+            if (!generationMatches036(card, generation)) return;
+            card._multi036SessionsRenderKey = null;
+            renderMultiSessions036(card);
+            if (card._historyDayOffset !== null && card._historyDayOffset !== undefined) {
+              await ensureHistoryRenders036(card);
+            }
+          } finally {
+            if (generationMatches036(card, generation)) card._multi036DeferredLoading = false;
+          }
+        });
+      }
+    
+      async function refreshMembers036(card, force = false) {
+        if (!multiActive036(card) || card._multi036MembersLoading) return;
+        const generation = currentGeneration036(card);
+        const anchor = anchorEntry036(card);
+        const members = [...(card._multi036Site?.members || [])].sort((left, right) => {
+          const leftRank = memberIsActive036(card, left) ? 0 : String(left.entry_id) === String(anchor) ? 1 : 2;
+          const rightRank = memberIsActive036(card, right) ? 0 : String(right.entry_id) === String(anchor) ? 1 : 2;
+          return leftRank - rightRank || finite036(left.display_order, 0) - finite036(right.display_order, 0);
+        });
+        card._multi036MembersLoading = true;
+        try {
+          await runLimited036(
+            members,
+            MULTI_REQUEST_CONCURRENCY,
+            async (member) => {
+              await refreshMemberMap036(card, member, force, generation);
+              if (generationMatches036(card, generation)) {
+                renderMultiMap036(card);
+                renderMultiControls036(card);
+              }
+            },
+          );
+          if (generationMatches036(card, generation)) renderMulti036(card);
+        } finally {
+          if (generationMatches036(card, generation)) card._multi036MembersLoading = false;
+        }
+        if (generationMatches036(card, generation)) {
+          scheduleMemberDetails036(card, members, force, generation);
+        }
+      }
+    
+      const sessionRenderEndpoint036 = (card, member, sessionId) => {
+        const state = memberState036(card, member.entry_id);
+        const template = state.renderTemplate || memberRenderTemplate036(member);
+        if (template) return String(template).replace("{session_id}", encodeURIComponent(String(sessionId)));
+        return "/api/navimower/session-render/" + encodeURIComponent(String(member.entry_id)) + "/" + encodeURIComponent(String(sessionId));
+      };
+    
+      async function getSessionRender036(card, member, session) {
+        if (!(card._multi036RenderCache instanceof Map)) card._multi036RenderCache = new Map();
+        if (!(card._multi036RenderFailures instanceof Map)) card._multi036RenderFailures = new Map();
+        const id = sessionId036(session);
+        if (!id) return null;
+        const key = String(member.entry_id) + ":" + id;
+        if (card._multi036RenderCache.has(key)) return card._multi036RenderCache.get(key);
+        const failedAt = Number(card._multi036RenderFailures.get(key) || 0);
+        if (failedAt && Date.now() - failedAt < MULTI_RENDER_RETRY_MS) return null;
+        const generation = currentGeneration036(card);
+        try {
+          const payload = await callApi036(card, sessionRenderEndpoint036(card, member, id));
+          if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return null;
+          const render = payload?.render || payload;
+          if (render && (String(render?.mowed_area?.path_d || "").trim() || String(render?.travel?.path_d || "").trim())) {
+            cacheMultiRender036(card, key, render);
+            card._multi036RenderFailures.delete(key);
+            return render;
+          }
+        } catch (error) {
+          if (generationMatches036(card, generation)) {
+            card._multi036RenderFailures.set(key, Date.now());
+            console.debug("[Navimower Map Card] Multi-mower session render unavailable", key, error);
+          }
+        }
+        return null;
+      }
+    
+      async function ensureHistoryRenders036(card) {
+        if (!multiActive036(card) || card._historyDayOffset === null || card._historyDayOffset === undefined) return;
+        const offset = Math.max(0, Number(card._historyDayOffset) || 0);
+        const key = String(offset) + "|" + (card._multi036Site?.members || []).map((member) => {
+          const state = memberState036(card, member.entry_id);
+          return String(member.entry_id) + ":" + state.sessionsAt;
+        }).join("|");
+        if (card._multi036HistoryRenderKey === key || card._multi036HistoryRenderLoading) return;
+        card._multi036HistoryRenderLoading = true;
+        try {
+          const tasks = (card._multi036Site?.members || []).flatMap((member) => {
+            const sessions = sessionsForDay036(card, memberState036(card, member.entry_id).sessions, offset);
+            return sessions.map((session) => ({ member, session }));
+          });
+          await runLimited036(
+            tasks,
+            MULTI_REQUEST_CONCURRENCY,
+            ({ member, session }) => getSessionRender036(card, member, session),
+          );
+          card._multi036HistoryRenderKey = key;
+        } finally {
+          card._multi036HistoryRenderLoading = false;
+          renderMultiMap036(card, true);
+        }
+      }
+    
+      const bounds036 = (site) => {
+        const direct = site?.combined_svg_bounds;
+        if (direct && [direct.min_x, direct.min_y, direct.max_x, direct.max_y].every((value) => Number.isFinite(Number(value)))) return direct;
+        const items = (site?.members || []).map((member) => member?.svg_bounds).filter((item) => item && [item.min_x, item.min_y, item.max_x, item.max_y].every((value) => Number.isFinite(Number(value))));
+        if (!items.length) return null;
+        return {
+          min_x: Math.min(...items.map((item) => Number(item.min_x))),
+          min_y: Math.min(...items.map((item) => Number(item.min_y))),
+          max_x: Math.max(...items.map((item) => Number(item.max_x))),
+          max_y: Math.max(...items.map((item) => Number(item.max_y)))
+        };
+      };
+    
+      const siteLayout036 = (site) => {
+        const box = bounds036(site);
+        if (!box) return null;
+        const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
+        const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
+        const padding = 55;
+        const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
+        const drawnWidth = width * scale;
+        const drawnHeight = height * scale;
+        const offsetX = (1000 - drawnWidth) / 2 - Number(box.min_x) * scale;
+        const offsetY = (1000 - drawnHeight) / 2 - Number(box.min_y) * scale;
+        return { scale, offsetX, offsetY, bounds: box };
+      };
+    
+      const memberMatrix036 = (member, layout) => {
+        const matrix = Array.isArray(member?.svg_matrix) && member.svg_matrix.length >= 6 ? member.svg_matrix.map(Number) : null;
+        if (!matrix || matrix.some((value) => !Number.isFinite(value)) || !layout) return null;
+        const s = layout.scale;
+        return [
+          s * matrix[0], s * matrix[1], s * matrix[2], s * matrix[3],
+          s * matrix[4] + layout.offsetX, s * matrix[5] + layout.offsetY
+        ];
+      };
+    
+      const matrixString036 = (matrix) => "matrix(" + matrix.map((value) => Number(value).toFixed(8)).join(" ") + ")";
+    
+      const transformPoint036 = (matrix, x, y) => [
+        matrix[0] * x + matrix[2] * y + matrix[4],
+        matrix[1] * x + matrix[3] * y + matrix[5]
+      ];
+    
+      const rawPoints036 = (points) => (Array.isArray(points) ? points : [])
+        .filter((point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])))
+        .map((point) => Number(point[0]).toFixed(4) + "," + Number(point[1]).toFixed(4))
+        .join(" ");
+    
+      const memberIconKey036 = (member) => {
+        const configured = String(member?.mower_icon || "").trim().toLowerCase();
+        if (configured && typeof MOWER_ICON_SPECS_032 !== "undefined" && MOWER_ICON_SPECS_032[configured]) return configured;
+        const model = String(member?.model || member?.vehicle_type || "");
+        if (typeof autoMowerIcon032 === "function") return autoMowerIcon032(model) || "h2";
+        return "h2";
+      };
+    
+      const mowerMarkup036 = (card, member, matrix) => {
+        const entities = memberEntities036(member);
+        const x = entityValue036(card, entities.position_x);
+        const y = entityValue036(card, entities.position_y);
+        if (x === null || y === null || !matrix) return "";
+        const heading = entityValue036(card, entities.heading);
+        const key = memberIconKey036(member);
+        const spec = typeof MOWER_ICON_SPECS_032 !== "undefined" ? MOWER_ICON_SPECS_032[key] || MOWER_ICON_SPECS_032.h2 : null;
+        if (!spec) return "";
+        const zoom = Math.max(1, finite036(card?._view?.scale, 1));
+        const screen = transformPoint036(matrix, x, y);
+        const siteRotation = Math.atan2(matrix[1], matrix[0]) * 180 / Math.PI;
+        const degrees = siteRotation + (Number.isFinite(heading) ? 90 - heading : 90);
+        const scale = 58.83 / spec.height * clamp036(card?._config?.mower_scale, 0.5, 2.5) / zoom;
+        const mowerState = String(state036(card, entities.mower)?.state || "").toLowerCase();
+        const errorClass = ["error", "blocked", "unavailable"].includes(mowerState) ? " nm-multi-mower-error" : "";
+        const liveKey = [x.toFixed(3), y.toFixed(3), Number.isFinite(heading) ? heading.toFixed(4) : "", mowerState, zoom.toFixed(3)].join(":");
+        return "<g class=\"nm-multi-mower" + errorClass + "\" data-multi-mower-entry=\"" + esc(member.entry_id) + "\" data-multi-live-key=\"" + esc(liveKey) + "\" transform=\"translate(" + screen[0].toFixed(2) + " " + screen[1].toFixed(2) + ") rotate(" + degrees.toFixed(2) + ") scale(" + scale.toFixed(6) + ") translate(" + (-spec.width / 2).toFixed(2) + " " + (-spec.height / 2).toFixed(2) + ")\">" + spec.markup + "</g>";
+      };
+    
+      const normalizeLiveTrailSegments036 = (value) => {
+        if (!Array.isArray(value) || !value.length) return [];
+        const pointLike = (point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1]));
+        const clean = (segment) => (Array.isArray(segment) ? segment : [])
+          .filter(pointLike)
+          .map((point) => [Number(point[0]), Number(point[1])]);
+        if (value.every(pointLike)) {
+          const segment = clean(value);
+          return segment.length >= 2 ? [segment] : [];
+        }
+        return value.map(clean).filter((segment) => segment.length >= 2);
+      };
+    
+      const liveTrailSegments036 = (card, member, payload) => {
+        if (String(member?.entry_id) === String(anchorEntry036(card)) && typeof card?._activeTrailSegments === "function") {
+          const local = normalizeLiveTrailSegments036(card._activeTrailSegments());
+          if (local.length || payload?.vendor_trail_debug?.backend_tail_authoritative) return local;
+        }
+        return normalizeLiveTrailSegments036(payload?.trail_segments);
+      };
+    
+      const liveTrailSignature036 = (card, member, payload) => liveTrailSegments036(card, member, payload)
+        .map((segment) => {
+          const last = segment.at(-1) || [];
+          return segment.length + ":" + Number(last[0] || 0).toFixed(3) + "," + Number(last[1] || 0).toFixed(3);
+        })
+        .join(";");
+    
+      const memberTrailWidthMeters036 = (member) => {
+        if (typeof renderedTrailWidthMeters034 === "function") return renderedTrailWidthMeters034(member?.model || member?.vehicle_type || "");
+        return 0.25;
+      };
+    
+      const renderArchive036 = (render, color, opacity, cssClass = "") => {
+        if (!render) return "";
+        const area = String(render?.mowed_area?.path_d || "").trim();
+        const travel = String(render?.travel?.path_d || "").trim();
+        const route = String(render?.route?.path_d || "").trim();
+        const width = Math.max(0.02, finite036(render?.travel?.stroke_width_m, finite036(render?.route?.stroke_width_m, 0.08)));
+        const parts = [];
+        if (area) parts.push("<path class=\"nm-multi-session-area\" d=\"" + esc(area) + "\" fill=\"" + esc(color) + "\" fill-rule=\"evenodd\" clip-rule=\"evenodd\"/>");
+        if (travel) parts.push("<path d=\"" + esc(travel) + "\" fill=\"none\" stroke=\"" + esc(color) + "\" stroke-width=\"" + width.toFixed(3) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+        if (route) parts.push("<path d=\"" + esc(route) + "\" fill=\"none\" stroke=\"" + esc(color) + "\" stroke-width=\"" + width.toFixed(3) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+        return parts.length ? "<g class=\"nm-multi-session-render " + esc(cssClass) + "\" opacity=\"" + clamp036(opacity, 0, 1).toFixed(2) + "\">" + parts.join("") + "</g>" : "";
+      };
+    
+      const zoneLabelItem036 = (card, member, matrix, zone, coverageMap, payload) => {
+        const polygon = Array.isArray(zone?.polygon) ? zone.polygon : [];
+        const valid = polygon.filter((point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
+        if (valid.length < 3 || !matrix) return null;
+        const screenPolygon = valid.map((point) => transformPoint036(matrix, Number(point[0]), Number(point[1])));
+        const anchorX = screenPolygon.reduce((sum, point) => sum + Number(point[0]), 0) / screenPolygon.length;
+        const anchorY = screenPolygon.reduce((sum, point) => sum + Number(point[1]), 0) / screenPolygon.length;
+        const zoneId = Number(zone?.id);
+        const state = (payload?.zone_states || []).find((item) => Number(item?.id ?? item?.zone_id) === zoneId) || {};
+        const rawDetails = payload?.zone_details || payload?.zone_history || [];
+        const detail = Array.isArray(rawDetails)
+          ? rawDetails.find((item) => Number(item?.id ?? item?.zone_id) === zoneId) || {}
+          : rawDetails && typeof rawDetails === "object" ? rawDetails[String(zoneId)] || {} : {};
+        const coverage = coverageMap.get(zoneId) || {};
+        const pct = finite036(state?.coverage_pct ?? state?.progress ?? detail?.progress ?? detail?.percentage ?? coverage?.pct ?? coverage?.percentage, null);
+        const name = String(state?.name || zone?.name || coverage?.name || detail?.name || "Zone " + zone?.id);
+        const value = pct === null ? name : name + " · " + Math.round(pct) + "%";
+        const area = typeof card?._polygonArea === "function" ? Math.abs(card._polygonArea(screenPolygon)) : 0;
+        return { anchorX, anchorY, value, polygon: screenPolygon, area, memberEntryId: member?.entry_id, zoneId };
+      };
+    
+      const renderMultiZoneLabels036 = (card, items, legendVisible) => {
+        const sourceItems = (Array.isArray(items) ? items : []).filter(Boolean);
+        if (!sourceItems.length || typeof card?._pill !== "function") return "";
+        const obstacles = [];
+        if (legendVisible) {
+          const legendScale = clamp036(card?._config?.map_legend_scale, 0.5, 2);
+          obstacles.push({ left: 8, right: 22 + 158 * legendScale, top: 8, bottom: 22 + 112 * legendScale });
+        }
+        let arranged = sourceItems;
+        if (card?._config?.avoid_zone_label_overlap === false || typeof card?._layoutZoneLabels !== "function") {
+          arranged = sourceItems.map((item) => ({ ...item, cx: item.anchorX, cy: item.anchorY, ...(card._pillMetrics?.(item.value) || {}), moved: false }));
+        } else {
+          arranged = card._layoutZoneLabels(sourceItems, obstacles);
+        }
+        const output = [];
+        for (const item of arranged) {
+          const leader = typeof card?._zoneLabelLeader === "function" ? card._zoneLabelLeader(item) : "";
+          if (leader) output.push(leader);
+          const token = multiZoneToken036(item.memberEntryId, item.zoneId);
+          output.push(card._pill(item.cx, item.cy, item.value, token));
+        }
+        return output.join("");
+      };
+      const multiZoneToken036 = (entryId, zoneId) => "multi:" + encodeURIComponent(String(entryId || "")) + ":" + encodeURIComponent(String(zoneId ?? ""));
+    
+      const parseMultiZoneToken036 = (value) => {
+        const text = String(value || "");
+        if (!text.startsWith("multi:")) return null;
+        const separator = text.indexOf(":", 6);
+        if (separator < 0) return null;
+        try {
+          return {
+            entryId: decodeURIComponent(text.slice(6, separator)),
+            zoneId: decodeURIComponent(text.slice(separator + 1)),
+          };
+        } catch (_error) {
+          return null;
+        }
+      };
+    
+      const firstZoneValue036 = (...values) => values.find((value) => value !== undefined && value !== null && value !== "");
+    
+      const memberZoneDetails036 = (card, member, zoneId) => {
+        const payload = memberState036(card, member?.entry_id).map || {};
+        const map = payload?.map || {};
+        const numericZoneId = Number(zoneId);
+        const zone = (map?.zones || []).find((item) => Number(item?.id) === numericZoneId) || {};
+        const coverage = (payload?.coverage?.zones || []).find((item) => Number(item?.id) === numericZoneId) || {};
+        const state = (payload?.zone_states || []).find((item) => Number(item?.id ?? item?.zone_id) === numericZoneId) || {};
+        const rawDetails = payload?.zone_details || payload?.zone_history || [];
+        const detail = Array.isArray(rawDetails)
+          ? rawDetails.find((item) => Number(item?.id ?? item?.zone_id) === numericZoneId) || {}
+          : rawDetails && typeof rawDetails === "object" ? rawDetails[String(numericZoneId)] || {} : {};
+        const history = detail?.history && typeof detail.history === "object" ? detail.history : {};
+        const progress = finite036(firstZoneValue036(state.coverage_pct, state.progress, detail.progress, detail.percentage, coverage.pct, coverage.percentage), null);
+        const lastMowed = firstZoneValue036(state.last_mowed_at, detail.last_mowed_at, detail.last_mowed, detail.last_mow_time, history.last_mowed_at, coverage.last_mowed_at, zone.last_mowed_at);
+        const lastCompleted = firstZoneValue036(state.last_completed_at, detail.last_completed_at, detail.last_completed, detail.completed_at, history.last_completed_at, coverage.last_completed_at, zone.last_completed_at);
+        const rawHeight = firstZoneValue036(state.cutting_height_mm, detail.cutting_height_mm, detail.cut_height_mm, detail.cutting_height, detail.cut_height, coverage.cutting_height_mm, zone.cutting_height_mm, zone?.boundary?.height_set);
+        const heightNumber = finite036(rawHeight, null);
+        const cuttingHeight = heightNumber !== null && heightNumber >= 10 && heightNumber <= 100 ? heightNumber : null;
+        return {
+          name: String(state.name || zone.name || coverage.name || detail.name || "Zone " + zoneId),
+          progress,
+          lastMowed,
+          lastCompleted,
+          cuttingHeight,
+        };
+      };
+    
+      const originalOpenZoneInfo036 = proto._openZoneInfo;
+      if (typeof originalOpenZoneInfo036 === "function") {
+        proto._openZoneInfo = function multi036OpenZoneInfo(zoneId) {
+          const parsed = parseMultiZoneToken036(zoneId);
+          if (!parsed || !multiActive036(this)) return originalOpenZoneInfo036.call(this, zoneId);
+          const member = memberById036(this, parsed.entryId);
+          if (!member || !this._zoneInfoEl || !this._zoneInfoTitleEl || !this._zoneInfoGridEl) return;
+          const details = memberZoneDetails036(this, member, parsed.zoneId);
+          const formatStamp = (value) => typeof this._formatZoneTimestamp === "function" ? this._formatZoneTimestamp(value) : (date036(value)?.toLocaleString() || "Not available");
+          const rows = [
+            ["Mower", displayName036(member)],
+            ["Progress", details.progress === null ? "Not available" : Math.round(details.progress) + "%"],
+            ["Last mowed", formatStamp(details.lastMowed)],
+            ["Last completed", formatStamp(details.lastCompleted)],
+          ];
+          if (details.cuttingHeight !== null) rows.push(["Cutting height", Math.round(details.cuttingHeight) + " mm"]);
+          this._selectedZoneId = String(zoneId);
+          this._zoneInfoTitleEl.textContent = details.name;
+          this._zoneInfoGridEl.innerHTML = rows.map(([label, value]) => "<span>" + esc(label) + "</span><strong>" + esc(value) + "</strong>").join("");
+          this._zoneInfoEl.hidden = false;
+        };
+      }
+    
+      const updateMultiMowers036 = (card, site, layout, liveSignature) => {
+        if (!card?._multi036Layer || card._multi036LiveRenderKey === liveSignature) return;
+        const existing = new Map(
+          [...card._multi036Layer.querySelectorAll?.("[data-multi-mower-entry]") || []]
+            .map((element) => [String(element.dataset.multiMowerEntry || ""), element]),
+        );
+        for (const member of site?.members || []) {
+          const matrix = memberMatrix036(member, layout);
+          const markup = matrix ? mowerMarkup036(card, member, matrix) : "";
+          const current = existing.get(String(member.entry_id));
+          if (!markup) {
+            current?.remove?.();
+            continue;
+          }
+          const holder = document.createElementNS(SVG_NS, "g");
+          holder.innerHTML = markup;
+          const next = holder.firstElementChild;
+          if (!next) continue;
+          if (current) {
+            if (current.dataset.multiLiveKey !== next.dataset.multiLiveKey) current.replaceWith(next);
+          } else {
+            card._multi036Layer.appendChild(next);
+          }
+        }
+        card._multi036LiveRenderKey = liveSignature;
+      };
+    
+      function renderMultiMap036(card, force = false) {
+        ensureMultiUi036(card);
+        const layer = card._multi036Layer;
+        if (!layer) return;
+        if (!multiActive036(card)) {
+          layer.style.display = "none";
+          return;
+        }
+        layer.style.display = "";
+        const site = card._multi036Site;
+        const layout = siteLayout036(site);
+        if (!layout) {
+          layer.innerHTML = "<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"var(--secondary-background-color)\"/><text x=\"500\" y=\"500\" text-anchor=\"middle\" fill=\"var(--secondary-text-color)\">Waiting for validated multi-mower map bounds…</text>";
+          return;
+        }
+    
+        const liveSignature = (site.members || []).map((member) => {
+          const entities = memberEntities036(member);
+          return [member.entry_id, state036(card, entities.position_x)?.state, state036(card, entities.position_y)?.state, state036(card, entities.heading)?.state, state036(card, entities.mower)?.state].join(":");
+        }).join("|");
+        const mapSignature = (site.members || []).map((member) => {
+          const payload = memberState036(card, member.entry_id).map;
+          card._zoneArtifactsHandled?.(payload, member.entry_id);
+          return [member.entry_id, payload?.map?.revision, card._zoneArtifactsMode?.(member.entry_id), payload?.current_cycle_render?.revision, payload?.trail_revision, liveTrailSignature036(card, member, payload)].join(":");
+        }).join("|");
+        const key = [mapSignature, card._historyDayOffset, card._multi036SelectedSessionKey, card?._view?.scale, card?._config?.show_zone_labels, card?._config?.avoid_zone_label_overlap, card?._config?.zone_label_font_size, card?._config?.zone_label_opacity, card?._config?.map_legend_scale, card?._config?.show_channels, card?._config?.show_vf_off_areas, card?._config?.show_gate_areas, card?._config?.show_custom_areas, card?._config?.map_background_color, card?._config?.trail_color, card?._config?.trail_opacity].join("|");
+        if (key === card._multi036MapRenderKey) {
+          updateMultiMowers036(card, site, layout, liveSignature);
+          card._drawZoneArtifactMembers?.();
+          return;
+        }
+        card._multi036MapRenderKey = key;
+    
+        const c = card._config || {};
+        const background = String(c.map_background_color || "").trim() || "var(--secondary-background-color)";
+        const zoneFill = c.zone_fill_color || "#81c784";
+        const zoneStroke = c.zone_stroke_color || "#43a047";
+        const zoneFillOpacity = clamp036(c.zone_fill_opacity, 0, 1);
+        const zoneStrokeWidth = clamp036(c.zone_stroke_width, 0.5, 12);
+        const trailColor = c.trail_color || "#43a047";
+        const trailOpacity = clamp036(c.trail_opacity, 0, 1);
+        const legendScale = clamp036(c.map_legend_scale, 0.5, 2);
+        const mapUnderlayActive036 = ["openstreetmap", "estonia_orthophoto", "estonia_hybrid", "google_satellite"].includes(String(card?._config?.map_underlay || "none").toLowerCase());
+        const parts = ["<rect x=\"0\" y=\"0\" width=\"1000\" height=\"1000\" fill=\"" + (mapUnderlayActive036 ? "transparent" : esc(background)) + "\"/>"];
+        const zoneLabelItems = [];
+        const dockMarkers = [];
+        const rootMowers = [];
+    
+        for (const member of site.members || []) {
+          const memberState = memberState036(card, member.entry_id);
+          const payload = memberState.map;
+          const map = payload?.map || {};
+          const matrix = memberMatrix036(member, layout);
+          if (!matrix || !payload) continue;
+          const local = [];
+          const coverageMap = new Map((payload?.coverage?.zones || []).map((item) => [Number(item.id), item]));
+    
+          for (const zone of map.zones || []) {
+            const points = rawPoints036(zone?.polygon);
+            if (!points) continue;
+            local.push("<polygon points=\"" + points + "\" fill=\"" + esc(zoneFill) + "\" fill-opacity=\"" + zoneFillOpacity.toFixed(2) + "\" stroke=\"" + esc(zoneStroke) + "\" stroke-width=\"" + zoneStrokeWidth.toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+            if (c.show_zone_labels !== false) zoneLabelItems.push(zoneLabelItem036(card, member, matrix, zone, coverageMap, payload));
+          }
+    
+          if (card._nmBeta8Clients?.has?.(String(member.entry_id))) local.push('<g data-nm-artifacts-entry="' + esc(member.entry_id) + '" pointer-events="none"></g>');
+          if (!card._multi036SelectedSessionKey && (card._historyDayOffset === null || card._historyDayOffset === undefined)) {
+            const current = payload?.current_cycle_render;
+            if (!card._zoneArtifactsHandled?.(payload, member.entry_id) && current?.scope === "current_cycle") {
+              local.push(renderArchive036({ mowed_area: current.mowed_area, travel: { path_d: "" }, route: { path_d: "" } }, trailColor, trailOpacity, "nm-multi-current-cycle"));
+            }
+            const liveTrailWidth = memberTrailWidthMeters036(member);
+            for (const segment of liveTrailSegments036(card, member, payload)) {
+              const points = rawPoints036(segment);
+              if (points) local.push("<polyline class=\"nm-multi-live-trail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+            }
+          } else if (!card._multi036SelectedSessionKey) {
+            const sessions = sessionsForDay036(card, memberState.sessions, card._historyDayOffset);
+            for (const session of sessions) {
+              const cacheKey = String(member.entry_id) + ":" + sessionId036(session);
+              const render = card._multi036RenderCache?.get?.(cacheKey);
+              if (render) local.push(renderArchive036(render, trailColor, trailOpacity, "nm-multi-history-session"));
+            }
+          }
+    
+          for (const polygon of map.off_limit_areas || []) {
+            const points = rawPoints036(polygon);
+            if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\" fill-opacity=\".08\" stroke=\"" + esc(c.off_limit_color || "#FF5A00") + "\" stroke-width=\"" + clamp036(c.off_limit_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+          }
+          if (c.show_vf_off_areas !== false) {
+            for (const polygon of map.vf_off_areas || []) {
+              const points = rawPoints036(polygon);
+              if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.vf_off_color || "#2F80ED") + "\" fill-opacity=\".06\" stroke=\"" + esc(c.vf_off_color || "#2F80ED") + "\" stroke-width=\"" + clamp036(c.vf_off_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+            }
+          }
+          if (c.show_channels !== false) {
+            for (const channel of map.channels || []) {
+              const points = rawPoints036(channel?.points);
+              if (points) local.push("<polyline points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(c.channel_color || "#808080") + "\" stroke-width=\"" + clamp036(c.channel_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-opacity=\".58\" stroke-linecap=\"round\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+            }
+          }
+          if (c.show_gate_areas !== false) {
+            for (const gate of payload?.gate_areas || []) {
+              const polygon = rawPoints036(gate?.polygon);
+              if (polygon && (Array.isArray(gate?.polygon) ? gate.polygon.length : 0) >= 3) {
+                local.push("<polygon points=\"" + polygon + "\" fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+                continue;
+              }
+              const x1 = finite036(gate?.x_min, null), x2 = finite036(gate?.x_max, null), y1 = finite036(gate?.y_min, null), y2 = finite036(gate?.y_max, null);
+              if ([x1, x2, y1, y2].every((value) => value !== null)) local.push("<rect x=\"" + Math.min(x1, x2).toFixed(4) + "\" y=\"" + Math.min(y1, y2).toFixed(4) + "\" width=\"" + Math.abs(x2 - x1).toFixed(4) + "\" height=\"" + Math.abs(y2 - y1).toFixed(4) + "\" fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+            }
+          }
+          if (c.show_custom_areas !== false) {
+            for (const area of payload?.custom_areas || []) {
+              const points = rawPoints036(area?.polygon);
+              if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.custom_area_color || "#8e24aa") + "\" fill-opacity=\"" + clamp036(c.custom_area_fill_opacity, 0, 1).toFixed(2) + "\" stroke=\"" + esc(c.custom_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.custom_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+            }
+          }
+    
+          const selectedKey = card._multi036SelectedSessionKey;
+          if (selectedKey && selectedKey.startsWith(String(member.entry_id) + ":")) {
+            const selectedRender = card._multi036RenderCache?.get?.(selectedKey);
+            if (selectedRender) local.push(renderArchive036(selectedRender, trailColor, 1, "nm-multi-selected-session"));
+          }
+    
+          const mower = mowerMarkup036(card, member, matrix);
+          if (mower) rootMowers.push(mower);
+    
+          const station = map.station;
+          if (station && Number.isFinite(Number(station.x)) && Number.isFinite(Number(station.y))) {
+            const screen = transformPoint036(matrix, Number(station.x), Number(station.y));
+            if (typeof card._station === "function") dockMarkers.push(card._station(screen[0], screen[1]));
+          }
+    
+          parts.push("<g class=\"nm-multi-member-map\" data-entry-id=\"" + esc(member.entry_id) + "\" transform=\"" + matrixString036(matrix) + "\">" + local.join("") + "</g>");
+        }
+    
+        if (c.show_zone_labels !== false) parts.push(renderMultiZoneLabels036(card, zoneLabelItems, c.show_map_legend !== false));
+        parts.push(dockMarkers.join(""));
+        parts.push(rootMowers.join(""));
+    
+        if (c.show_map_legend !== false) {
+          parts.push("<g class=\"nm-multi-map-legend\" transform=\"translate(14 14) scale(" + legendScale.toFixed(2) + ")\"><rect width=\"158\" height=\"112\" rx=\"10\" fill=\"var(--card-background-color,#fff)\" fill-opacity=\"" + clamp036(c.map_legend_opacity, 0, 1).toFixed(2) + "\"/><circle cx=\"14\" cy=\"20\" r=\"5\" fill=\"" + esc(zoneFill) + "\"/><text x=\"28\" y=\"24\" font-size=\"13\" fill=\"var(--primary-text-color)\">Zones</text><circle cx=\"14\" cy=\"46\" r=\"5\" fill=\"" + esc(trailColor) + "\"/><text x=\"28\" y=\"50\" font-size=\"13\" fill=\"var(--primary-text-color)\">Mowed</text><circle cx=\"14\" cy=\"72\" r=\"5\" fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\"/><text x=\"28\" y=\"76\" font-size=\"13\" fill=\"var(--primary-text-color)\">Off-limit</text><circle cx=\"14\" cy=\"98\" r=\"5\" fill=\"" + esc(c.channel_color || "#808080") + "\"/><text x=\"28\" y=\"102\" font-size=\"13\" fill=\"var(--primary-text-color)\">Channel</text></g>");
+        }
+    
+        if (card._applyZoneArtifactMultiMarkup) card._applyZoneArtifactMultiMarkup(layer, parts.join(""));
+        else layer.innerHTML = parts.join("");
+        card._drawZoneArtifactMembers?.();
+        card._multi036LiveRenderKey = liveSignature;
+      }
+    
+      const displayName036 = (member) => String(member?.name || member?.model || "Mower");
+    
+      const cleanMemberText036 = (value) => {
+        if (value === undefined || value === null) return null;
+        const text = String(value).trim();
+        return !text || ["unknown", "unavailable", "none"].includes(text.toLowerCase()) ? null : text;
+      };
+    
+      const memberMeta036 = (card, member, mower) => {
+        const c = card?._config || {};
+        const entities = memberEntities036(member);
+        const items = [];
+        const status = cleanMemberText036(mower?.state);
+        if (c.show_status !== false && status) items.push('<span class="nm-multi-meta-status">' + esc(status) + '</span>');
+        items.push('<span class="nm-multi-meta-spacer"></span>');
+        const zone = cleanMemberText036(state036(card, entities.current_physical_zone)?.state);
+        if (c.show_zone !== false && zone) items.push('<span class="nm-multi-meta-item nm-multi-meta-zone"><ha-icon icon="mdi:map-marker-radius"></ha-icon><span>' + esc(zone) + '</span></span>');
+        const batteryState = state036(card, entities.battery);
+        const battery = finite036(batteryState?.state, null);
+        if (c.show_battery !== false && battery !== null) items.push('<span class="nm-multi-meta-item nm-multi-meta-battery"><ha-icon icon="mdi:battery"></ha-icon><span>' + Math.round(battery) + '%</span></span>');
+        if (c.show_position === true) {
+          const x = entityValue036(card, entities.position_x);
+          const y = entityValue036(card, entities.position_y);
+          if (x !== null && y !== null) items.push('<span class="nm-multi-meta-item nm-multi-meta-position"><ha-icon icon="mdi:crosshairs-gps"></ha-icon><span>' + x.toFixed(1) + ', ' + y.toFixed(1) + '</span></span>');
+        }
+        const meaningful = items.some((item) => !item.includes("nm-multi-meta-spacer"));
+        return meaningful ? "<div class=\"nm-multi-member-meta\">" + items.join("") + "</div>" : "";
+      };
+    
+      function renderMultiControls036(card) {
+        ensureMultiUi036(card);
+        const host = card._multi036Controls;
+        if (!host) return;
+        if (!multiActive036(card)) {
+          host.hidden = true;
+          return;
+        }
+        host.hidden = false;
+        const members = card._multi036Site?.members || [];
+        const controlsKey = [
+          card?._config?.show_status,
+          card?._config?.show_zone,
+          card?._config?.show_battery,
+          card?._config?.show_position,
+          ...members.map((member) => {
+            const entities = memberEntities036(member);
+            return [
+              member.entry_id,
+              state036(card, entities.mower)?.state,
+              state036(card, entities.mower)?.last_updated,
+              state036(card, entities.current_physical_zone)?.state,
+              state036(card, entities.battery)?.state,
+              state036(card, entities.managed_schedule)?.state,
+              state036(card, entities.native_schedule)?.state,
+              JSON.stringify(memberState036(card, member.entry_id).command || null),
+            ].join(":");
+          })
+        ].join("|");
+        if (controlsKey === card._multi036ControlsRenderKey) return;
+        card._multi036ControlsRenderKey = controlsKey;
+        host.style.setProperty("--nm-multi-columns", String(Math.max(1, members.length)));
+        host.innerHTML = members.map((member) => {
+          const entities = memberEntities036(member);
+          const mower = state036(card, entities.mower);
+          const unavailable = !mower || ["unknown", "unavailable"].includes(String(mower.state || "").toLowerCase());
+          const managedOn = String(state036(card, entities.managed_schedule)?.state || "").toLowerCase() === "on";
+          const nativeOn = String(state036(card, entities.native_schedule)?.state || "").toLowerCase() === "on";
+          const scheduleOn = managedOn || nativeOn;
+          const canResume = typeof shouldOfferResume === "function" ? shouldOfferResume(card._hass, mower) : ["paused", "returning"].includes(String(mower?.state || "").toLowerCase());
+          const status = memberState036(card, member.entry_id).command;
+          const meta = memberMeta036(card, member, mower);
+          return "<section class=\"nm-multi-control-member\" data-entry-id=\"" + esc(member.entry_id) + "\"><button type=\"button\" class=\"nm-multi-schedule" + (scheduleOn ? " active" : "") + "\" data-multi-schedule=\"" + esc(member.entry_id) + "\" title=\"Open " + esc(displayName036(member)) + " schedule\"><span>" + esc(displayName036(member)) + "</span><ha-icon icon=\"mdi:calendar-clock\"></ha-icon></button>" + meta + "<div class=\"nm-multi-command-grid\"><button type=\"button\" data-multi-command=\"mow\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:play\"></ha-icon><span>Mow</span></button>" + (canResume ? "<button type=\"button\" data-multi-command=\"resume\" data-entry-id=\"" + esc(member.entry_id) + "\"><ha-icon icon=\"mdi:play-circle-outline\"></ha-icon><span>Resume</span></button>" : "") + "<button type=\"button\" data-multi-command=\"pause\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:pause\"></ha-icon><span>Pause</span></button><button type=\"button\" data-multi-command=\"dock\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:home-map-marker\"></ha-icon><span>Home</span></button></div>" + (status ? "<div class=\"nm-multi-command-status " + esc(status.kind || "") + "\">" + esc(status.text || "") + "</div>" : "") + "</section>";
+        }).join("");
+      }
+      async function runMemberCommand036(card, member, command) {
+        if (!member || !card?._hass?.callService) return;
+        const state = memberState036(card, member.entry_id);
+        const entities = memberEntities036(member);
+        card._multi036ActionMember = member;
+        state.command = { kind: "saving", text: command === "dock" ? "Returning home…" : command === "pause" ? "Pausing…" : "Resuming…" };
+        renderMultiControls036(card);
+        try {
+          if (command === "resume") {
+            const deviceId = memberDevice036(member);
+            await card._hass.callService("navimower", "resume", deviceId ? { device_id: deviceId } : {});
+          } else {
+            const entityId = entities.mower;
+            if (!entityId) throw new Error("Mower entity is unavailable");
+            await card._hass.callService("lawn_mower", command, { entity_id: entityId });
+          }
+          state.command = { kind: "saved", text: command === "dock" ? "Home command sent" : command === "pause" ? "Pause command sent" : "Resume command sent" };
+        } catch (error) {
+          state.command = { kind: "error", text: "Command failed" };
+          console.error("[Navimower Map Card] Multi-mower command failed", command, error);
+        } finally {
+          card._multi036ActionMember = null;
+          renderMultiControls036(card);
+        }
+      }
+    
+      const clearDialogFlags036 = (card) => {
+        card._notificationDialogOpen = false;
+        card._beta5SettingsOpen = false;
+        card._beta6SettingsOpen = false;
+      };
+    
+      const memberSchedulerIds036 = (card, member) => {
+        const frontend = member?.frontend || {};
+        const entities = frontend?.entities || {};
+        return {
+          status: entities.schedule_status || null,
+          managedSwitch: entities.managed_schedule || null,
+          nativeSwitch: entities.native_schedule || null,
+          nativeData: entities.native_schedule_data || null,
+          start: entities.schedule_start || null,
+          end: entities.schedule_end || null,
+          deviceId: frontend.device_id || null,
+          configEntryId: member?.entry_id || null,
+          source: "multi_site_frontend",
+          authoritative: true,
+        };
+      };
+    
+      const primeMemberScheduler036 = (card, member) => {
+        const ids = memberSchedulerIds036(card, member);
+        card._beta2SchedulerIds = ids;
+        card._beta10SchedulerEntities = ids;
+        card._beta6SchedulerEntities = ids;
+        card._beta5SchedulerEntities = ids;
+        card._beta10ScheduleDeviceId = ids.deviceId || null;
+        return ids;
+      };
+    
+      async function openMemberSchedule036(card, member) {
+        if (!member) return;
+        setDialogMember036(card, member);
+        clearDialogFlags036(card);
+        const ids = primeMemberScheduler036(card, member);
+        const managedStatusPresent = Boolean(ids.status && state036(card, ids.status));
+        if (!managedStatusPresent && card._config) {
+          const hadMode = Object.prototype.hasOwnProperty.call(card._config, "schedule_view_mode");
+          const previousMode = card._config.schedule_view_mode;
+          card._config.schedule_view_mode = "native";
+          try {
+            await card._openScheduleDialog?.();
+          } catch (error) {
+            console.error("[Navimower Map Card] Multi-mower native schedule open failed", error);
+          } finally {
+            if (hadMode) card._config.schedule_view_mode = previousMode;
+            else delete card._config.schedule_view_mode;
+          }
+          return;
+        }
+        try {
+          await card._openScheduleDialog?.();
+        } catch (error) {
+          console.error("[Navimower Map Card] Multi-mower schedule open failed", error);
+        }
+      }
+      function openMemberMow036(card, member) {
+        if (!member) return;
+        setDialogMember036(card, member);
+        clearDialogFlags036(card);
+        card._mowSequence = [];
+        card._mowReset = true;
+        card._onMowPressed?.();
+      }
+    
+      const sessionLabel036 = (card, session) => {
+        const start = date036(session?.started_at ?? session?.started_at_ms);
+        const end = date036(session?.ended_at ?? session?.ended_at_ms);
+        if (typeof card._formatSessionTime === "function") return card._formatSessionTime(start, end, Boolean(session?.active), new Date());
+        if (!start) return session?.active ? "Current session" : "Mowing session";
+        const options = { hour: "2-digit", minute: "2-digit" };
+        return start.toLocaleTimeString([], options) + "–" + (end ? end.toLocaleTimeString([], options) : "…");
+      };
+    
+      function renderMultiSessions036(card) {
+        ensureMultiUi036(card);
+        if (!card._sessionsEl) return;
+        if (!multiActive036(card)) return;
+        if (card?._config?.show_session_legend === false) {
+          card._sessionsEl.style.display = "none";
+          return;
+        }
+        const offset = card._historyDayOffset === null || card._historyDayOffset === undefined ? 0 : Math.max(0, Number(card._historyDayOffset) || 0);
+        const sessionsKey = [offset, card._multi036SelectedSessionKey, ...(card._multi036Site?.members || []).map((member) => String(member.entry_id) + ":" + memberState036(card, member.entry_id).sessionsAt + ":" + memberState036(card, member.entry_id).sessions.length)].join("|");
+        if (sessionsKey === card._multi036SessionsRenderKey) return;
+        card._multi036SessionsRenderKey = sessionsKey;
+        const groups = (card._multi036Site?.members || []).map((member) => {
+          const sessions = sessionsForDay036(card, memberState036(card, member.entry_id).sessions, offset);
+          const rows = sessions.length ? sessions.map((session) => {
+            const id = sessionId036(session);
+            const key = String(member.entry_id) + ":" + id;
+            const selected = card._multi036SelectedSessionKey === key;
+            return "<button type=\"button\" class=\"nm-session nm-multi-session" + (selected ? " nm-session-pulsing" : "") + "\" data-multi-session-key=\"" + esc(key) + "\" data-entry-id=\"" + esc(member.entry_id) + "\" data-session-id-multi=\"" + esc(id) + "\" title=\"Show this session on the map\"><span class=\"nm-session-dot\" style=\"background:" + esc(card?._config?.trail_color || "#43a047") + ";opacity:" + clamp036(card?._config?.trail_opacity, 0, 1).toFixed(2) + "\"></span><span>" + esc(sessionLabel036(card, session)) + "</span></button>";
+          }).join("") : "<span class=\"nm-multi-session-empty\">No sessions</span>";
+          return "<section class=\"nm-multi-session-group\"><div class=\"nm-multi-session-heading\">" + esc(displayName036(member)) + "</div><div class=\"nm-multi-session-rows\">" + rows + "</div></section>";
+        }).join("");
+        card._sessionsEl.classList.add("nm-multi-sessions-active");
+        card._sessionsEl.innerHTML = groups;
+        card._sessionsEl.style.display = "grid";
+      }
+    
+      async function selectSession036(card, entryId, sessionId, key) {
+        const member = memberById036(card, entryId);
+        if (!member) return;
+        const state = memberState036(card, entryId);
+        const session = state.sessions.find((item) => sessionId036(item) === String(sessionId));
+        if (!session) return;
+        const generation = currentGeneration036(card);
+        const requestKey = String(key);
+        card._multi036PendingSelectionKey = requestKey;
+        await getSessionRender036(card, member, session);
+        if (
+          !generationMatches036(card, generation)
+          || card._multi036PendingSelectionKey !== requestKey
+          || !memberById036(card, entryId)
+        ) return;
+        card._multi036SelectedSessionKey = requestKey;
+        card._multi036MapRenderKey = null;
+        card._multi036SessionsRenderKey = null;
+        renderMultiSessions036(card);
+        renderMultiMap036(card, true);
+        if (card._multi036PulseTimer) clearTimeout(card._multi036PulseTimer);
+        card._multi036PulseTimer = null;
+      }
+    
+      const notificationItems036 = (card) => {
+        const rows = [];
+        for (const member of card?._multi036Site?.members || []) {
+          const entityId = memberEntities036(member)?.notification;
+          const source = state036(card, entityId);
+          let items = [];
+          if (typeof notificationItemsFromState === "function") items = notificationItemsFromState(source);
+          else if (source && !["unknown", "unavailable", "no notifications"].includes(String(source.state || "").toLowerCase())) items = [{ ...source.attributes, title: source.state }];
+          for (const item of items || []) rows.push({ ...item, member, notification_entity: entityId });
+        }
+        return rows.sort((left, right) => (date036(right.created_at ?? right.addtime)?.getTime() || 0) - (date036(left.created_at ?? left.addtime)?.getTime() || 0));
+      };
+    
+      function syncMultiNotificationBell036(card) {
+        if (!multiActive036(card)) return;
+        const button = card?._notificationButtonEl || card?.querySelector?.(".nm-notification-button");
+        if (!button) return;
+        const unread = notificationItems036(card).some((item) => item.read === false);
+        button.classList.toggle("unread", unread);
+        button.setAttribute("aria-label", unread ? "Open unread notifications" : "Open notifications");
+        button.title = unread ? "Unread notifications · all mowers" : "Notifications · all mowers";
+        button.querySelector?.("ha-icon")?.setAttribute("icon", unread ? "mdi:bell-badge-outline" : "mdi:bell-outline");
+      }
+    
+      function renderMultiNotifications036(card) {
+        if (!multiActive036(card) || !card?._modalHostEl || !card._notificationDialogOpen) return;
+        const items = notificationItems036(card);
+        const pageSize = typeof notificationPageSize === "function" ? notificationPageSize(card._config || {}) : Math.max(1, Math.min(10, Number(card?._config?.notification_page_size) || 3));
+        const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+        card._multi036NotificationPage = Math.max(0, Math.min(pageCount - 1, Number(card._multi036NotificationPage) || 0));
+        const pageItems = items.slice(card._multi036NotificationPage * pageSize, card._multi036NotificationPage * pageSize + pageSize);
+        const unread = items.some((item) => item.read === false);
+        const body = pageItems.length ? pageItems.map((item) => {
+          const member = item.member;
+          const stamp = typeof formatNotificationTimestamp === "function" ? formatNotificationTimestamp(item.created_at ?? item.addtime, card._hass) : (date036(item.created_at ?? item.addtime)?.toLocaleString() || "Time unavailable");
+          const id = String(item.message_id ?? item.messageId ?? item.id ?? "");
+          const code = item.notification_code ?? item.error_code ?? item.event_code ?? item.code ?? null;
+          return "<article class=\"nm-notification-item" + (item.read === false ? " unread" : "") + "\"><div class=\"nm-notification-meta\"><span class=\"nm-notification-dot\"></span><span class=\"nm-multi-notification-mower\">" + esc(displayName036(member)) + "</span><span class=\"nm-notification-time\">" + esc(stamp) + "</span>" + (code ? "<span class=\"nm-notification-code\">" + esc(code) + "</span>" : "") + "</div><div class=\"nm-notification-item-title\">" + esc(item.title || "Notification") + "</div>" + (item.content ? "<div class=\"nm-notification-content\">" + esc(item.content) + "</div>" : "") + (item.read === false && id ? "<button type=\"button\" class=\"nm-notification-mark-read\" data-multi-notification-read=\"" + esc(id) + "\" data-entry-id=\"" + esc(member.entry_id) + "\">Mark as read</button>" : "") + "</article>";
+        }).join("") : "<div class=\"nm-notification-empty\">No notifications available.</div>";
+        const pager = pageCount > 1 ? "<div class=\"nm-notification-pager\"><button type=\"button\" data-multi-notification-page=\"previous\"" + (card._multi036NotificationPage <= 0 ? " disabled" : "") + ">Previous</button><span class=\"nm-notification-page-label\">" + (card._multi036NotificationPage + 1) + " / " + pageCount + "</span><button type=\"button\" data-multi-notification-page=\"next\"" + (card._multi036NotificationPage >= pageCount - 1 ? " disabled" : "") + ">Next</button></div>" : "";
+        card._modalHostEl.innerHTML = "<div class=\"nm-backdrop nm-notification-backdrop\"><div class=\"nm-dialog nm-notification-dialog\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Notifications\"><div class=\"nm-notification-head\"><div class=\"nm-notification-title\">Notifications</div>" + (unread ? "<button type=\"button\" class=\"nm-notification-mark-all\" data-multi-notification-all>Mark all as read</button>" : "<span></span>") + "<button type=\"button\" class=\"nm-notification-close\" aria-label=\"Close notifications\"><ha-icon icon=\"mdi:close\"></ha-icon></button></div><div class=\"nm-notification-body\">" + body + "</div>" + pager + "</div></div>";
+        const backdrop = card._modalHostEl.querySelector?.(".nm-notification-backdrop");
+        backdrop?.addEventListener("click", (event) => { if (event.target === backdrop) card._closeNotificationDialog?.(); });
+        card._modalHostEl.querySelector?.(".nm-notification-close")?.addEventListener("click", () => card._closeNotificationDialog?.());
+        card._modalHostEl.querySelectorAll?.("[data-multi-notification-page]").forEach((button) => button.addEventListener("click", () => {
+          if (button.disabled) return;
+          card._multi036NotificationPage += button.dataset.multiNotificationPage === "next" ? 1 : -1;
+          renderMultiNotifications036(card);
+        }));
+        card._modalHostEl.querySelectorAll?.("[data-multi-notification-read]").forEach((button) => button.addEventListener("click", async () => {
+          const member = memberById036(card, button.dataset.entryId);
+          const deviceId = memberDevice036(member);
+          if (!deviceId) return;
+          button.disabled = true;
+          try { await card._hass.callService("navimower", "mark_notification_read", { device_id: deviceId, message_id: button.dataset.multiNotificationRead }); } catch (error) { console.error("[Navimower Map Card] Multi-mower mark read failed", error); }
+        }));
+        card._modalHostEl.querySelector?.("[data-multi-notification-all]")?.addEventListener("click", async (event) => {
+          event.currentTarget.disabled = true;
+          const members = (card._multi036Site?.members || []).filter((member) => notificationItems036(card).some((item) => item.member?.entry_id === member.entry_id && item.read === false));
+          await Promise.allSettled(members.map((member) => {
+            const deviceId = memberDevice036(member);
+            return deviceId ? card._hass.callService("navimower", "mark_all_notifications_read", { device_id: deviceId }) : Promise.resolve();
+          }));
+        });
+      }
+    
+      function syncMultiButton036(card) {
+        const button = card._multi036Button || card.querySelector?.(".nm-multi-button");
+        if (!button) return;
+        button.hidden = true;
+        button.remove?.();
+        card._multi036Button = button;
+      }
+    
+      const hideCoreLayer036 = (element, hide) => {
+        if (!element) return;
+        if (hide) {
+          if (element.dataset.multi036Display === undefined) element.dataset.multi036Display = element.style.display || "";
+          element.style.display = "none";
+        } else if (element.dataset.multi036Display !== undefined) {
+          element.style.display = element.dataset.multi036Display;
+          delete element.dataset.multi036Display;
+        }
+      };
+    
+      function applyMultiMode036(card) {
+        ensureMultiUi036(card);
+        const active = multiActive036(card);
+        if (card._multi036ModeApplied === active) {
+          if (active) {
+            hideCoreLayer036(card._scheduleButtonEl, true);
+            hideCoreLayer036(card._footerEl, true);
+            renderMulti036(card);
+          }
+          return;
+        }
+        card._multi036ModeApplied = active;
+        const coreLayers = [card._baseEl, card._historyEl, card._trailEl, card._highlightEl, card._detailsEl, card._labelsEl, card._dynamicEl, card._uiEl];
+        coreLayers.forEach((element) => hideCoreLayer036(element, active));
+        hideCoreLayer036(card._controlsEl, active);
+        hideCoreLayer036(card._commandStatusEl, active);
+        hideCoreLayer036(card._footerEl, active);
+        hideCoreLayer036(card._scheduleButtonEl, active);
+        if (card._multi036Layer) card._multi036Layer.style.display = active ? "" : "none";
+        if (card._multi036Controls) card._multi036Controls.hidden = !active;
+        if (!active) {
+          card._multi036DialogMember = null;
+          card._multi036SelectedSessionKey = null;
+          card._sessionsEl?.classList?.remove?.("nm-multi-sessions-active");
+          card._renderShell?.();
+          card._renderHistory?.();
+          card._renderTrail?.();
+          card._renderMower?.();
+          card._renderFooter?.();
+          card._renderControls?.();
+          card._renderSessions?.();
+          return;
+        }
+        card._historyRenderKey = null;
+        card._sessionsRenderKey = null;
+        card._multi036MapRenderKey = null;
+        card._view = { scale: Math.max(1, finite036(card?._config?.initial_zoom, 1)), cx: 500, cy: 500 };
+        card._initialViewApplied = true;
+        card._applyViewBox?.();
+        void refreshMembers036(card, true);
+        renderMulti036(card);
+      }
+    
+      function renderMulti036(card) {
+        if (!multiActive036(card)) return;
+        renderMultiMap036(card);
+        renderMultiControls036(card);
+        renderMultiSessions036(card);
+        syncMultiNotificationBell036(card);
+      }
+    
+      function ensureMultiUi036(card) {
+        if (!card?._domReady || typeof document === "undefined") return;
+        if (!card._multi036Button) {
+          const header = card.querySelector?.(".nm-header");
+          if (header) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "nm-multi-button";
+            button.hidden = true;
+            button.setAttribute("aria-label", "Toggle multi mower map");
+            button.setAttribute("aria-pressed", "false");
+            button.innerHTML = "<span>Multi</span><ha-icon icon=\"mdi:robot-mower-outline\"></ha-icon>";
+            const notification = header.querySelector?.(".nm-notification-button");
+            const schedule = header.querySelector?.(".nm-schedule-button");
+            if (notification) notification.before(button);
+            else if (schedule) schedule.before(button);
+            else header.appendChild(button);
+            button.addEventListener("click", () => {
+              if (!siteAvailable036(card)) return;
+              ensurePreference036(card);
+              card._multi036Requested = !card._multi036Requested;
+              savePreference036(card);
+              syncMultiButton036(card);
+              applyMultiMode036(card);
+            });
+            card._multi036Button = button;
+          }
+        }
+        if (!card._multi036Layer && card._svgEl) {
+          const layer = document.createElementNS(SVG_NS, "g");
+          layer.setAttribute("class", "nm-multi-layer");
+          layer.style.display = "none";
+          card._svgEl.appendChild(layer);
+          card._multi036Layer = layer;
+        }
+        if (!card._multi036Controls && card._controlsEl) {
+          const controls = document.createElement("div");
+          controls.className = "nm-multi-controls";
+          controls.hidden = true;
+          card._controlsEl.before(controls);
+          controls.addEventListener("click", (event) => {
+            const scheduleButton = event.target?.closest?.("[data-multi-schedule]");
+            if (scheduleButton) {
+              const member = memberById036(card, scheduleButton.dataset.multiSchedule);
+              void openMemberSchedule036(card, member);
+              return;
+            }
+            const button = event.target?.closest?.("[data-multi-command]");
+            if (!button || button.disabled) return;
+            const member = memberById036(card, button.dataset.entryId);
+            const command = button.dataset.multiCommand;
+            if (command === "mow") openMemberMow036(card, member);
+            else void runMemberCommand036(card, member, command);
+          });
+          card._multi036Controls = controls;
+        }
+        if (card._sessionsEl && !card._sessionsEl.__multi036Click) {
+          card._sessionsEl.__multi036Click = true;
+          card._sessionsEl.addEventListener("click", (event) => {
+            const button = event.target?.closest?.("[data-multi-session-key]");
+            if (!button || !multiActive036(card)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            void selectSession036(card, button.dataset.entryId, button.dataset.sessionIdMulti, button.dataset.multiSessionKey);
+          }, true);
+        }
+        if (!card._multi036Styles) {
+          const style = document.createElement("style");
+          style.dataset.multiMower036 = "true";
+          style.textContent = [
+            ".nm-multi-button{height:34px;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:0;border-radius:18px;background:transparent;color:var(--secondary-text-color);font:inherit;font-size:.82rem;font-weight:650;cursor:pointer}",
+            ".nm-multi-button[hidden]{display:none}.nm-multi-button.active{color:#FF5A00;background:color-mix(in srgb,#FF5A00 10%,transparent)}.nm-multi-button ha-icon{--mdc-icon-size:20px}",
+            ".nm-multi-controls{display:grid;grid-template-columns:repeat(var(--nm-multi-columns,2),minmax(0,1fr));gap:10px;margin:10px 2px 0}.nm-multi-controls[hidden]{display:none}",
+            ".nm-multi-control-member{min-width:0;padding:9px;border:1px solid var(--divider-color);border-radius:11px;background:color-mix(in srgb,var(--secondary-background-color) 65%,transparent)}",
+            ".nm-multi-schedule{width:100%;min-height:32px;display:flex;align-items:center;justify-content:space-between;gap:7px;border:0;border-radius:9px;padding:5px 8px;color:var(--primary-text-color);background:transparent;font:inherit;font-weight:700;cursor:pointer}.nm-multi-schedule.active{color:#FF5A00}.nm-multi-schedule ha-icon{--mdc-icon-size:20px}",
+            ".nm-multi-member-meta{display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;padding:2px 8px 7px;color:var(--secondary-text-color);font-size:.76rem}.nm-multi-meta-status{text-transform:capitalize}.nm-multi-meta-spacer{flex:1 1 auto}.nm-multi-meta-item{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}.nm-multi-meta-item ha-icon{--mdc-icon-size:15px}",
+            ".nm-multi-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.nm-multi-command-grid button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;padding:7px 8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit;font-size:.84rem;font-weight:650;cursor:pointer}.nm-multi-command-grid button:disabled{opacity:.45;cursor:default}.nm-multi-command-grid ha-icon{--mdc-icon-size:19px}",
+            ".nm-multi-command-status{padding:6px 4px 0;text-align:center;color:var(--secondary-text-color);font-size:.74rem}.nm-multi-command-status.error{color:var(--error-color,#db4437)}",
+            ".nm-sessions.nm-multi-sessions-active{grid-template-columns:1fr!important;gap:7px!important;width:100%}.nm-multi-session-group{display:grid;grid-template-columns:minmax(80px,auto) 1fr;align-items:start;gap:8px 12px;width:100%}.nm-multi-session-heading{padding-top:2px;color:var(--secondary-text-color);font-size:.76rem;font-weight:750}.nm-multi-session-rows{display:flex;flex-wrap:wrap;gap:5px 10px;min-width:0}.nm-multi-session-empty{color:var(--secondary-text-color);font-size:.8rem;opacity:.7}",
+            ".nm-multi-selected-session .nm-multi-session-area{animation:nm-multi-session-pulse 600ms ease-in-out 3 forwards}@keyframes nm-multi-session-pulse{0%,100%{opacity:.1}50%{opacity:1;filter:drop-shadow(0 0 7px var(--nm-highlight-color,#43a047))}}",
+            ".nm-multi-mower-error{filter:drop-shadow(0 0 7px var(--error-color,#db4437))}.nm-multi-notification-mower{flex:0 0 auto;padding:1px 6px;border-radius:10px;background:var(--secondary-background-color);color:var(--primary-text-color);font-weight:700}",
+            "@media(max-width:620px){.nm-multi-controls{grid-template-columns:1fr}.nm-multi-session-group{grid-template-columns:1fr;gap:2px}.nm-multi-session-heading{padding-left:4px}.nm-multi-command-grid button span{font-size:.8rem}}"
+          ].join("\n");
+          card.appendChild(style);
+          card._multi036Styles = style;
+        }
+      }
+    
+      const originalStub036 = typeof Card.getStubConfig === "function" ? Card.getStubConfig.bind(Card) : null;
+      Card.getStubConfig = function multi036StubConfig() {
+        return { ...(originalStub036?.() || {}), multi_mower: false };
+      };
+    
+      const originalForm036 = typeof Card.getConfigForm === "function" ? Card.getConfigForm.bind(Card) : null;
+      Card.getConfigForm = function multi036ConfigForm() {
+        const form = originalForm036?.() || { schema: [] };
+        const walk = (node) => {
+          if (!node) return false;
+          if (Array.isArray(node)) {
+            const index = node.findIndex((item) => item?.name === "entity");
+            if (index >= 0 && !node.some((item) => item?.name === "multi_mower")) {
+              node.splice(index + 1, 0, { name: "multi_mower", selector: { boolean: {} } });
+              return true;
+            }
+            for (const item of node) if (walk(item)) return true;
+          } else if (typeof node === "object") {
+            for (const value of Object.values(node)) if (walk(value)) return true;
+          }
+          return false;
+        };
+        walk(form.schema);
+        const label = typeof form.computeLabel === "function" ? form.computeLabel : null;
+        form.computeLabel = (schema) => schema?.name === "multi_mower" ? "Multi mower" : label?.(schema) || schema?.name || "";
+        return form;
+      };
+    
+      const originalSetConfig036 = proto.setConfig;
+      if (typeof originalSetConfig036 === "function") {
+        proto.setConfig = function multi036SetConfig(config) {
+          const previousIdentity = this?._config?.entity;
+          const result = originalSetConfig036.call(this, { ...(config || {}), multi_mower: asBool036(config?.multi_mower, false) });
+          if (previousIdentity !== this?._config?.entity) {
+            this._multi036Generation = currentGeneration036(this) + 1;
+            this._multi036PreferenceLoaded = false;
+            this._multi036Site = null;
+            this._multi036Members = new Map();
+            this._multi036RenderCache = new Map();
+            this._multi036RenderFailures = new Map();
+            this._multi036PendingSelectionKey = null;
+            this._multi036MapRenderKey = null;
+            this._multi036LiveRenderKey = null;
+            this._multi036ControlsRenderKey = null;
+            this._multi036SessionsRenderKey = null;
+          }
+          ensurePreference036(this);
+          syncMultiButton036(this);
+          applyMultiMode036(this);
+          return result;
+        };
+      }
+    
+      const originalEnsureDom036 = proto._ensureDom;
+      if (typeof originalEnsureDom036 === "function") {
+        proto._ensureDom = function multi036EnsureDom(...args) {
+          const result = originalEnsureDom036.apply(this, args);
+          ensureMultiUi036(this);
+          syncMultiButton036(this);
+          return result;
+        };
+      }
+    
+      const originalMaybeLoadMap036 = proto._maybeLoadMap;
+      if (typeof originalMaybeLoadMap036 === "function") {
+        proto._maybeLoadMap = async function multi036MaybeLoadMap(...args) {
+          const result = await originalMaybeLoadMap036.apply(this, args);
+          if (this._mapPayload) {
+            const anchor = anchorEntry036(this);
+            const member = anchor ? memberById036(this, anchor) : null;
+            if (member) {
+              const state = memberState036(this, anchor);
+              state.map = this._mapPayload;
+              state.mapAt = Date.now();
+            }
+          }
+          await loadSite036(this, false);
+          if (multiActive036(this)) await refreshMembers036(this, false);
+          return result;
+        };
+      }
+    
+      const originalRenderShell036 = proto._renderShell;
+      if (typeof originalRenderShell036 === "function") {
+        proto._renderShell = function multi036RenderShell(...args) {
+          const result = originalRenderShell036.apply(this, args);
+          ensureMultiUi036(this);
+          syncMultiButton036(this);
+          applyMultiMode036(this);
+          syncMultiNotificationBell036(this);
+          return result;
+        };
+      }
+    
+      const originalRenderFooter036 = proto._renderFooter;
+      if (typeof originalRenderFooter036 === "function") {
+        proto._renderFooter = function multi036RenderFooter(...args) {
+          if (multiActive036(this)) {
+            if (this._footerEl) {
+              this._footerEl.innerHTML = "";
+              this._footerEl.style.display = "none";
+            }
+            return;
+          }
+          return originalRenderFooter036.apply(this, args);
+        };
+      }
+    
+      const originalRenderControls036 = proto._renderControls;
+      if (typeof originalRenderControls036 === "function") {
+        proto._renderControls = function multi036RenderControls(...args) {
+          if (multiActive036(this)) {
+            renderMultiControls036(this);
+            return;
+          }
+          return originalRenderControls036.apply(this, args);
+        };
+      }
+    
+      const originalRenderSessions036 = proto._renderSessions;
+      if (typeof originalRenderSessions036 === "function") {
+        proto._renderSessions = function multi036RenderSessions(...args) {
+          if (multiActive036(this)) {
+            renderMultiSessions036(this);
+            void ensureHistoryRenders036(this);
+            return;
+          }
+          this._sessionsEl?.classList?.remove?.("nm-multi-sessions-active");
+          return originalRenderSessions036.apply(this, args);
+        };
+      }
+    
+      const originalRenderHistory036 = proto._renderHistory;
+      if (typeof originalRenderHistory036 === "function") {
+        proto._renderHistory = function multi036RenderHistory(...args) {
+          if (multiActive036(this)) {
+            void ensureHistoryRenders036(this);
+            renderMultiMap036(this, true);
+            return;
+          }
+          return originalRenderHistory036.apply(this, args);
+        };
+      }
+    
+      const originalApplyView036 = proto._applyViewBox;
+      if (typeof originalApplyView036 === "function") {
+        proto._applyViewBox = function multi036ApplyView(...args) {
+          const result = originalApplyView036.apply(this, args);
+          if (multiActive036(this)) renderMultiMap036(this, true);
+          return result;
+        };
+      }
+    
+      const originalOpenNotification036 = proto._openNotificationDialog;
+      if (typeof originalOpenNotification036 === "function") {
+        proto._openNotificationDialog = function multi036OpenNotification(...args) {
+          if (!multiActive036(this)) return originalOpenNotification036.apply(this, args);
+          this._mowDialogOpen = false;
+          this._scheduleDialogOpen = false;
+          this._beta6ManagedOpen = false;
+          this._beta2ScheduleOpen = false;
+          this._notificationDialogOpen = true;
+          this._multi036NotificationPage = 0;
+          renderMultiNotifications036(this);
+          syncMultiNotificationBell036(this);
+        };
+      }
+    
+      const originalRenderDialog036 = proto._renderDialog;
+      if (typeof originalRenderDialog036 === "function") {
+        proto._renderDialog = function multi036RenderDialog(...args) {
+          if (multiActive036(this) && this._notificationDialogOpen) {
+            renderMultiNotifications036(this);
+            return;
+          }
+          return originalRenderDialog036.apply(this, args);
+        };
+      }
+    
+      const hassDescriptor036 = Object.getOwnPropertyDescriptor(proto, "hass");
+      if (hassDescriptor036?.set) {
+        Object.defineProperty(proto, "hass", {
+          configurable: true,
+          get: hassDescriptor036.get,
+          set(value) {
+            hassDescriptor036.set.call(this, value);
+            ensureMultiUi036(this);
+            ensurePreference036(this);
+            syncMultiButton036(this);
+            void loadSite036(this, false);
+            if (multiActive036(this)) {
+              const active = (this._multi036Site?.members || []).some((member) => memberIsActive036(this, member));
+              const interval = active ? MAP_REFRESH_ACTIVE_MS : MAP_REFRESH_IDLE_MS;
+              if (!this._multi036LastMemberRefresh || Date.now() - this._multi036LastMemberRefresh >= interval) {
+                this._multi036LastMemberRefresh = Date.now();
+                void refreshMembers036(this, false);
+              }
+              renderMulti036(this);
+              hideCoreLayer036(this._scheduleButtonEl, true);
+              if (this._notificationDialogOpen) renderMultiNotifications036(this);
+            }
+          }
+        });
+      }
+    
+      proto._beta8RefreshMultiRender = function() { if (multiActive036(this)) renderMultiMap036(this, true); };
+      // 0.3.6-beta2: multi-mower field-test fixes.
+      // 0.3.6-beta3: compact multi-mower metadata and labels.
+      // 0.3.6-beta4: strict member schedule and clickable multi-zone labels.
   }
 
-  proto._beta8RefreshMultiRender = function() { if (multiActive036(this)) renderMultiMap036(this, true); };
-  // 0.3.6-beta2: multi-mower field-test fixes.
-  // 0.3.6-beta3: compact multi-mower metadata and labels.
-  // 0.3.6-beta4: strict member schedule and clickable multi-zone labels.
-})();
 
 
 // 0.3.6-beta5: optional OpenStreetMap underlay.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  const EARTH_RADIUS_M = 6378137;
-  const DEFAULT_OPACITY = 0.55;
-  const DEFAULT_ZOOM = 19;
-  const MAX_TILES = 36;
-
-  const finite = (value, fallback = null) => {
-    if (value === null || value === undefined || value === "") return fallback;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-  const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, finite(value, minimum)));
-  const underlayProvider = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
-  const frontendUnderlayMetadata = (card) => {
-    const single = card?._mapPayload?.frontend?.map_underlays;
-    const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
-    if (!multiVisible && single && typeof single === "object") return single;
-    const multi = card?._multi036Site?.anchor_frontend?.map_underlays;
-    if (multi && typeof multi === "object") return multi;
-    return single && typeof single === "object" ? single : {};
-  };
-  const providerAvailable = (card, provider = underlayProvider(card)) => {
-    if (provider === "openstreetmap") return true;
-    const metadata = frontendUnderlayMetadata(card);
-    if (provider === "google_satellite") {
-      return metadata?.google_satellite?.available === true
-        && Boolean(metadata?.google_satellite?.tile_api_path_template);
-    }
-    if (["estonia_orthophoto", "estonia_hybrid"].includes(provider)) {
-      const advertised = metadata?.[provider]?.available;
-      return advertised === undefined ? true : advertised === true;
-    }
-    return false;
-  };
-  const underlayEnabled = (card) => ["openstreetmap", "estonia_orthophoto", "estonia_hybrid", "google_satellite"].includes(underlayProvider(card))
-    && providerAvailable(card);
-  const underlayOpacity = (card) => clamp(card?._config?.underlay_opacity ?? card?._config?.osm_underlay_opacity ?? DEFAULT_OPACITY, 0.1, 1);
-  const googleTileTemplate = (card) => String(frontendUnderlayMetadata(card)?.google_satellite?.tile_api_path_template || "");
-  const googleMaxZoom = (card) => clamp(card?._googleSatelliteMaxZoom11 ?? DEFAULT_ZOOM, 15, DEFAULT_ZOOM);
-  const isEstoniaLocation = (lat, lon) => {
-    const latitude = finite(lat);
-    const longitude = finite(lon);
-    return latitude !== null && longitude !== null
-      && latitude >= 57.3 && latitude <= 60.0
-      && longitude >= 21.5 && longitude <= 28.3;
-  };
-  const markEstoniaAvailability = (card, lat, lon) => {
-    const available = isEstoniaLocation(lat, lon);
-    if (available) Card.__navimower036EstoniaSite = true;
-    if (card) card._estoniaOrthophotoAvailable036 = available;
-    return available;
-  };
-
-  const georeference = (card) => card?._mapPayload?.georeference || card?._mapPayload?.map?.georeference || null;
-  const validGeoreference = (value) => {
-    if (!value || typeof value !== "object") return false;
-    const ref = value.reference || {};
-    const complete = [ref.local_x, ref.local_y, ref.latitude, ref.longitude, value.rotation_rad].every((item) => finite(item) !== null);
-    if (!complete) return false;
-    return value.status === "validated" || value?.validation?.valid === true;
-  };
-
-  const UNDERLAY_WGS84_A_M = 6378137.0;
-  const UNDERLAY_WGS84_F = 1 / 298.257223563;
-  const UNDERLAY_WGS84_E2 = UNDERLAY_WGS84_F * (2 - UNDERLAY_WGS84_F);
-  const underlayCurvatureRadii = (latitudeRad) => {
-    const sinLat = Math.sin(latitudeRad);
-    const denominator = 1 - UNDERLAY_WGS84_E2 * sinLat * sinLat;
-    const root = Math.sqrt(denominator);
-    return {
-      meridional: UNDERLAY_WGS84_A_M * (1 - UNDERLAY_WGS84_E2) / (denominator * root),
-      primeVertical: UNDERLAY_WGS84_A_M / root,
-    };
-  };
-  const underlayShortestLonDeltaRad = (lon0, lon) => {
-    const deltaDeg = ((lon - lon0 + 180) % 360 + 360) % 360 - 180;
-    return deltaDeg * Math.PI / 180;
-  };
-  const offsetMeters = (lat0, lon0, lat, lon) => {
-    const lat0Rad = lat0 * Math.PI / 180;
-    const latRad = lat * Math.PI / 180;
-    const meanLat = (lat0Rad + latRad) / 2;
-    const radii = underlayCurvatureRadii(meanLat);
-    return {
-      east: underlayShortestLonDeltaRad(lon0, lon) * radii.primeVertical * Math.cos(meanLat),
-      north: (latRad - lat0Rad) * radii.meridional,
-    };
-  };
-
-  const offsetWgs84 = (lat0, lon0, east, north) => {
-    const lat0Rad = lat0 * Math.PI / 180;
-    let targetLat = lat0Rad;
-    for (let index = 0; index < 3; index += 1) {
-      const meanLat = (lat0Rad + targetLat) / 2;
-      const radii = underlayCurvatureRadii(meanLat);
-      targetLat = lat0Rad + north / radii.meridional;
-    }
-    const meanLat = (lat0Rad + targetLat) / 2;
-    const radii = underlayCurvatureRadii(meanLat);
-    const eastRadius = radii.primeVertical * Math.cos(meanLat);
-    const targetLon = lon0 * Math.PI / 180 + east / eastRadius;
-    let lon = targetLon * 180 / Math.PI;
-    lon = ((lon + 180) % 360 + 360) % 360 - 180;
-    return { lat: targetLat * 180 / Math.PI, lon };
-  };
-
-  const localToWgs84 = (geo, x, y) => {
-    if (!validGeoreference(geo)) return null;
-    const ref = geo.reference || {};
-    const rotation = finite(geo.rotation_rad, 0);
-    const dx = Number(x) - Number(ref.local_x);
-    const dy = Number(y) - Number(ref.local_y);
-    const east = dx * Math.cos(rotation) + dy * Math.sin(rotation);
-    const north = -dx * Math.sin(rotation) + dy * Math.cos(rotation);
-    return offsetWgs84(Number(ref.latitude), Number(ref.longitude), east, north);
-  };
-
-  const wgs84ToLocal = (geo, lat, lon) => {
-    if (!validGeoreference(geo)) return null;
-    const ref = geo.reference || {};
-    const rotation = finite(geo.rotation_rad, 0);
-    const { east, north } = offsetMeters(Number(ref.latitude), Number(ref.longitude), lat, lon);
-    const dx = east * Math.cos(rotation) - north * Math.sin(rotation);
-    const dy = east * Math.sin(rotation) + north * Math.cos(rotation);
-    return { x: Number(ref.local_x) + dx, y: Number(ref.local_y) + dy };
-  };
-
-  const tilePoint = (lat, lon, zoom) => {
-    const n = 2 ** zoom;
-    const safeLat = clamp(lat, -85.05112878, 85.05112878);
-    const latRad = safeLat * Math.PI / 180;
-    return {
-      x: (lon + 180) / 360 * n,
-      y: (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n,
-    };
-  };
-
-  const tileBounds = (x, y, zoom) => {
-    const n = 2 ** zoom;
-    const lonLeft = x / n * 360 - 180;
-    const lonRight = (x + 1) / n * 360 - 180;
-    const latAt = (tileY) => Math.atan(Math.sinh(Math.PI * (1 - 2 * tileY / n))) * 180 / Math.PI;
-    return { west: lonLeft, east: lonRight, north: latAt(y), south: latAt(y + 1) };
-  };
-
-  const chooseTiles = (bounds, maxZoom = DEFAULT_ZOOM) => {
-    if (!bounds) return null;
-    for (let zoom = Math.min(DEFAULT_ZOOM, maxZoom); zoom >= 15; zoom -= 1) {
-      const nw = tilePoint(bounds.north, bounds.west, zoom);
-      const se = tilePoint(bounds.south, bounds.east, zoom);
-      const minX = Math.floor(Math.min(nw.x, se.x));
-      const maxX = Math.floor(Math.max(nw.x, se.x));
-      const minY = Math.floor(Math.min(nw.y, se.y));
-      const maxY = Math.floor(Math.max(nw.y, se.y));
-      const count = (maxX - minX + 1) * (maxY - minY + 1);
-      if (count <= MAX_TILES || zoom === 15) return { zoom, minX, maxX, minY, maxY };
-    }
-    return null;
-  };
-
-  const mapPoints = (map) => {
-    const points = [];
-    const add = (value) => {
-      for (const point of Array.isArray(value) ? value : []) {
-        if (Array.isArray(point) && finite(point[0]) !== null && finite(point[1]) !== null) points.push([Number(point[0]), Number(point[1])]);
-      }
-    };
-    for (const zone of map?.zones || []) add(zone?.polygon);
-    for (const polygon of map?.off_limit_areas || []) add(polygon);
-    for (const polygon of map?.vf_off_areas || []) add(polygon);
-    for (const channel of map?.channels || []) add(channel?.points);
-    const station = map?.station;
-    if (finite(station?.x) !== null && finite(station?.y) !== null) points.push([Number(station.x), Number(station.y)]);
-    return points;
-  };
-
-  const paddedBounds = (items, paddingM = 18) => {
-    if (!items.length) return null;
-    let north = Math.max(...items.map((item) => item.lat));
-    let south = Math.min(...items.map((item) => item.lat));
-    let east = Math.max(...items.map((item) => item.lon));
-    let west = Math.min(...items.map((item) => item.lon));
-    const centerLat = (north + south) / 2;
-    const dLat = paddingM / EARTH_RADIUS_M * 180 / Math.PI;
-    const dLon = paddingM / (EARTH_RADIUS_M * Math.max(0.01, Math.cos(centerLat * Math.PI / 180))) * 180 / Math.PI;
-    north += dLat; south -= dLat; east += dLon; west -= dLon;
-    return { north, south, east, west };
-  };
-
-  const tileMarkup = (bounds, screenPoint, opacity, provider = "openstreetmap", googleTemplate = "", googleZoom = DEFAULT_ZOOM) => {
-    const providerMaxZoom = ["estonia_orthophoto", "estonia_hybrid"].includes(provider)
-      ? 18
-      : provider === "google_satellite" ? googleZoom : DEFAULT_ZOOM;
-    const range = chooseTiles(bounds, providerMaxZoom);
-    if (!range) return "";
-    const images = [];
-    for (let y = range.minY; y <= range.maxY; y += 1) {
-      for (let x = range.minX; x <= range.maxX; x += 1) {
-        const box = tileBounds(x, y, range.zoom);
-        const nw = screenPoint(box.north, box.west);
-        const ne = screenPoint(box.north, box.east);
-        const sw = screenPoint(box.south, box.west);
-        if (![nw, ne, sw].every((point) => point && finite(point.x) !== null && finite(point.y) !== null)) continue;
-        const a = (ne.x - nw.x) / 256;
-        const b = (ne.y - nw.y) / 256;
-        const c = (sw.x - nw.x) / 256;
-        const d = (sw.y - nw.y) / 256;
-        const transform = [a, b, c, d, nw.x, nw.y].map((value) => Number(value).toFixed(8)).join(" ");
-        const tmsY = 2 ** range.zoom - 1 - y;
-        const photoHref = "https://tiles.maaamet.ee/tm/tms/1.0.0/foto@GMC/" + range.zoom + "/" + x + "/" + tmsY + ".png?ASUTUS=NAVIMOWER&KESKKOND=LIVE&IS=NAVIMOWER_MAP_CARD";
-        if (provider === "estonia_hybrid") {
-          const hybridHref = "https://tiles.maaamet.ee/tm/tms/1.0.0/hybriid@GMC/" + range.zoom + "/" + x + "/" + tmsY + ".png?ASUTUS=NAVIMOWER&KESKKOND=LIVE&IS=NAVIMOWER_MAP_CARD";
-          images.push('<image href="' + photoHref + '" x="0" y="0" width="256" height="256" preserveAspectRatio="none" opacity="' + opacity.toFixed(2) + '" transform="matrix(' + transform + ')"/>');
-          images.push('<image href="' + hybridHref + '" x="0" y="0" width="256" height="256" preserveAspectRatio="none" opacity="' + opacity.toFixed(2) + '" transform="matrix(' + transform + ')"/>');
-          continue;
-        }
+  nmRuntimePatch21: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const EARTH_RADIUS_M = 6378137;
+      const DEFAULT_OPACITY = 0.55;
+      const DEFAULT_ZOOM = 19;
+      const MAX_TILES = 36;
+    
+      const finite = (value, fallback = null) => {
+        if (value === null || value === undefined || value === "") return fallback;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+      const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, finite(value, minimum)));
+      const underlayProvider = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
+      const frontendUnderlayMetadata = (card) => {
+        const single = card?._mapPayload?.frontend?.map_underlays;
+        const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
+        if (!multiVisible && single && typeof single === "object") return single;
+        const multi = card?._multi036Site?.anchor_frontend?.map_underlays;
+        if (multi && typeof multi === "object") return multi;
+        return single && typeof single === "object" ? single : {};
+      };
+      const providerAvailable = (card, provider = underlayProvider(card)) => {
+        if (provider === "openstreetmap") return true;
+        const metadata = frontendUnderlayMetadata(card);
         if (provider === "google_satellite") {
-          const proxyPath = String(googleTemplate || "")
-            .replace("{z}", String(range.zoom))
-            .replace("{x}", String(x))
-            .replace("{y}", String(y));
-          if (!proxyPath) continue;
-          images.push('<image data-nm-google-path="' + proxyPath + '" data-nm-google-z="' + range.zoom + '" data-nm-google-x="' + x + '" data-nm-google-y="' + y + '" href="" x="0" y="0" width="256" height="256" preserveAspectRatio="none" opacity="' + opacity.toFixed(2) + '" transform="matrix(' + transform + ')"/>');
-          continue;
+          return metadata?.google_satellite?.available === true
+            && Boolean(metadata?.google_satellite?.tile_api_path_template);
         }
-        const href = provider === "estonia_orthophoto"
-          ? photoHref
-          : "#nm-osm-" + range.zoom + "-" + x + "-" + y;
-        images.push('<image href="' + href + '" x="0" y="0" width="256" height="256" preserveAspectRatio="none" opacity="' + opacity.toFixed(2) + '" transform="matrix(' + transform + ')"/>');
-      }
-    }
-    return images.join("");
-  };
-
-  const ensureAttribution = (card, visible) => {
-    const wrap = card?.querySelector?.(".nm-wrap");
-    if (!wrap) return;
-    const provider = underlayProvider(card);
-    let node = wrap.querySelector?.(".nm-osm-attribution");
-    if (!node) {
-      node = document.createElement("div");
-      node.className = "nm-osm-attribution";
-      Object.assign(node.style, {
-        position: "absolute", right: "4px", bottom: "4px", zIndex: "8",
-        padding: "2px 5px", borderRadius: "4px", fontSize: "10px", lineHeight: "1.2",
-        background: "rgba(255,255,255,.78)", color: "#37474f",
-      });
-      wrap.appendChild(node);
-    }
-    if (node.dataset.provider !== provider) {
-      node.dataset.provider = provider;
-      if (["estonia_orthophoto", "estonia_hybrid"].includes(provider)) {
-        node.innerHTML = '<a href="https://geoportaal.maaamet.ee/" target="_blank" rel="noopener noreferrer">Aluskaart: Maa- ja Ruumiamet</a>';
-      } else if (provider === "google_satellite") {
-        node.textContent = "Google Maps";
-      } else {
-        node.innerHTML = '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>';
-      }
-      const link = node.querySelector("a");
-      if (link) link.style.cssText = "color:inherit;text-decoration:none";
-    }
-    node.hidden = !visible;
-  };
-
-  const insertOsmGroup = (layer, markup) => {
-    if (!layer || !markup) {
-      layer?.querySelector?.(".nm-osm-underlay")?.remove?.();
-      return false;
-    }
-    const markupKey = fastHash(markup);
-    const current = layer.querySelector?.(".nm-osm-underlay");
-    if (current?.dataset?.underlayKey === markupKey) return true;
-    current?.remove?.();
-    const group = document.createElementNS(SVG_NS, "g");
-    group.setAttribute("class", "nm-osm-underlay");
-    group.setAttribute("pointer-events", "none");
-    group.dataset.underlayKey = markupKey;
-    group.innerHTML = markup;
-    const first = layer.firstElementChild;
-    if (first?.nextSibling) layer.insertBefore(group, first.nextSibling);
-    else layer.appendChild(group);
-    return true;
-  };
-
-  const googleDynamicFrameOffset12 = (card) => {
-    if (underlayProvider(card) !== "google_satellite") return null;
-    const frame = georeference(card)?.cartographic_frame;
-    const east = finite(frame?.east_m);
-    const north = finite(frame?.north_m);
-    if (frame?.applied !== true || east === null || north === null) return null;
-    return { east, north };
-  };
-
-  const googleDynamicGeoreference12 = (card, geo) => {
-    const frameOffset = googleDynamicFrameOffset12(card);
-    if (!frameOffset || !validGeoreference(geo)) return geo;
-    const ref = geo?.reference || {};
-    const restored = offsetWgs84(
-      Number(ref.latitude),
-      Number(ref.longitude),
-      -frameOffset.east,
-      -frameOffset.north,
-    );
-    if (!restored || finite(restored.lat) === null || finite(restored.lon) === null) return geo;
-    card._googleSatelliteFrameCorrection11 = {
-      mode: "inverse_active_cartographic_translation",
-      east_m: -frameOffset.east,
-      north_m: -frameOffset.north,
-    };
-    return {
-      ...geo,
-      reference: {
-        ...ref,
-        latitude: restored.lat,
-        longitude: restored.lon,
-      },
-    };
-  };
-
-  const googleDynamicSiteOrigin12 = (card, origin) => {
-    const frameOffset = googleDynamicFrameOffset12(card);
-    const latitude = finite(origin?.latitude);
-    const longitude = finite(origin?.longitude);
-    if (!frameOffset || latitude === null || longitude === null) return origin;
-    const restored = offsetWgs84(
-      latitude,
-      longitude,
-      -frameOffset.east,
-      -frameOffset.north,
-    );
-    if (!restored || finite(restored.lat) === null || finite(restored.lon) === null) return origin;
-    card._googleSatelliteFrameCorrection11 = {
-      mode: "inverse_active_cartographic_translation",
-      east_m: -frameOffset.east,
-      north_m: -frameOffset.north,
-    };
-    return { ...origin, latitude: restored.lat, longitude: restored.lon };
-  };
-
-  const providerFrontend13 = (card) => {
-    const single = card?._mapPayload?.frontend;
-    const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
-    if (!multiVisible && single && typeof single === "object") return single;
-    const multi = card?._multi036Site?.anchor_frontend;
-    if (multi && typeof multi === "object") return multi;
-    return single && typeof single === "object" ? single : {};
-  };
-
-  const providerFrameName13 = (card) => {
-    const provider = underlayProvider(card);
-    const advertised = providerFrontend13(card)?.map_underlays?.[provider]?.reference_frame;
-    if (advertised) return String(advertised);
-    if (["openstreetmap", "google_satellite"].includes(provider)) return "web_wgs84";
-    if (["estonia_orthophoto", "estonia_hybrid"].includes(provider)) return "regional_cartographic";
-    return "active";
-  };
-
-  const providerGeoreference13 = (card, activeGeo) => {
-    const frontend = providerFrontend13(card);
-    const frames = frontend?.georeference_frames;
-    const frameName = providerFrameName13(card);
-    const frame = frames && typeof frames === "object" ? frames[frameName] : null;
-    const candidate = frame?.georeference;
-    if (frame?.available === true && validGeoreference(candidate)) {
-      card._underlayReferenceFrame13 = {
-        provider: underlayProvider(card),
-        frame: frameName,
-        source: frame?.source || null,
-        fallback: false,
-      };
-      return candidate;
-    }
-
-    // Compatibility while integration/card are updated in either order: beta12
-    // already knows how to reconstruct Google's dynamic frame from beta22's
-    // active cartographic transform. Once beta23 frames exist, an unavailable
-    // preferred frame intentionally falls back to active rather than inventing
-    // a provider/model offset in JavaScript.
-    const hasFrames = Boolean(frames && typeof frames === "object" && Object.keys(frames).length);
-    if (!hasFrames && underlayProvider(card) === "google_satellite") {
-      card._underlayReferenceFrame13 = {
-        provider: "google_satellite",
-        frame: frameName,
-        source: "beta12_compatibility_fallback",
-        fallback: true,
-      };
-      return googleDynamicGeoreference12(card, activeGeo);
-    }
-
-    card._underlayReferenceFrame13 = {
-      provider: underlayProvider(card),
-      frame: frameName,
-      source: frame?.source || "active_fallback",
-      fallback: true,
-    };
-    return activeGeo;
-  };
-
-  const providerSiteOrigin13 = (card, site) => {
-    const frameName = providerFrameName13(card);
-    const origins = site?.underlay_origins;
-    const candidate = origins && typeof origins === "object" ? origins[frameName] : null;
-    const latitude = finite(candidate?.latitude);
-    const longitude = finite(candidate?.longitude);
-    if (candidate?.available === true && latitude !== null && longitude !== null) {
-      card._underlayReferenceFrame13 = {
-        provider: underlayProvider(card),
-        frame: frameName,
-        source: candidate?.source || null,
-        fallback: false,
-      };
-      return { latitude, longitude };
-    }
-
-    const hasOrigins = Boolean(origins && typeof origins === "object" && Object.keys(origins).length);
-    if (!hasOrigins && underlayProvider(card) === "google_satellite") {
-      return googleDynamicSiteOrigin12(card, site?.origin || {});
-    }
-    return site?.origin || {};
-  };
-
-  const syncSingle = (card) => {
-    if (!card?._baseEl) return false;
-    if (!underlayEnabled(card)) {
-      card._baseEl.querySelector?.(".nm-osm-underlay")?.remove?.();
-      return false;
-    }
-    const activeGeo = georeference(card);
-    const geo = providerGeoreference13(card, activeGeo);
-    if (!validGeoreference(geo) || !card._layout?.sx || !card._layout?.sy) {
-      card._baseEl.querySelector?.(".nm-osm-underlay")?.remove?.();
-      return false;
-    }
-    const ref = geo?.reference || {};
-    const inEstonia = markEstoniaAvailability(card, ref.latitude, ref.longitude);
-    if (["estonia_orthophoto", "estonia_hybrid"].includes(underlayProvider(card)) && !inEstonia) {
-      card._baseEl.querySelector?.(".nm-osm-underlay")?.remove?.();
-      return false;
-    }
-    const gps = mapPoints(card?._mapPayload?.map || {}).map(([x, y]) => localToWgs84(geo, x, y)).filter(Boolean);
-    const bounds = paddedBounds(gps);
-    const markup = tileMarkup(bounds, (lat, lon) => {
-      const local = wgs84ToLocal(geo, lat, lon);
-      return local ? { x: card._layout.sx(local.x), y: card._layout.sy(local.y) } : null;
-    }, underlayOpacity(card), underlayProvider(card), googleTileTemplate(card), googleMaxZoom(card));
-    return insertOsmGroup(card._baseEl, markup);
-  };
-
-  const siteLayout = (site) => {
-    const box = site?.combined_svg_bounds;
-    if (!box || [box.min_x, box.min_y, box.max_x, box.max_y].some((value) => finite(value) === null)) return null;
-    const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
-    const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
-    const padding = 55;
-    const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
-    return {
-      scale,
-      offsetX: (1000 - width * scale) / 2 - Number(box.min_x) * scale,
-      offsetY: (1000 - height * scale) / 2 - Number(box.min_y) * scale,
-      box,
-    };
-  };
-
-  const syncMulti = (card) => {
-    const multiLayer = card?._multi036Layer;
-    if (!multiLayer || !card?._svgEl) return false;
-    let layer = card._osm036MultiLayer;
-    if (!layer || !layer.isConnected) {
-      layer = document.createElementNS(SVG_NS, "g");
-      layer.setAttribute("class", "nm-osm-multi-underlay-layer");
-      layer.setAttribute("pointer-events", "none");
-      card._svgEl.insertBefore(layer, multiLayer);
-      card._osm036MultiLayer = layer;
-    }
-    if (!underlayEnabled(card) || multiLayer.style.display === "none") {
-      layer.innerHTML = "";
-      return false;
-    }
-    const site = card?._multi036Site;
-    const origin = providerSiteOrigin13(card, site);
-    const lat0 = finite(origin.latitude);
-    const lon0 = finite(origin.longitude);
-    const layout = siteLayout(site);
-    if (lat0 === null || lon0 === null || !layout || site?.status !== "validated") {
-      layer.querySelector?.(".nm-osm-underlay")?.remove?.();
-      return false;
-    }
-    const inEstonia = markEstoniaAvailability(card, lat0, lon0);
-    if (["estonia_orthophoto", "estonia_hybrid"].includes(underlayProvider(card)) && !inEstonia) {
-      layer.querySelector?.(".nm-osm-underlay")?.remove?.();
-      return false;
-    }
-    const siteBox = site?.combined_site_bounds;
-    if (!siteBox || [siteBox.min_east, siteBox.max_east, siteBox.min_north, siteBox.max_north].some((value) => finite(value) === null)) return false;
-    const corners = [
-      offsetWgs84(lat0, lon0, Number(siteBox.min_east), Number(siteBox.min_north)),
-      offsetWgs84(lat0, lon0, Number(siteBox.min_east), Number(siteBox.max_north)),
-      offsetWgs84(lat0, lon0, Number(siteBox.max_east), Number(siteBox.min_north)),
-      offsetWgs84(lat0, lon0, Number(siteBox.max_east), Number(siteBox.max_north)),
-    ];
-    const bounds = paddedBounds(corners);
-    const markup = tileMarkup(bounds, (lat, lon) => {
-      const { east, north } = offsetMeters(lat0, lon0, lat, lon);
-      return { x: layout.offsetX + east * layout.scale, y: layout.offsetY - north * layout.scale };
-    }, underlayOpacity(card), underlayProvider(card), googleTileTemplate(card), googleMaxZoom(card));
-    return insertOsmGroup(layer, markup);
-  };
-
-  const syncCard = (card) => {
-    if (!card?._config || typeof document === "undefined") return;
-    const siteOrigin = card?._multi036Site?.origin || {};
-    const singleRef = georeference(card)?.reference || {};
-    if (finite(siteOrigin.latitude) !== null && finite(siteOrigin.longitude) !== null) {
-      markEstoniaAvailability(card, siteOrigin.latitude, siteOrigin.longitude);
-    } else if (finite(singleRef.latitude) !== null && finite(singleRef.longitude) !== null) {
-      markEstoniaAvailability(card, singleRef.latitude, singleRef.longitude);
-    }
-    const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
-    const visible = multiVisible ? syncMulti(card) : syncSingle(card);
-    ensureAttribution(card, underlayEnabled(card) && visible);
-  };
-
-  proto._syncOsmUnderlay036 = function beta7SyncOsmUnderlay() { syncCard(this); };
-
-  const previousStub = Card.getStubConfig?.bind(Card);
-  Card.getStubConfig = (...args) => ({ ...(previousStub?.(...args) || {}), map_underlay: "none", osm_underlay_opacity: DEFAULT_OPACITY });
-
-  const previousForm = Card.getConfigForm?.bind(Card);
-  Card.getConfigForm = (...args) => {
-    const form = previousForm?.(...args) || { schema: [] };
-    const rootHass = globalThis.document?.querySelector?.("home-assistant")?.hass;
-    const haConfig = rootHass?.config || {};
-    const country = String(haConfig.country || "").toUpperCase();
-    const homeLatitude = finite(haConfig.latitude);
-    const homeLongitude = finite(haConfig.longitude);
-    const homeInEstonia = homeLatitude !== null && homeLongitude !== null
-      && isEstoniaLocation(homeLatitude, homeLongitude);
-    const haTimeZone = String(haConfig.time_zone || "");
-    let browserTimeZone = "";
-    try {
-      browserTimeZone = String(Intl.DateTimeFormat().resolvedOptions().timeZone || "");
-    } catch (_error) {
-      browserTimeZone = "";
-    }
-    const estoniaUnderlayAvailable = country === "EE"
-      || homeInEstonia
-      || haTimeZone === "Europe/Tallinn"
-      || browserTimeZone === "Europe/Tallinn"
-      || Card.__navimower036EstoniaSite === true;
-    const walkArrays = (items) => {
-      if (!Array.isArray(items)) return false;
-      const index = items.findIndex((item) => item?.name === "map_background_color");
-      if (index >= 0) {
-        if (!items.some((item) => item?.name === "map_underlay")) {
-          items.splice(index + 1, 0,
-            { name: "map_underlay", selector: { select: { options: [
-              { value: "none", label: "None" },
-              { value: "openstreetmap", label: "OpenStreetMap" },
-              ...(estoniaUnderlayAvailable ? [{ value: "estonia_orthophoto", label: "Maa- ja Ruumiamet Ortofoto" }] : []),
-            ] } } },
-            { name: "osm_underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
-          );
+        if (["estonia_orthophoto", "estonia_hybrid"].includes(provider)) {
+          const advertised = metadata?.[provider]?.available;
+          return advertised === undefined ? true : advertised === true;
         }
+        return false;
+      };
+      const underlayEnabled = (card) => ["openstreetmap", "estonia_orthophoto", "estonia_hybrid", "google_satellite"].includes(underlayProvider(card))
+        && providerAvailable(card);
+      const underlayOpacity = (card) => clamp(card?._config?.underlay_opacity ?? card?._config?.osm_underlay_opacity ?? DEFAULT_OPACITY, 0.1, 1);
+      const googleTileTemplate = (card) => String(frontendUnderlayMetadata(card)?.google_satellite?.tile_api_path_template || "");
+      const googleMaxZoom = (card) => clamp(card?._googleSatelliteMaxZoom11 ?? DEFAULT_ZOOM, 15, DEFAULT_ZOOM);
+      const isEstoniaLocation = (lat, lon) => {
+        const latitude = finite(lat);
+        const longitude = finite(lon);
+        return latitude !== null && longitude !== null
+          && latitude >= 57.3 && latitude <= 60.0
+          && longitude >= 21.5 && longitude <= 28.3;
+      };
+      const markEstoniaAvailability = (card, lat, lon) => {
+        const available = isEstoniaLocation(lat, lon);
+        if (available) Card.__navimower036EstoniaSite = true;
+        if (card) card._estoniaOrthophotoAvailable036 = available;
+        return available;
+      };
+    
+      const georeference = (card) => card?._mapPayload?.georeference || card?._mapPayload?.map?.georeference || null;
+      const validGeoreference = (value) => {
+        if (!value || typeof value !== "object") return false;
+        const ref = value.reference || {};
+        const complete = [ref.local_x, ref.local_y, ref.latitude, ref.longitude, value.rotation_rad].every((item) => finite(item) !== null);
+        if (!complete) return false;
+        return value.status === "validated" || value?.validation?.valid === true;
+      };
+    
+      const UNDERLAY_WGS84_A_M = 6378137.0;
+      const UNDERLAY_WGS84_F = 1 / 298.257223563;
+      const UNDERLAY_WGS84_E2 = UNDERLAY_WGS84_F * (2 - UNDERLAY_WGS84_F);
+      const underlayCurvatureRadii = (latitudeRad) => {
+        const sinLat = Math.sin(latitudeRad);
+        const denominator = 1 - UNDERLAY_WGS84_E2 * sinLat * sinLat;
+        const root = Math.sqrt(denominator);
+        return {
+          meridional: UNDERLAY_WGS84_A_M * (1 - UNDERLAY_WGS84_E2) / (denominator * root),
+          primeVertical: UNDERLAY_WGS84_A_M / root,
+        };
+      };
+      const underlayShortestLonDeltaRad = (lon0, lon) => {
+        const deltaDeg = ((lon - lon0 + 180) % 360 + 360) % 360 - 180;
+        return deltaDeg * Math.PI / 180;
+      };
+      const offsetMeters = (lat0, lon0, lat, lon) => {
+        const lat0Rad = lat0 * Math.PI / 180;
+        const latRad = lat * Math.PI / 180;
+        const meanLat = (lat0Rad + latRad) / 2;
+        const radii = underlayCurvatureRadii(meanLat);
+        return {
+          east: underlayShortestLonDeltaRad(lon0, lon) * radii.primeVertical * Math.cos(meanLat),
+          north: (latRad - lat0Rad) * radii.meridional,
+        };
+      };
+    
+      const offsetWgs84 = (lat0, lon0, east, north) => {
+        const lat0Rad = lat0 * Math.PI / 180;
+        let targetLat = lat0Rad;
+        for (let index = 0; index < 3; index += 1) {
+          const meanLat = (lat0Rad + targetLat) / 2;
+          const radii = underlayCurvatureRadii(meanLat);
+          targetLat = lat0Rad + north / radii.meridional;
+        }
+        const meanLat = (lat0Rad + targetLat) / 2;
+        const radii = underlayCurvatureRadii(meanLat);
+        const eastRadius = radii.primeVertical * Math.cos(meanLat);
+        const targetLon = lon0 * Math.PI / 180 + east / eastRadius;
+        let lon = targetLon * 180 / Math.PI;
+        lon = ((lon + 180) % 360 + 360) % 360 - 180;
+        return { lat: targetLat * 180 / Math.PI, lon };
+      };
+    
+      const localToWgs84 = (geo, x, y) => {
+        if (!validGeoreference(geo)) return null;
+        const ref = geo.reference || {};
+        const rotation = finite(geo.rotation_rad, 0);
+        const dx = Number(x) - Number(ref.local_x);
+        const dy = Number(y) - Number(ref.local_y);
+        const east = dx * Math.cos(rotation) + dy * Math.sin(rotation);
+        const north = -dx * Math.sin(rotation) + dy * Math.cos(rotation);
+        return offsetWgs84(Number(ref.latitude), Number(ref.longitude), east, north);
+      };
+    
+      const wgs84ToLocal = (geo, lat, lon) => {
+        if (!validGeoreference(geo)) return null;
+        const ref = geo.reference || {};
+        const rotation = finite(geo.rotation_rad, 0);
+        const { east, north } = offsetMeters(Number(ref.latitude), Number(ref.longitude), lat, lon);
+        const dx = east * Math.cos(rotation) - north * Math.sin(rotation);
+        const dy = east * Math.sin(rotation) + north * Math.cos(rotation);
+        return { x: Number(ref.local_x) + dx, y: Number(ref.local_y) + dy };
+      };
+    
+      const tilePoint = (lat, lon, zoom) => {
+        const n = 2 ** zoom;
+        const safeLat = clamp(lat, -85.05112878, 85.05112878);
+        const latRad = safeLat * Math.PI / 180;
+        return {
+          x: (lon + 180) / 360 * n,
+          y: (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n,
+        };
+      };
+    
+      const tileBounds = (x, y, zoom) => {
+        const n = 2 ** zoom;
+        const lonLeft = x / n * 360 - 180;
+        const lonRight = (x + 1) / n * 360 - 180;
+        const latAt = (tileY) => Math.atan(Math.sinh(Math.PI * (1 - 2 * tileY / n))) * 180 / Math.PI;
+        return { west: lonLeft, east: lonRight, north: latAt(y), south: latAt(y + 1) };
+      };
+    
+      const chooseTiles = (bounds, maxZoom = DEFAULT_ZOOM) => {
+        if (!bounds) return null;
+        for (let zoom = Math.min(DEFAULT_ZOOM, maxZoom); zoom >= 15; zoom -= 1) {
+          const nw = tilePoint(bounds.north, bounds.west, zoom);
+          const se = tilePoint(bounds.south, bounds.east, zoom);
+          const minX = Math.floor(Math.min(nw.x, se.x));
+          const maxX = Math.floor(Math.max(nw.x, se.x));
+          const minY = Math.floor(Math.min(nw.y, se.y));
+          const maxY = Math.floor(Math.max(nw.y, se.y));
+          const count = (maxX - minX + 1) * (maxY - minY + 1);
+          if (count <= MAX_TILES || zoom === 15) return { zoom, minX, maxX, minY, maxY };
+        }
+        return null;
+      };
+    
+      const mapPoints = (map) => {
+        const points = [];
+        const add = (value) => {
+          for (const point of Array.isArray(value) ? value : []) {
+            if (Array.isArray(point) && finite(point[0]) !== null && finite(point[1]) !== null) points.push([Number(point[0]), Number(point[1])]);
+          }
+        };
+        for (const zone of map?.zones || []) add(zone?.polygon);
+        for (const polygon of map?.off_limit_areas || []) add(polygon);
+        for (const polygon of map?.vf_off_areas || []) add(polygon);
+        for (const channel of map?.channels || []) add(channel?.points);
+        const station = map?.station;
+        if (finite(station?.x) !== null && finite(station?.y) !== null) points.push([Number(station.x), Number(station.y)]);
+        return points;
+      };
+    
+      const paddedBounds = (items, paddingM = 18) => {
+        if (!items.length) return null;
+        let north = Math.max(...items.map((item) => item.lat));
+        let south = Math.min(...items.map((item) => item.lat));
+        let east = Math.max(...items.map((item) => item.lon));
+        let west = Math.min(...items.map((item) => item.lon));
+        const centerLat = (north + south) / 2;
+        const dLat = paddingM / EARTH_RADIUS_M * 180 / Math.PI;
+        const dLon = paddingM / (EARTH_RADIUS_M * Math.max(0.01, Math.cos(centerLat * Math.PI / 180))) * 180 / Math.PI;
+        north += dLat; south -= dLat; east += dLon; west -= dLon;
+        return { north, south, east, west };
+      };
+    
+      const tileMarkup = (bounds, screenPoint, opacity, provider = "openstreetmap", googleTemplate = "", googleZoom = DEFAULT_ZOOM) => {
+        const providerMaxZoom = ["estonia_orthophoto", "estonia_hybrid"].includes(provider)
+          ? 18
+          : provider === "google_satellite" ? googleZoom : DEFAULT_ZOOM;
+        const range = chooseTiles(bounds, providerMaxZoom);
+        if (!range) return "";
+        const images = [];
+        for (let y = range.minY; y <= range.maxY; y += 1) {
+          for (let x = range.minX; x <= range.maxX; x += 1) {
+            const box = tileBounds(x, y, range.zoom);
+            const nw = screenPoint(box.north, box.west);
+            const ne = screenPoint(box.north, box.east);
+            const sw = screenPoint(box.south, box.west);
+            if (![nw, ne, sw].every((point) => point && finite(point.x) !== null && finite(point.y) !== null)) continue;
+            const a = (ne.x - nw.x) / 256;
+            const b = (ne.y - nw.y) / 256;
+            const c = (sw.x - nw.x) / 256;
+            const d = (sw.y - nw.y) / 256;
+            const transform = [a, b, c, d, nw.x, nw.y].map((value) => Number(value).toFixed(8)).join(" ");
+            const tmsY = 2 ** range.zoom - 1 - y;
+            const photoHref = "https://tiles.maaamet.ee/tm/tms/1.0.0/foto@GMC/" + range.zoom + "/" + x + "/" + tmsY + ".png?ASUTUS=NAVIMOWER&KESKKOND=LIVE&IS=NAVIMOWER_MAP_CARD";
+            if (provider === "estonia_hybrid") {
+              const hybridHref = "https://tiles.maaamet.ee/tm/tms/1.0.0/hybriid@GMC/" + range.zoom + "/" + x + "/" + tmsY + ".png?ASUTUS=NAVIMOWER&KESKKOND=LIVE&IS=NAVIMOWER_MAP_CARD";
+              images.push('<image href="' + photoHref + '" x="0" y="0" width="256" height="256" preserveAspectRatio="none" opacity="' + opacity.toFixed(2) + '" transform="matrix(' + transform + ')"/>');
+              images.push('<image href="' + hybridHref + '" x="0" y="0" width="256" height="256" preserveAspectRatio="none" opacity="' + opacity.toFixed(2) + '" transform="matrix(' + transform + ')"/>');
+              continue;
+            }
+            if (provider === "google_satellite") {
+              const proxyPath = String(googleTemplate || "")
+                .replace("{z}", String(range.zoom))
+                .replace("{x}", String(x))
+                .replace("{y}", String(y));
+              if (!proxyPath) continue;
+              images.push('<image data-nm-google-path="' + proxyPath + '" data-nm-google-z="' + range.zoom + '" data-nm-google-x="' + x + '" data-nm-google-y="' + y + '" href="" x="0" y="0" width="256" height="256" preserveAspectRatio="none" opacity="' + opacity.toFixed(2) + '" transform="matrix(' + transform + ')"/>');
+              continue;
+            }
+            const href = provider === "estonia_orthophoto"
+              ? photoHref
+              : "#nm-osm-" + range.zoom + "-" + x + "-" + y;
+            images.push('<image href="' + href + '" x="0" y="0" width="256" height="256" preserveAspectRatio="none" opacity="' + opacity.toFixed(2) + '" transform="matrix(' + transform + ')"/>');
+          }
+        }
+        return images.join("");
+      };
+    
+      const ensureAttribution = (card, visible) => {
+        const wrap = card?.querySelector?.(".nm-wrap");
+        if (!wrap) return;
+        const provider = underlayProvider(card);
+        let node = wrap.querySelector?.(".nm-osm-attribution");
+        if (!node) {
+          node = document.createElement("div");
+          node.className = "nm-osm-attribution";
+          Object.assign(node.style, {
+            position: "absolute", right: "4px", bottom: "4px", zIndex: "8",
+            padding: "2px 5px", borderRadius: "4px", fontSize: "10px", lineHeight: "1.2",
+            background: "rgba(255,255,255,.78)", color: "#37474f",
+          });
+          wrap.appendChild(node);
+        }
+        if (node.dataset.provider !== provider) {
+          node.dataset.provider = provider;
+          if (["estonia_orthophoto", "estonia_hybrid"].includes(provider)) {
+            node.innerHTML = '<a href="https://geoportaal.maaamet.ee/" target="_blank" rel="noopener noreferrer">Aluskaart: Maa- ja Ruumiamet</a>';
+          } else if (provider === "google_satellite") {
+            node.textContent = "Google Maps";
+          } else {
+            node.innerHTML = '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>';
+          }
+          const link = node.querySelector("a");
+          if (link) link.style.cssText = "color:inherit;text-decoration:none";
+        }
+        node.hidden = !visible;
+      };
+    
+      const insertOsmGroup = (layer, markup) => {
+        if (!layer || !markup) {
+          layer?.querySelector?.(".nm-osm-underlay")?.remove?.();
+          return false;
+        }
+        const markupKey = fastHash(markup);
+        const current = layer.querySelector?.(".nm-osm-underlay");
+        if (current?.dataset?.underlayKey === markupKey) return true;
+        current?.remove?.();
+        const group = document.createElementNS(SVG_NS, "g");
+        group.setAttribute("class", "nm-osm-underlay");
+        group.setAttribute("pointer-events", "none");
+        group.dataset.underlayKey = markupKey;
+        group.innerHTML = markup;
+        const first = layer.firstElementChild;
+        if (first?.nextSibling) layer.insertBefore(group, first.nextSibling);
+        else layer.appendChild(group);
         return true;
+      };
+    
+      const googleDynamicFrameOffset12 = (card) => {
+        if (underlayProvider(card) !== "google_satellite") return null;
+        const frame = georeference(card)?.cartographic_frame;
+        const east = finite(frame?.east_m);
+        const north = finite(frame?.north_m);
+        if (frame?.applied !== true || east === null || north === null) return null;
+        return { east, north };
+      };
+    
+      const googleDynamicGeoreference12 = (card, geo) => {
+        const frameOffset = googleDynamicFrameOffset12(card);
+        if (!frameOffset || !validGeoreference(geo)) return geo;
+        const ref = geo?.reference || {};
+        const restored = offsetWgs84(
+          Number(ref.latitude),
+          Number(ref.longitude),
+          -frameOffset.east,
+          -frameOffset.north,
+        );
+        if (!restored || finite(restored.lat) === null || finite(restored.lon) === null) return geo;
+        card._googleSatelliteFrameCorrection11 = {
+          mode: "inverse_active_cartographic_translation",
+          east_m: -frameOffset.east,
+          north_m: -frameOffset.north,
+        };
+        return {
+          ...geo,
+          reference: {
+            ...ref,
+            latitude: restored.lat,
+            longitude: restored.lon,
+          },
+        };
+      };
+    
+      const googleDynamicSiteOrigin12 = (card, origin) => {
+        const frameOffset = googleDynamicFrameOffset12(card);
+        const latitude = finite(origin?.latitude);
+        const longitude = finite(origin?.longitude);
+        if (!frameOffset || latitude === null || longitude === null) return origin;
+        const restored = offsetWgs84(
+          latitude,
+          longitude,
+          -frameOffset.east,
+          -frameOffset.north,
+        );
+        if (!restored || finite(restored.lat) === null || finite(restored.lon) === null) return origin;
+        card._googleSatelliteFrameCorrection11 = {
+          mode: "inverse_active_cartographic_translation",
+          east_m: -frameOffset.east,
+          north_m: -frameOffset.north,
+        };
+        return { ...origin, latitude: restored.lat, longitude: restored.lon };
+      };
+    
+      const providerFrontend13 = (card) => {
+        const single = card?._mapPayload?.frontend;
+        const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
+        if (!multiVisible && single && typeof single === "object") return single;
+        const multi = card?._multi036Site?.anchor_frontend;
+        if (multi && typeof multi === "object") return multi;
+        return single && typeof single === "object" ? single : {};
+      };
+    
+      const providerFrameName13 = (card) => {
+        const provider = underlayProvider(card);
+        const advertised = providerFrontend13(card)?.map_underlays?.[provider]?.reference_frame;
+        if (advertised) return String(advertised);
+        if (["openstreetmap", "google_satellite"].includes(provider)) return "web_wgs84";
+        if (["estonia_orthophoto", "estonia_hybrid"].includes(provider)) return "regional_cartographic";
+        return "active";
+      };
+    
+      const providerGeoreference13 = (card, activeGeo) => {
+        const frontend = providerFrontend13(card);
+        const frames = frontend?.georeference_frames;
+        const frameName = providerFrameName13(card);
+        const frame = frames && typeof frames === "object" ? frames[frameName] : null;
+        const candidate = frame?.georeference;
+        if (frame?.available === true && validGeoreference(candidate)) {
+          card._underlayReferenceFrame13 = {
+            provider: underlayProvider(card),
+            frame: frameName,
+            source: frame?.source || null,
+            fallback: false,
+          };
+          return candidate;
+        }
+    
+        // Compatibility while integration/card are updated in either order: beta12
+        // already knows how to reconstruct Google's dynamic frame from beta22's
+        // active cartographic transform. Once beta23 frames exist, an unavailable
+        // preferred frame intentionally falls back to active rather than inventing
+        // a provider/model offset in JavaScript.
+        const hasFrames = Boolean(frames && typeof frames === "object" && Object.keys(frames).length);
+        if (!hasFrames && underlayProvider(card) === "google_satellite") {
+          card._underlayReferenceFrame13 = {
+            provider: "google_satellite",
+            frame: frameName,
+            source: "beta12_compatibility_fallback",
+            fallback: true,
+          };
+          return googleDynamicGeoreference12(card, activeGeo);
+        }
+    
+        card._underlayReferenceFrame13 = {
+          provider: underlayProvider(card),
+          frame: frameName,
+          source: frame?.source || "active_fallback",
+          fallback: true,
+        };
+        return activeGeo;
+      };
+    
+      const providerSiteOrigin13 = (card, site) => {
+        const frameName = providerFrameName13(card);
+        const origins = site?.underlay_origins;
+        const candidate = origins && typeof origins === "object" ? origins[frameName] : null;
+        const latitude = finite(candidate?.latitude);
+        const longitude = finite(candidate?.longitude);
+        if (candidate?.available === true && latitude !== null && longitude !== null) {
+          card._underlayReferenceFrame13 = {
+            provider: underlayProvider(card),
+            frame: frameName,
+            source: candidate?.source || null,
+            fallback: false,
+          };
+          return { latitude, longitude };
+        }
+    
+        const hasOrigins = Boolean(origins && typeof origins === "object" && Object.keys(origins).length);
+        if (!hasOrigins && underlayProvider(card) === "google_satellite") {
+          return googleDynamicSiteOrigin12(card, site?.origin || {});
+        }
+        return site?.origin || {};
+      };
+    
+      const syncSingle = (card) => {
+        if (!card?._baseEl) return false;
+        if (!underlayEnabled(card)) {
+          card._baseEl.querySelector?.(".nm-osm-underlay")?.remove?.();
+          return false;
+        }
+        const activeGeo = georeference(card);
+        const geo = providerGeoreference13(card, activeGeo);
+        if (!validGeoreference(geo) || !card._layout?.sx || !card._layout?.sy) {
+          card._baseEl.querySelector?.(".nm-osm-underlay")?.remove?.();
+          return false;
+        }
+        const ref = geo?.reference || {};
+        const inEstonia = markEstoniaAvailability(card, ref.latitude, ref.longitude);
+        if (["estonia_orthophoto", "estonia_hybrid"].includes(underlayProvider(card)) && !inEstonia) {
+          card._baseEl.querySelector?.(".nm-osm-underlay")?.remove?.();
+          return false;
+        }
+        const gps = mapPoints(card?._mapPayload?.map || {}).map(([x, y]) => localToWgs84(geo, x, y)).filter(Boolean);
+        const bounds = paddedBounds(gps);
+        const markup = tileMarkup(bounds, (lat, lon) => {
+          const local = wgs84ToLocal(geo, lat, lon);
+          return local ? { x: card._layout.sx(local.x), y: card._layout.sy(local.y) } : null;
+        }, underlayOpacity(card), underlayProvider(card), googleTileTemplate(card), googleMaxZoom(card));
+        return insertOsmGroup(card._baseEl, markup);
+      };
+    
+      const siteLayout = (site) => {
+        const box = site?.combined_svg_bounds;
+        if (!box || [box.min_x, box.min_y, box.max_x, box.max_y].some((value) => finite(value) === null)) return null;
+        const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
+        const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
+        const padding = 55;
+        const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
+        return {
+          scale,
+          offsetX: (1000 - width * scale) / 2 - Number(box.min_x) * scale,
+          offsetY: (1000 - height * scale) / 2 - Number(box.min_y) * scale,
+          box,
+        };
+      };
+    
+      const syncMulti = (card) => {
+        const multiLayer = card?._multi036Layer;
+        if (!multiLayer || !card?._svgEl) return false;
+        let layer = card._osm036MultiLayer;
+        if (!layer || !layer.isConnected) {
+          layer = document.createElementNS(SVG_NS, "g");
+          layer.setAttribute("class", "nm-osm-multi-underlay-layer");
+          layer.setAttribute("pointer-events", "none");
+          card._svgEl.insertBefore(layer, multiLayer);
+          card._osm036MultiLayer = layer;
+        }
+        if (!underlayEnabled(card) || multiLayer.style.display === "none") {
+          layer.innerHTML = "";
+          return false;
+        }
+        const site = card?._multi036Site;
+        const origin = providerSiteOrigin13(card, site);
+        const lat0 = finite(origin.latitude);
+        const lon0 = finite(origin.longitude);
+        const layout = siteLayout(site);
+        if (lat0 === null || lon0 === null || !layout || site?.status !== "validated") {
+          layer.querySelector?.(".nm-osm-underlay")?.remove?.();
+          return false;
+        }
+        const inEstonia = markEstoniaAvailability(card, lat0, lon0);
+        if (["estonia_orthophoto", "estonia_hybrid"].includes(underlayProvider(card)) && !inEstonia) {
+          layer.querySelector?.(".nm-osm-underlay")?.remove?.();
+          return false;
+        }
+        const siteBox = site?.combined_site_bounds;
+        if (!siteBox || [siteBox.min_east, siteBox.max_east, siteBox.min_north, siteBox.max_north].some((value) => finite(value) === null)) return false;
+        const corners = [
+          offsetWgs84(lat0, lon0, Number(siteBox.min_east), Number(siteBox.min_north)),
+          offsetWgs84(lat0, lon0, Number(siteBox.min_east), Number(siteBox.max_north)),
+          offsetWgs84(lat0, lon0, Number(siteBox.max_east), Number(siteBox.min_north)),
+          offsetWgs84(lat0, lon0, Number(siteBox.max_east), Number(siteBox.max_north)),
+        ];
+        const bounds = paddedBounds(corners);
+        const markup = tileMarkup(bounds, (lat, lon) => {
+          const { east, north } = offsetMeters(lat0, lon0, lat, lon);
+          return { x: layout.offsetX + east * layout.scale, y: layout.offsetY - north * layout.scale };
+        }, underlayOpacity(card), underlayProvider(card), googleTileTemplate(card), googleMaxZoom(card));
+        return insertOsmGroup(layer, markup);
+      };
+    
+      const syncCard = (card) => {
+        if (!card?._config || typeof document === "undefined") return;
+        const siteOrigin = card?._multi036Site?.origin || {};
+        const singleRef = georeference(card)?.reference || {};
+        if (finite(siteOrigin.latitude) !== null && finite(siteOrigin.longitude) !== null) {
+          markEstoniaAvailability(card, siteOrigin.latitude, siteOrigin.longitude);
+        } else if (finite(singleRef.latitude) !== null && finite(singleRef.longitude) !== null) {
+          markEstoniaAvailability(card, singleRef.latitude, singleRef.longitude);
+        }
+        const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
+        const visible = multiVisible ? syncMulti(card) : syncSingle(card);
+        ensureAttribution(card, underlayEnabled(card) && visible);
+      };
+    
+      proto._syncOsmUnderlay036 = function beta7SyncOsmUnderlay() { syncCard(this); };
+    
+      const previousStub = Card.getStubConfig?.bind(Card);
+      Card.getStubConfig = (...args) => ({ ...(previousStub?.(...args) || {}), map_underlay: "none", osm_underlay_opacity: DEFAULT_OPACITY });
+    
+      const previousForm = Card.getConfigForm?.bind(Card);
+      Card.getConfigForm = (...args) => {
+        const form = previousForm?.(...args) || { schema: [] };
+        const rootHass = globalThis.document?.querySelector?.("home-assistant")?.hass;
+        const haConfig = rootHass?.config || {};
+        const country = String(haConfig.country || "").toUpperCase();
+        const homeLatitude = finite(haConfig.latitude);
+        const homeLongitude = finite(haConfig.longitude);
+        const homeInEstonia = homeLatitude !== null && homeLongitude !== null
+          && isEstoniaLocation(homeLatitude, homeLongitude);
+        const haTimeZone = String(haConfig.time_zone || "");
+        let browserTimeZone = "";
+        try {
+          browserTimeZone = String(Intl.DateTimeFormat().resolvedOptions().timeZone || "");
+        } catch (_error) {
+          browserTimeZone = "";
+        }
+        const estoniaUnderlayAvailable = country === "EE"
+          || homeInEstonia
+          || haTimeZone === "Europe/Tallinn"
+          || browserTimeZone === "Europe/Tallinn"
+          || Card.__navimower036EstoniaSite === true;
+        const walkArrays = (items) => {
+          if (!Array.isArray(items)) return false;
+          const index = items.findIndex((item) => item?.name === "map_background_color");
+          if (index >= 0) {
+            if (!items.some((item) => item?.name === "map_underlay")) {
+              items.splice(index + 1, 0,
+                { name: "map_underlay", selector: { select: { options: [
+                  { value: "none", label: "None" },
+                  { value: "openstreetmap", label: "OpenStreetMap" },
+                  ...(estoniaUnderlayAvailable ? [{ value: "estonia_orthophoto", label: "Maa- ja Ruumiamet Ortofoto" }] : []),
+                ] } } },
+                { name: "osm_underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
+              );
+            }
+            return true;
+          }
+          for (const item of items) if (walkArrays(item?.schema)) return true;
+          return false;
+        };
+        walkArrays(form.schema);
+        const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+        form.computeLabel = (schema, data) => schema?.name === "map_underlay" ? "Map underlay" : schema?.name === "osm_underlay_opacity" ? "Map underlay opacity" : baseLabel?.(schema, data) || schema?.name || "";
+        return form;
+      };
+    
+      const previousSetConfig = proto.setConfig;
+      if (typeof previousSetConfig === "function") {
+        proto.setConfig = function beta5OsmSetConfig(config) {
+          const next = { ...(config || {}) };
+          if (next.map_underlay === undefined) next.map_underlay = "none";
+          if (next.osm_underlay_opacity === undefined) next.osm_underlay_opacity = DEFAULT_OPACITY;
+          const result = previousSetConfig.call(this, next);
+          queueMicrotask(() => syncCard(this));
+          return result;
+        };
       }
-      for (const item of items) if (walkArrays(item?.schema)) return true;
-      return false;
-    };
-    walkArrays(form.schema);
-    const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema, data) => schema?.name === "map_underlay" ? "Map underlay" : schema?.name === "osm_underlay_opacity" ? "Map underlay opacity" : baseLabel?.(schema, data) || schema?.name || "";
-    return form;
-  };
-
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta5OsmSetConfig(config) {
-      const next = { ...(config || {}) };
-      if (next.map_underlay === undefined) next.map_underlay = "none";
-      if (next.osm_underlay_opacity === undefined) next.osm_underlay_opacity = DEFAULT_OPACITY;
-      const result = previousSetConfig.call(this, next);
-      queueMicrotask(() => syncCard(this));
-      return result;
-    };
+    
+      const previousStaticCacheKey = proto._staticCacheKey;
+      if (typeof previousStaticCacheKey === "function") {
+        proto._staticCacheKey = function beta5OsmStaticKey(...args) {
+          return [previousStaticCacheKey.apply(this, args), this?._config?.map_underlay || "none", this?._config?.underlay_opacity ?? this?._config?.osm_underlay_opacity ?? DEFAULT_OPACITY].join("|");
+        };
+      }
+    
+      for (const method of ["_renderStatic", "_applyStaticLayers", "_ensureDom", "_applyViewBox"]) {
+        const previous = proto[method];
+        if (typeof previous !== "function") continue;
+        proto[method] = function beta5OsmWrapped(...args) {
+          const result = previous.apply(this, args);
+          queueMicrotask(() => syncCard(this));
+          return result;
+        };
+      }
+    
+      const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
+      if (hassDescriptor?.set) {
+        Object.defineProperty(proto, "hass", {
+          configurable: true,
+          get: hassDescriptor.get,
+          set(value) {
+            hassDescriptor.set.call(this, value);
+            queueMicrotask(() => syncCard(this));
+          },
+        });
+      }
   }
 
-  const previousStaticCacheKey = proto._staticCacheKey;
-  if (typeof previousStaticCacheKey === "function") {
-    proto._staticCacheKey = function beta5OsmStaticKey(...args) {
-      return [previousStaticCacheKey.apply(this, args), this?._config?.map_underlay || "none", this?._config?.underlay_opacity ?? this?._config?.osm_underlay_opacity ?? DEFAULT_OPACITY].join("|");
-    };
-  }
-
-  for (const method of ["_renderStatic", "_applyStaticLayers", "_ensureDom", "_applyViewBox"]) {
-    const previous = proto[method];
-    if (typeof previous !== "function") continue;
-    proto[method] = function beta5OsmWrapped(...args) {
-      const result = previous.apply(this, args);
-      queueMicrotask(() => syncCard(this));
-      return result;
-    };
-  }
-
-  const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (hassDescriptor?.set) {
-    Object.defineProperty(proto, "hass", {
-      configurable: true,
-      get: hassDescriptor.get,
-      set(value) {
-        hassDescriptor.set.call(this, value);
-        queueMicrotask(() => syncCard(this));
-      },
-    });
-  }
-
-})();
 
 
 // 0.3.6-beta6: OSM Multi stability and editor visibility.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const previousForm = Card.getConfigForm?.bind(Card);
-  Card.getConfigForm = (...args) => {
-    const form = previousForm?.(...args) || { schema: [] };
-    if (!Array.isArray(form.schema)) return form;
-    const names = new Set(["map_underlay", "osm_underlay_opacity"]);
-    const remove = (items) => {
-      for (const item of Array.isArray(items) ? items : []) {
-        if (!Array.isArray(item?.schema)) continue;
-        item.schema = item.schema.filter((child) => !names.has(child?.name));
-        remove(item.schema);
+  nmRuntimePatch22: {
+    const Card = __navimowerRuntimeCard;
+    const previousForm = Card.getConfigForm?.bind(Card);
+      Card.getConfigForm = (...args) => {
+        const form = previousForm?.(...args) || { schema: [] };
+        if (!Array.isArray(form.schema)) return form;
+        const names = new Set(["map_underlay", "osm_underlay_opacity"]);
+        const remove = (items) => {
+          for (const item of Array.isArray(items) ? items : []) {
+            if (!Array.isArray(item?.schema)) continue;
+            item.schema = item.schema.filter((child) => !names.has(child?.name));
+            remove(item.schema);
+          }
+        };
+        remove(form.schema);
+        form.schema = form.schema.filter((item) => item?.name !== "map_underlay_settings");
+        form.schema.push({
+          type: "expandable",
+          name: "map_underlay_settings",
+          title: "Map underlay",
+          flatten: true,
+          schema: [{
+            type: "grid",
+            name: "map_underlay_grid",
+            flatten: true,
+            column_min_width: "220px",
+            schema: [
+              { name: "map_underlay", selector: { select: { options: [
+                { value: "none", label: "None" },
+                { value: "openstreetmap", label: "OpenStreetMap" },
+              ] } } },
+              { name: "osm_underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
+            ],
+          }],
+        });
+        const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+        form.computeLabel = (schema, data) => schema?.name === "map_underlay" ? "Map underlay" : schema?.name === "osm_underlay_opacity" ? "OSM opacity" : baseLabel?.(schema, data) || schema?.name || "";
+        return form;
+      };
+    
+      const proto = Card.prototype;
+      for (const method of ["_renderShell", "_ensureDom", "_applyViewBox"]) {
+        const previous = proto[method];
+        if (typeof previous !== "function") continue;
+        proto[method] = function beta6OsmRefresh(...args) {
+          const result = previous.apply(this, args);
+          if (this._osm036Observer) {
+            this._osm036Observer.disconnect?.();
+            this._osm036Observer = null;
+          }
+          return result;
+        };
       }
-    };
-    remove(form.schema);
-    form.schema = form.schema.filter((item) => item?.name !== "map_underlay_settings");
-    form.schema.push({
-      type: "expandable",
-      name: "map_underlay_settings",
-      title: "Map underlay",
-      flatten: true,
-      schema: [{
-        type: "grid",
-        name: "map_underlay_grid",
-        flatten: true,
-        column_min_width: "220px",
-        schema: [
-          { name: "map_underlay", selector: { select: { options: [
-            { value: "none", label: "None" },
-            { value: "openstreetmap", label: "OpenStreetMap" },
-          ] } } },
-          { name: "osm_underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
-        ],
-      }],
-    });
-    const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema, data) => schema?.name === "map_underlay" ? "Map underlay" : schema?.name === "osm_underlay_opacity" ? "OSM opacity" : baseLabel?.(schema, data) || schema?.name || "";
-    return form;
-  };
-
-  const proto = Card.prototype;
-  for (const method of ["_renderShell", "_ensureDom", "_applyViewBox"]) {
-    const previous = proto[method];
-    if (typeof previous !== "function") continue;
-    proto[method] = function beta6OsmRefresh(...args) {
-      const result = previous.apply(this, args);
-      if (this._osm036Observer) {
-        this._osm036Observer.disconnect?.();
-        this._osm036Observer = null;
-      }
-      return result;
-    };
   }
 
-})();
 
 
 // 0.3.6-beta7: OSM Multi visibility and ready-state sync.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta7OsmSetConfig(config) {
-      const result = previousSetConfig.call(this, config);
-      queueMicrotask(() => this._syncOsmUnderlay036?.());
-      return result;
-    };
+  nmRuntimePatch23: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const previousSetConfig = proto.setConfig;
+      if (typeof previousSetConfig === "function") {
+        proto.setConfig = function beta7OsmSetConfig(config) {
+          const result = previousSetConfig.call(this, config);
+          queueMicrotask(() => this._syncOsmUnderlay036?.());
+          return result;
+        };
+      }
   }
 
-})();
 
 
 // 0.3.6-beta8: Estonia orthophoto underlay.
@@ -12017,662 +12000,660 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 
 // 0.3.6-beta10: zoom-aware Estonia orthophoto detail and WGS84 ellipsoid underlay geodesy.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  const WGS84_A_M = 6378137.0;
-  const WGS84_F = 1 / 298.257223563;
-  const WGS84_E2 = WGS84_F * (2 - WGS84_F);
-  const DETAIL_SCALE_THRESHOLD = 1.08;
-  const DETAIL_DEBOUNCE_MS = 180;
-  const DETAIL_BOUNDS_PADDING = 0.08;
-  const MAX_WMS_PIXELS = 1600;
-
-  const finite10 = (value, fallback = null) => {
-    if (value === null || value === undefined || value === "") return fallback;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-  const clamp10 = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
-  const provider10 = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
-  const opacity10 = (card) => clamp10(finite10(card?._config?.underlay_opacity ?? card?._config?.osm_underlay_opacity, 0.55), 0.1, 1);
-  const georeference10 = (card) => card?._mapPayload?.georeference || card?._mapPayload?.map?.georeference || null;
-  const validGeoreference10 = (value) => {
-    if (!value || typeof value !== "object") return false;
-    const ref = value.reference || {};
-    const complete = [ref.local_x, ref.local_y, ref.latitude, ref.longitude, value.rotation_rad].every((item) => finite10(item) !== null);
-    if (!complete) return false;
-    return value.status === "validated" || value?.validation?.valid === true;
-  };
-
-  const radii10 = (latitudeRad) => {
-    const sinLat = Math.sin(latitudeRad);
-    const denominator = 1 - WGS84_E2 * sinLat * sinLat;
-    const root = Math.sqrt(denominator);
-    return {
-      meridional: WGS84_A_M * (1 - WGS84_E2) / (denominator * root),
-      primeVertical: WGS84_A_M / root,
-    };
-  };
-  const shortestLon10 = (lon0, lon) => {
-    const deltaDeg = ((lon - lon0 + 180) % 360 + 360) % 360 - 180;
-    return deltaDeg * Math.PI / 180;
-  };
-  const offsetMeters10 = (lat0, lon0, lat, lon) => {
-    const lat0Rad = lat0 * Math.PI / 180;
-    const latRad = lat * Math.PI / 180;
-    const meanLat = (lat0Rad + latRad) / 2;
-    const radii = radii10(meanLat);
-    return {
-      east: shortestLon10(lon0, lon) * radii.primeVertical * Math.cos(meanLat),
-      north: (latRad - lat0Rad) * radii.meridional,
-    };
-  };
-  const offsetWgs8410 = (lat0, lon0, east, north) => {
-    const lat0Rad = lat0 * Math.PI / 180;
-    let targetLat = lat0Rad;
-    for (let index = 0; index < 3; index += 1) {
-      const meanLat = (lat0Rad + targetLat) / 2;
-      targetLat = lat0Rad + north / radii10(meanLat).meridional;
-    }
-    const meanLat = (lat0Rad + targetLat) / 2;
-    const eastRadius = radii10(meanLat).primeVertical * Math.cos(meanLat);
-    const targetLon = lon0 * Math.PI / 180 + east / eastRadius;
-    let lon = targetLon * 180 / Math.PI;
-    lon = ((lon + 180) % 360 + 360) % 360 - 180;
-    return { lat: targetLat * 180 / Math.PI, lon };
-  };
-
-  const localToWgs8410 = (geo, x, y) => {
-    if (!validGeoreference10(geo)) return null;
-    const ref = geo.reference || {};
-    const rotation = finite10(geo.rotation_rad, 0);
-    const dx = Number(x) - Number(ref.local_x);
-    const dy = Number(y) - Number(ref.local_y);
-    const east = dx * Math.cos(rotation) + dy * Math.sin(rotation);
-    const north = -dx * Math.sin(rotation) + dy * Math.cos(rotation);
-    return offsetWgs8410(Number(ref.latitude), Number(ref.longitude), east, north);
-  };
-  const wgs84ToLocal10 = (geo, lat, lon) => {
-    if (!validGeoreference10(geo)) return null;
-    const ref = geo.reference || {};
-    const rotation = finite10(geo.rotation_rad, 0);
-    const offset = offsetMeters10(Number(ref.latitude), Number(ref.longitude), lat, lon);
-    const dx = offset.east * Math.cos(rotation) - offset.north * Math.sin(rotation);
-    const dy = offset.east * Math.sin(rotation) + offset.north * Math.cos(rotation);
-    return { x: Number(ref.local_x) + dx, y: Number(ref.local_y) + dy };
-  };
-
-  const viewBounds10 = (card) => {
-    const view = card?._view || {};
-    const scale = Math.max(0.05, finite10(view.scale, 1));
-    const span = 1000 / scale;
-    const cx = finite10(view.cx, 500);
-    const cy = finite10(view.cy, 500);
-    return {
-      scale,
-      left: cx - span / 2,
-      right: cx + span / 2,
-      top: cy - span / 2,
-      bottom: cy + span / 2,
-    };
-  };
-  const geoBounds10 = (points) => {
-    if (!Array.isArray(points) || !points.length) return null;
-    let north = Math.max(...points.map((point) => Number(point.lat)));
-    let south = Math.min(...points.map((point) => Number(point.lat)));
-    let east = Math.max(...points.map((point) => Number(point.lon)));
-    let west = Math.min(...points.map((point) => Number(point.lon)));
-    if (![north, south, east, west].every(Number.isFinite)) return null;
-    const latPad = Math.max((north - south) * DETAIL_BOUNDS_PADDING, 0.000005);
-    const lonPad = Math.max((east - west) * DETAIL_BOUNDS_PADDING, 0.000005);
-    north += latPad;
-    south -= latPad;
-    east += lonPad;
-    west -= lonPad;
-    return { north, south, east, west };
-  };
-  const requestSize10 = (card) => {
-    const rect = card?._svgEl?.getBoundingClientRect?.() || card?.getBoundingClientRect?.() || {};
-    const dpr = clamp10(finite10(globalThis.devicePixelRatio, 1), 1, 2.5);
-    const width = clamp10(Math.round(Math.max(512, finite10(rect.width, 800) * dpr)), 512, MAX_WMS_PIXELS);
-    const height = clamp10(Math.round(Math.max(512, finite10(rect.height, 800) * dpr)), 512, MAX_WMS_PIXELS);
-    return { width, height };
-  };
-  const wmsUrl10 = (bounds, width, height, provider = "estonia_orthophoto") => {
-    const params = new URLSearchParams();
-    params.set("SERVICE", "WMS");
-    params.set("REQUEST", "GetMap");
-    params.set("VERSION", "1.1.1");
-    params.set("LAYERS", provider === "estonia_hybrid" ? "EESTIFOTO,HYBRID" : "EESTIFOTO");
-    params.set("STYLES", "");
-    params.set("FORMAT", "image/png");
-    params.set("TRANSPARENT", "FALSE");
-    params.set("SRS", "EPSG:4326");
-    params.set("BBOX", [bounds.west, bounds.south, bounds.east, bounds.north].map((value) => Number(value).toFixed(8)).join(","));
-    params.set("WIDTH", String(width));
-    params.set("HEIGHT", String(height));
-    params.set("ASUTUS", "NAVIMOWER");
-    params.set("KESKKOND", "LIVE");
-    params.set("IS", "NAVIMOWER_MAP_CARD");
-    return "https://kaart.maaamet.ee/wms/alus-geo?" + params.toString();
-  };
-
-  const clearDetail10 = (layer) => {
-    layer?.querySelectorAll?.(".nm-estonia-wms-detail,.nm-estonia-wms-detail-pending")?.forEach?.((node) => node.remove());
-  };
-  const installDetail10 = (layer, bounds, screenPoint, card) => {
-    if (!layer || !bounds || typeof screenPoint !== "function") return false;
-    const size = requestSize10(card);
-    const nw = screenPoint(bounds.north, bounds.west);
-    const ne = screenPoint(bounds.north, bounds.east);
-    const sw = screenPoint(bounds.south, bounds.west);
-    if (![nw, ne, sw].every((point) => point && finite10(point.x) !== null && finite10(point.y) !== null)) return false;
-    const a = (ne.x - nw.x) / size.width;
-    const b = (ne.y - nw.y) / size.width;
-    const c = (sw.x - nw.x) / size.height;
-    const d = (sw.y - nw.y) / size.height;
-    const url = wmsUrl10(bounds, size.width, size.height, provider10(card));
-    const key = url + "|" + opacity10(card).toFixed(2);
-    const current = layer.querySelector?.(".nm-estonia-wms-detail");
-    const pending = layer.querySelector?.(".nm-estonia-wms-detail-pending");
-    if (current?.dataset?.wmsKey === key || pending?.dataset?.wmsKey === key) return true;
-    pending?.remove?.();
-
-    const group = document.createElementNS(SVG_NS, "g");
-    group.setAttribute("class", "nm-estonia-wms-detail-pending");
-    group.setAttribute("pointer-events", "none");
-    group.dataset.wmsKey = key;
-    const image = document.createElementNS(SVG_NS, "image");
-    image.setAttribute("href", url);
-    image.setAttribute("x", "0");
-    image.setAttribute("y", "0");
-    image.setAttribute("width", String(size.width));
-    image.setAttribute("height", String(size.height));
-    image.setAttribute("preserveAspectRatio", "none");
-    image.setAttribute("opacity", opacity10(card).toFixed(2));
-    image.setAttribute("transform", "matrix(" + [a, b, c, d, nw.x, nw.y].map((value) => Number(value).toFixed(10)).join(" ") + ")");
-    group.appendChild(image);
-
-    const base = layer.querySelector?.(".nm-osm-underlay");
-    const anchor = current || base;
-    if (anchor?.parentNode === layer) anchor.after(group);
-    else if (layer.firstElementChild?.nextSibling) layer.insertBefore(group, layer.firstElementChild.nextSibling);
-    else layer.appendChild(group);
-
-    image.addEventListener("load", () => {
-      if (!group.isConnected) return;
-      layer.querySelectorAll?.(".nm-estonia-wms-detail")?.forEach?.((node) => node.remove());
-      group.setAttribute("class", "nm-estonia-wms-detail");
-    }, { once: true });
-    image.addEventListener("error", () => group.remove(), { once: true });
-    return true;
-  };
-
-  const singleVisibleBounds10 = (card, geo) => {
-    const layout = card?._layout;
-    if (!layout?.sx || !layout?.sy) return null;
-    const sx0 = finite10(layout.sx(0));
-    const sx1 = finite10(layout.sx(1));
-    const sy0 = finite10(layout.sy(0));
-    const sy1 = finite10(layout.sy(1));
-    if ([sx0, sx1, sy0, sy1].some((value) => value === null) || Math.abs(sx1 - sx0) < 1e-9 || Math.abs(sy1 - sy0) < 1e-9) return null;
-    const localAt = (screenX, screenY) => ({
-      x: (screenX - sx0) / (sx1 - sx0),
-      y: (screenY - sy0) / (sy1 - sy0),
-    });
-    const view = viewBounds10(card);
-    const localCorners = [
-      localAt(view.left, view.top),
-      localAt(view.right, view.top),
-      localAt(view.left, view.bottom),
-      localAt(view.right, view.bottom),
-    ];
-    return geoBounds10(localCorners.map((point) => localToWgs8410(geo, point.x, point.y)).filter(Boolean));
-  };
-  const syncSingle10 = (card) => {
-    const layer = card?._baseEl;
-    if (!layer) return false;
-    const view = viewBounds10(card);
-    if (!["estonia_orthophoto", "estonia_hybrid"].includes(provider10(card)) || view.scale < DETAIL_SCALE_THRESHOLD) {
-      clearDetail10(layer);
-      return false;
-    }
-    const geo = georeference10(card);
-    if (!validGeoreference10(geo) || !card?._layout?.sx || !card?._layout?.sy) {
-      clearDetail10(layer);
-      return false;
-    }
-    const bounds = singleVisibleBounds10(card, geo);
-    if (!bounds) return false;
-    return installDetail10(layer, bounds, (lat, lon) => {
-      const local = wgs84ToLocal10(geo, lat, lon);
-      return local ? { x: card._layout.sx(local.x), y: card._layout.sy(local.y) } : null;
-    }, card);
-  };
-
-  const siteLayout10 = (site) => {
-    const box = site?.combined_svg_bounds;
-    if (!box || [box.min_x, box.min_y, box.max_x, box.max_y].some((value) => finite10(value) === null)) return null;
-    const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
-    const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
-    const padding = 55;
-    const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
-    return {
-      scale,
-      offsetX: (1000 - width * scale) / 2 - Number(box.min_x) * scale,
-      offsetY: (1000 - height * scale) / 2 - Number(box.min_y) * scale,
-    };
-  };
-  const multiVisibleBounds10 = (card, lat0, lon0, layout) => {
-    const view = viewBounds10(card);
-    const siteAt = (screenX, screenY) => ({
-      east: (screenX - layout.offsetX) / layout.scale,
-      north: (layout.offsetY - screenY) / layout.scale,
-    });
-    const corners = [
-      siteAt(view.left, view.top),
-      siteAt(view.right, view.top),
-      siteAt(view.left, view.bottom),
-      siteAt(view.right, view.bottom),
-    ];
-    return geoBounds10(corners.map((point) => offsetWgs8410(lat0, lon0, point.east, point.north)));
-  };
-  const syncMulti10 = (card) => {
-    const layer = card?._multi036Layer;
-    if (!layer || layer.style.display === "none") return false;
-    const view = viewBounds10(card);
-    if (!["estonia_orthophoto", "estonia_hybrid"].includes(provider10(card)) || view.scale < DETAIL_SCALE_THRESHOLD) {
-      clearDetail10(layer);
-      return false;
-    }
-    const site = card?._multi036Site;
-    const origin = site?.origin || {};
-    const lat0 = finite10(origin.latitude);
-    const lon0 = finite10(origin.longitude);
-    const layout = siteLayout10(site);
-    if (lat0 === null || lon0 === null || !layout || site?.status !== "validated") {
-      clearDetail10(layer);
-      return false;
-    }
-    const bounds = multiVisibleBounds10(card, lat0, lon0, layout);
-    if (!bounds) return false;
-    return installDetail10(layer, bounds, (lat, lon) => {
-      const offset = offsetMeters10(lat0, lon0, lat, lon);
-      return { x: layout.offsetX + offset.east * layout.scale, y: layout.offsetY - offset.north * layout.scale };
-    }, card);
-  };
-
-  const syncDetail10 = (card) => {
-    if (!card || typeof document === "undefined") return;
-    const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
-    if (multiVisible) {
-      clearDetail10(card?._baseEl);
-      syncMulti10(card);
-    } else {
-      clearDetail10(card?._multi036Layer);
-      syncSingle10(card);
-    }
-  };
-  const scheduleDetail10 = (card, delay = DETAIL_DEBOUNCE_MS) => {
-    if (!card) return;
-    if (card._estoniaWmsDetailTimer036) clearTimeout(card._estoniaWmsDetailTimer036);
-    const view = viewBounds10(card);
-    if (!["estonia_orthophoto", "estonia_hybrid"].includes(provider10(card)) || view.scale < DETAIL_SCALE_THRESHOLD) {
-      card._estoniaWmsDetailTimer036 = null;
-      syncDetail10(card);
-      return;
-    }
-    card._estoniaWmsDetailTimer036 = setTimeout(() => {
-      card._estoniaWmsDetailTimer036 = null;
-      syncDetail10(card);
-    }, Math.max(0, delay));
-  };
-
-  const previousSetConfig10 = proto.setConfig;
-  if (typeof previousSetConfig10 === "function") {
-    proto.setConfig = function beta10EstoniaDetailSetConfig(config) {
-      const result = previousSetConfig10.call(this, config);
-      scheduleDetail10(this, 0);
-      return result;
-    };
+  nmRuntimePatch24: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const WGS84_A_M = 6378137.0;
+      const WGS84_F = 1 / 298.257223563;
+      const WGS84_E2 = WGS84_F * (2 - WGS84_F);
+      const DETAIL_SCALE_THRESHOLD = 1.08;
+      const DETAIL_DEBOUNCE_MS = 180;
+      const DETAIL_BOUNDS_PADDING = 0.08;
+      const MAX_WMS_PIXELS = 1600;
+    
+      const finite10 = (value, fallback = null) => {
+        if (value === null || value === undefined || value === "") return fallback;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+      const clamp10 = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
+      const provider10 = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
+      const opacity10 = (card) => clamp10(finite10(card?._config?.underlay_opacity ?? card?._config?.osm_underlay_opacity, 0.55), 0.1, 1);
+      const georeference10 = (card) => card?._mapPayload?.georeference || card?._mapPayload?.map?.georeference || null;
+      const validGeoreference10 = (value) => {
+        if (!value || typeof value !== "object") return false;
+        const ref = value.reference || {};
+        const complete = [ref.local_x, ref.local_y, ref.latitude, ref.longitude, value.rotation_rad].every((item) => finite10(item) !== null);
+        if (!complete) return false;
+        return value.status === "validated" || value?.validation?.valid === true;
+      };
+    
+      const radii10 = (latitudeRad) => {
+        const sinLat = Math.sin(latitudeRad);
+        const denominator = 1 - WGS84_E2 * sinLat * sinLat;
+        const root = Math.sqrt(denominator);
+        return {
+          meridional: WGS84_A_M * (1 - WGS84_E2) / (denominator * root),
+          primeVertical: WGS84_A_M / root,
+        };
+      };
+      const shortestLon10 = (lon0, lon) => {
+        const deltaDeg = ((lon - lon0 + 180) % 360 + 360) % 360 - 180;
+        return deltaDeg * Math.PI / 180;
+      };
+      const offsetMeters10 = (lat0, lon0, lat, lon) => {
+        const lat0Rad = lat0 * Math.PI / 180;
+        const latRad = lat * Math.PI / 180;
+        const meanLat = (lat0Rad + latRad) / 2;
+        const radii = radii10(meanLat);
+        return {
+          east: shortestLon10(lon0, lon) * radii.primeVertical * Math.cos(meanLat),
+          north: (latRad - lat0Rad) * radii.meridional,
+        };
+      };
+      const offsetWgs8410 = (lat0, lon0, east, north) => {
+        const lat0Rad = lat0 * Math.PI / 180;
+        let targetLat = lat0Rad;
+        for (let index = 0; index < 3; index += 1) {
+          const meanLat = (lat0Rad + targetLat) / 2;
+          targetLat = lat0Rad + north / radii10(meanLat).meridional;
+        }
+        const meanLat = (lat0Rad + targetLat) / 2;
+        const eastRadius = radii10(meanLat).primeVertical * Math.cos(meanLat);
+        const targetLon = lon0 * Math.PI / 180 + east / eastRadius;
+        let lon = targetLon * 180 / Math.PI;
+        lon = ((lon + 180) % 360 + 360) % 360 - 180;
+        return { lat: targetLat * 180 / Math.PI, lon };
+      };
+    
+      const localToWgs8410 = (geo, x, y) => {
+        if (!validGeoreference10(geo)) return null;
+        const ref = geo.reference || {};
+        const rotation = finite10(geo.rotation_rad, 0);
+        const dx = Number(x) - Number(ref.local_x);
+        const dy = Number(y) - Number(ref.local_y);
+        const east = dx * Math.cos(rotation) + dy * Math.sin(rotation);
+        const north = -dx * Math.sin(rotation) + dy * Math.cos(rotation);
+        return offsetWgs8410(Number(ref.latitude), Number(ref.longitude), east, north);
+      };
+      const wgs84ToLocal10 = (geo, lat, lon) => {
+        if (!validGeoreference10(geo)) return null;
+        const ref = geo.reference || {};
+        const rotation = finite10(geo.rotation_rad, 0);
+        const offset = offsetMeters10(Number(ref.latitude), Number(ref.longitude), lat, lon);
+        const dx = offset.east * Math.cos(rotation) - offset.north * Math.sin(rotation);
+        const dy = offset.east * Math.sin(rotation) + offset.north * Math.cos(rotation);
+        return { x: Number(ref.local_x) + dx, y: Number(ref.local_y) + dy };
+      };
+    
+      const viewBounds10 = (card) => {
+        const view = card?._view || {};
+        const scale = Math.max(0.05, finite10(view.scale, 1));
+        const span = 1000 / scale;
+        const cx = finite10(view.cx, 500);
+        const cy = finite10(view.cy, 500);
+        return {
+          scale,
+          left: cx - span / 2,
+          right: cx + span / 2,
+          top: cy - span / 2,
+          bottom: cy + span / 2,
+        };
+      };
+      const geoBounds10 = (points) => {
+        if (!Array.isArray(points) || !points.length) return null;
+        let north = Math.max(...points.map((point) => Number(point.lat)));
+        let south = Math.min(...points.map((point) => Number(point.lat)));
+        let east = Math.max(...points.map((point) => Number(point.lon)));
+        let west = Math.min(...points.map((point) => Number(point.lon)));
+        if (![north, south, east, west].every(Number.isFinite)) return null;
+        const latPad = Math.max((north - south) * DETAIL_BOUNDS_PADDING, 0.000005);
+        const lonPad = Math.max((east - west) * DETAIL_BOUNDS_PADDING, 0.000005);
+        north += latPad;
+        south -= latPad;
+        east += lonPad;
+        west -= lonPad;
+        return { north, south, east, west };
+      };
+      const requestSize10 = (card) => {
+        const rect = card?._svgEl?.getBoundingClientRect?.() || card?.getBoundingClientRect?.() || {};
+        const dpr = clamp10(finite10(globalThis.devicePixelRatio, 1), 1, 2.5);
+        const width = clamp10(Math.round(Math.max(512, finite10(rect.width, 800) * dpr)), 512, MAX_WMS_PIXELS);
+        const height = clamp10(Math.round(Math.max(512, finite10(rect.height, 800) * dpr)), 512, MAX_WMS_PIXELS);
+        return { width, height };
+      };
+      const wmsUrl10 = (bounds, width, height, provider = "estonia_orthophoto") => {
+        const params = new URLSearchParams();
+        params.set("SERVICE", "WMS");
+        params.set("REQUEST", "GetMap");
+        params.set("VERSION", "1.1.1");
+        params.set("LAYERS", provider === "estonia_hybrid" ? "EESTIFOTO,HYBRID" : "EESTIFOTO");
+        params.set("STYLES", "");
+        params.set("FORMAT", "image/png");
+        params.set("TRANSPARENT", "FALSE");
+        params.set("SRS", "EPSG:4326");
+        params.set("BBOX", [bounds.west, bounds.south, bounds.east, bounds.north].map((value) => Number(value).toFixed(8)).join(","));
+        params.set("WIDTH", String(width));
+        params.set("HEIGHT", String(height));
+        params.set("ASUTUS", "NAVIMOWER");
+        params.set("KESKKOND", "LIVE");
+        params.set("IS", "NAVIMOWER_MAP_CARD");
+        return "https://kaart.maaamet.ee/wms/alus-geo?" + params.toString();
+      };
+    
+      const clearDetail10 = (layer) => {
+        layer?.querySelectorAll?.(".nm-estonia-wms-detail,.nm-estonia-wms-detail-pending")?.forEach?.((node) => node.remove());
+      };
+      const installDetail10 = (layer, bounds, screenPoint, card) => {
+        if (!layer || !bounds || typeof screenPoint !== "function") return false;
+        const size = requestSize10(card);
+        const nw = screenPoint(bounds.north, bounds.west);
+        const ne = screenPoint(bounds.north, bounds.east);
+        const sw = screenPoint(bounds.south, bounds.west);
+        if (![nw, ne, sw].every((point) => point && finite10(point.x) !== null && finite10(point.y) !== null)) return false;
+        const a = (ne.x - nw.x) / size.width;
+        const b = (ne.y - nw.y) / size.width;
+        const c = (sw.x - nw.x) / size.height;
+        const d = (sw.y - nw.y) / size.height;
+        const url = wmsUrl10(bounds, size.width, size.height, provider10(card));
+        const key = url + "|" + opacity10(card).toFixed(2);
+        const current = layer.querySelector?.(".nm-estonia-wms-detail");
+        const pending = layer.querySelector?.(".nm-estonia-wms-detail-pending");
+        if (current?.dataset?.wmsKey === key || pending?.dataset?.wmsKey === key) return true;
+        pending?.remove?.();
+    
+        const group = document.createElementNS(SVG_NS, "g");
+        group.setAttribute("class", "nm-estonia-wms-detail-pending");
+        group.setAttribute("pointer-events", "none");
+        group.dataset.wmsKey = key;
+        const image = document.createElementNS(SVG_NS, "image");
+        image.setAttribute("href", url);
+        image.setAttribute("x", "0");
+        image.setAttribute("y", "0");
+        image.setAttribute("width", String(size.width));
+        image.setAttribute("height", String(size.height));
+        image.setAttribute("preserveAspectRatio", "none");
+        image.setAttribute("opacity", opacity10(card).toFixed(2));
+        image.setAttribute("transform", "matrix(" + [a, b, c, d, nw.x, nw.y].map((value) => Number(value).toFixed(10)).join(" ") + ")");
+        group.appendChild(image);
+    
+        const base = layer.querySelector?.(".nm-osm-underlay");
+        const anchor = current || base;
+        if (anchor?.parentNode === layer) anchor.after(group);
+        else if (layer.firstElementChild?.nextSibling) layer.insertBefore(group, layer.firstElementChild.nextSibling);
+        else layer.appendChild(group);
+    
+        image.addEventListener("load", () => {
+          if (!group.isConnected) return;
+          layer.querySelectorAll?.(".nm-estonia-wms-detail")?.forEach?.((node) => node.remove());
+          group.setAttribute("class", "nm-estonia-wms-detail");
+        }, { once: true });
+        image.addEventListener("error", () => group.remove(), { once: true });
+        return true;
+      };
+    
+      const singleVisibleBounds10 = (card, geo) => {
+        const layout = card?._layout;
+        if (!layout?.sx || !layout?.sy) return null;
+        const sx0 = finite10(layout.sx(0));
+        const sx1 = finite10(layout.sx(1));
+        const sy0 = finite10(layout.sy(0));
+        const sy1 = finite10(layout.sy(1));
+        if ([sx0, sx1, sy0, sy1].some((value) => value === null) || Math.abs(sx1 - sx0) < 1e-9 || Math.abs(sy1 - sy0) < 1e-9) return null;
+        const localAt = (screenX, screenY) => ({
+          x: (screenX - sx0) / (sx1 - sx0),
+          y: (screenY - sy0) / (sy1 - sy0),
+        });
+        const view = viewBounds10(card);
+        const localCorners = [
+          localAt(view.left, view.top),
+          localAt(view.right, view.top),
+          localAt(view.left, view.bottom),
+          localAt(view.right, view.bottom),
+        ];
+        return geoBounds10(localCorners.map((point) => localToWgs8410(geo, point.x, point.y)).filter(Boolean));
+      };
+      const syncSingle10 = (card) => {
+        const layer = card?._baseEl;
+        if (!layer) return false;
+        const view = viewBounds10(card);
+        if (!["estonia_orthophoto", "estonia_hybrid"].includes(provider10(card)) || view.scale < DETAIL_SCALE_THRESHOLD) {
+          clearDetail10(layer);
+          return false;
+        }
+        const geo = georeference10(card);
+        if (!validGeoreference10(geo) || !card?._layout?.sx || !card?._layout?.sy) {
+          clearDetail10(layer);
+          return false;
+        }
+        const bounds = singleVisibleBounds10(card, geo);
+        if (!bounds) return false;
+        return installDetail10(layer, bounds, (lat, lon) => {
+          const local = wgs84ToLocal10(geo, lat, lon);
+          return local ? { x: card._layout.sx(local.x), y: card._layout.sy(local.y) } : null;
+        }, card);
+      };
+    
+      const siteLayout10 = (site) => {
+        const box = site?.combined_svg_bounds;
+        if (!box || [box.min_x, box.min_y, box.max_x, box.max_y].some((value) => finite10(value) === null)) return null;
+        const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
+        const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
+        const padding = 55;
+        const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
+        return {
+          scale,
+          offsetX: (1000 - width * scale) / 2 - Number(box.min_x) * scale,
+          offsetY: (1000 - height * scale) / 2 - Number(box.min_y) * scale,
+        };
+      };
+      const multiVisibleBounds10 = (card, lat0, lon0, layout) => {
+        const view = viewBounds10(card);
+        const siteAt = (screenX, screenY) => ({
+          east: (screenX - layout.offsetX) / layout.scale,
+          north: (layout.offsetY - screenY) / layout.scale,
+        });
+        const corners = [
+          siteAt(view.left, view.top),
+          siteAt(view.right, view.top),
+          siteAt(view.left, view.bottom),
+          siteAt(view.right, view.bottom),
+        ];
+        return geoBounds10(corners.map((point) => offsetWgs8410(lat0, lon0, point.east, point.north)));
+      };
+      const syncMulti10 = (card) => {
+        const layer = card?._multi036Layer;
+        if (!layer || layer.style.display === "none") return false;
+        const view = viewBounds10(card);
+        if (!["estonia_orthophoto", "estonia_hybrid"].includes(provider10(card)) || view.scale < DETAIL_SCALE_THRESHOLD) {
+          clearDetail10(layer);
+          return false;
+        }
+        const site = card?._multi036Site;
+        const origin = site?.origin || {};
+        const lat0 = finite10(origin.latitude);
+        const lon0 = finite10(origin.longitude);
+        const layout = siteLayout10(site);
+        if (lat0 === null || lon0 === null || !layout || site?.status !== "validated") {
+          clearDetail10(layer);
+          return false;
+        }
+        const bounds = multiVisibleBounds10(card, lat0, lon0, layout);
+        if (!bounds) return false;
+        return installDetail10(layer, bounds, (lat, lon) => {
+          const offset = offsetMeters10(lat0, lon0, lat, lon);
+          return { x: layout.offsetX + offset.east * layout.scale, y: layout.offsetY - offset.north * layout.scale };
+        }, card);
+      };
+    
+      const syncDetail10 = (card) => {
+        if (!card || typeof document === "undefined") return;
+        const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
+        if (multiVisible) {
+          clearDetail10(card?._baseEl);
+          syncMulti10(card);
+        } else {
+          clearDetail10(card?._multi036Layer);
+          syncSingle10(card);
+        }
+      };
+      const scheduleDetail10 = (card, delay = DETAIL_DEBOUNCE_MS) => {
+        if (!card) return;
+        if (card._estoniaWmsDetailTimer036) clearTimeout(card._estoniaWmsDetailTimer036);
+        const view = viewBounds10(card);
+        if (!["estonia_orthophoto", "estonia_hybrid"].includes(provider10(card)) || view.scale < DETAIL_SCALE_THRESHOLD) {
+          card._estoniaWmsDetailTimer036 = null;
+          syncDetail10(card);
+          return;
+        }
+        card._estoniaWmsDetailTimer036 = setTimeout(() => {
+          card._estoniaWmsDetailTimer036 = null;
+          syncDetail10(card);
+        }, Math.max(0, delay));
+      };
+    
+      const previousSetConfig10 = proto.setConfig;
+      if (typeof previousSetConfig10 === "function") {
+        proto.setConfig = function beta10EstoniaDetailSetConfig(config) {
+          const result = previousSetConfig10.call(this, config);
+          scheduleDetail10(this, 0);
+          return result;
+        };
+      }
+    
+      for (const method of ["_renderStatic", "_applyStaticLayers", "_ensureDom", "_applyViewBox"]) {
+        const previous = proto[method];
+        if (typeof previous !== "function") continue;
+        proto[method] = function beta10EstoniaDetailWrapped(...args) {
+          const result = previous.apply(this, args);
+          scheduleDetail10(this, method === "_applyViewBox" ? DETAIL_DEBOUNCE_MS : 0);
+          return result;
+        };
+      }
   }
 
-  for (const method of ["_renderStatic", "_applyStaticLayers", "_ensureDom", "_applyViewBox"]) {
-    const previous = proto[method];
-    if (typeof previous !== "function") continue;
-    proto[method] = function beta10EstoniaDetailWrapped(...args) {
-      const result = previous.apply(this, args);
-      scheduleDetail10(this, method === "_applyViewBox" ? DETAIL_DEBOUNCE_MS : 0);
-      return result;
-    };
-  }
-
-})();
 
 
 // 0.3.6-beta11: unified map underlays, Estonia hybrid and Google Satellite.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const DEFAULT_OPACITY11 = 0.55;
-  const DEFAULT_GOOGLE_ZOOM11 = 19;
-  const MIN_GOOGLE_ZOOM11 = 15;
-  const GOOGLE_FETCH_CONCURRENCY11 = 6;
-  const GOOGLE_RETRY_MS11 = 15000;
-
-  const finite11 = (value, fallback = null) => {
-    if (value === null || value === undefined || value === "") return fallback;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-  const clamp11 = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, finite11(value, minimum)));
-  const apiPath11 = (path) => String(path || "").replace(/^\/api\//, "").replace(/^\/+/, "");
-  const provider11 = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
-  const frontend11 = (card) => card?._multi036Site?.anchor_frontend || card?._mapPayload?.frontend || {};
-  const googleMetadata11 = (card) => frontend11(card)?.map_underlays?.google_satellite || {};
-  const googleViewportPath11 = (card) => String(googleMetadata11(card)?.viewport_api_path || "");
-
-  const activeUnderlayLayer11 = (card) => {
-    const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
-    return multiVisible ? card?._osm036MultiLayer : card?._baseEl;
-  };
-
-  const tileBounds11 = (x, y, zoom) => {
-    const n = 2 ** zoom;
-    const lonLeft = x / n * 360 - 180;
-    const lonRight = (x + 1) / n * 360 - 180;
-    const latAt = (tileY) => Math.atan(Math.sinh(Math.PI * (1 - 2 * tileY / n))) * 180 / Math.PI;
-    return { west: lonLeft, east: lonRight, north: latAt(y), south: latAt(y + 1) };
-  };
-
-  const cleanupGoogleObjectUrls11 = (card) => {
-    const urls = card?._googleTileObjectUrls11;
-    if (!(urls instanceof Map)) return;
-    for (const [image, url] of urls.entries()) {
-      if (image?.isConnected) continue;
-      try { URL.revokeObjectURL(url); } catch (_error) { /* no-op */ }
-      urls.delete(image);
-    }
-  };
-
-  const rawGet11 = async (card, path) => {
-    const hass = card?._hass;
-    if (!hass || !path) throw new Error("Google Satellite backend is unavailable");
-    const relative = apiPath11(path);
-    if (typeof hass.callApiRaw === "function") return await hass.callApiRaw("GET", relative);
-    if (typeof hass.fetchWithAuth === "function") return await hass.fetchWithAuth("/api/" + relative);
-    throw new Error("Authenticated binary requests are unavailable");
-  };
-
-  const hydrateGoogleTiles11 = async (card) => {
-    cleanupGoogleObjectUrls11(card);
-    if (provider11(card) !== "google_satellite") return;
-    const metadata = googleMetadata11(card);
-    if (metadata?.available !== true) return;
-    const layer = activeUnderlayLayer11(card);
-    if (!layer) return;
-    const images = Array.from(layer.querySelectorAll?.('image[data-nm-google-path]') || []);
-    if (!images.length) return;
-    if (!(card._googleTileObjectUrls11 instanceof Map)) card._googleTileObjectUrls11 = new Map();
-    const now = Date.now();
-    const pending = images.filter((image) => {
-      if (image.getAttribute("data-nm-google-loaded") === "1") return false;
-      if (image.getAttribute("data-nm-google-loading") === "1") return false;
-      const errorAt = finite11(image.getAttribute("data-nm-google-error-at"), 0);
-      return !errorAt || now - errorAt >= GOOGLE_RETRY_MS11;
-    });
-    let cursor = 0;
-    const worker = async () => {
-      while (cursor < pending.length) {
-        const index = cursor;
-        cursor += 1;
-        const image = pending[index];
-        const path = image?.getAttribute?.("data-nm-google-path") || "";
-        if (!image || !path) continue;
-        image.setAttribute("data-nm-google-loading", "1");
-        try {
-          const response = await rawGet11(card, path);
-          if (!response?.ok) throw new Error("Google Satellite tile request failed");
-          const blob = await response.blob();
-          const objectUrl = URL.createObjectURL(blob);
-          if (!image.isConnected || provider11(card) !== "google_satellite") {
-            URL.revokeObjectURL(objectUrl);
-            continue;
+  nmRuntimePatch25: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const DEFAULT_OPACITY11 = 0.55;
+      const DEFAULT_GOOGLE_ZOOM11 = 19;
+      const MIN_GOOGLE_ZOOM11 = 15;
+      const GOOGLE_FETCH_CONCURRENCY11 = 6;
+      const GOOGLE_RETRY_MS11 = 15000;
+    
+      const finite11 = (value, fallback = null) => {
+        if (value === null || value === undefined || value === "") return fallback;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+      const clamp11 = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, finite11(value, minimum)));
+      const apiPath11 = (path) => String(path || "").replace(/^\/api\//, "").replace(/^\/+/, "");
+      const provider11 = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
+      const frontend11 = (card) => card?._multi036Site?.anchor_frontend || card?._mapPayload?.frontend || {};
+      const googleMetadata11 = (card) => frontend11(card)?.map_underlays?.google_satellite || {};
+      const googleViewportPath11 = (card) => String(googleMetadata11(card)?.viewport_api_path || "");
+    
+      const activeUnderlayLayer11 = (card) => {
+        const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
+        return multiVisible ? card?._osm036MultiLayer : card?._baseEl;
+      };
+    
+      const tileBounds11 = (x, y, zoom) => {
+        const n = 2 ** zoom;
+        const lonLeft = x / n * 360 - 180;
+        const lonRight = (x + 1) / n * 360 - 180;
+        const latAt = (tileY) => Math.atan(Math.sinh(Math.PI * (1 - 2 * tileY / n))) * 180 / Math.PI;
+        return { west: lonLeft, east: lonRight, north: latAt(y), south: latAt(y + 1) };
+      };
+    
+      const cleanupGoogleObjectUrls11 = (card) => {
+        const urls = card?._googleTileObjectUrls11;
+        if (!(urls instanceof Map)) return;
+        for (const [image, url] of urls.entries()) {
+          if (image?.isConnected) continue;
+          try { URL.revokeObjectURL(url); } catch (_error) { /* no-op */ }
+          urls.delete(image);
+        }
+      };
+    
+      const rawGet11 = async (card, path) => {
+        const hass = card?._hass;
+        if (!hass || !path) throw new Error("Google Satellite backend is unavailable");
+        const relative = apiPath11(path);
+        if (typeof hass.callApiRaw === "function") return await hass.callApiRaw("GET", relative);
+        if (typeof hass.fetchWithAuth === "function") return await hass.fetchWithAuth("/api/" + relative);
+        throw new Error("Authenticated binary requests are unavailable");
+      };
+    
+      const hydrateGoogleTiles11 = async (card) => {
+        cleanupGoogleObjectUrls11(card);
+        if (provider11(card) !== "google_satellite") return;
+        const metadata = googleMetadata11(card);
+        if (metadata?.available !== true) return;
+        const layer = activeUnderlayLayer11(card);
+        if (!layer) return;
+        const images = Array.from(layer.querySelectorAll?.('image[data-nm-google-path]') || []);
+        if (!images.length) return;
+        if (!(card._googleTileObjectUrls11 instanceof Map)) card._googleTileObjectUrls11 = new Map();
+        const now = Date.now();
+        const pending = images.filter((image) => {
+          if (image.getAttribute("data-nm-google-loaded") === "1") return false;
+          if (image.getAttribute("data-nm-google-loading") === "1") return false;
+          const errorAt = finite11(image.getAttribute("data-nm-google-error-at"), 0);
+          return !errorAt || now - errorAt >= GOOGLE_RETRY_MS11;
+        });
+        let cursor = 0;
+        const worker = async () => {
+          while (cursor < pending.length) {
+            const index = cursor;
+            cursor += 1;
+            const image = pending[index];
+            const path = image?.getAttribute?.("data-nm-google-path") || "";
+            if (!image || !path) continue;
+            image.setAttribute("data-nm-google-loading", "1");
+            try {
+              const response = await rawGet11(card, path);
+              if (!response?.ok) throw new Error("Google Satellite tile request failed");
+              const blob = await response.blob();
+              const objectUrl = URL.createObjectURL(blob);
+              if (!image.isConnected || provider11(card) !== "google_satellite") {
+                URL.revokeObjectURL(objectUrl);
+                continue;
+              }
+              const previous = card._googleTileObjectUrls11.get(image);
+              if (previous && previous !== objectUrl) URL.revokeObjectURL(previous);
+              card._googleTileObjectUrls11.set(image, objectUrl);
+              image.setAttribute("href", objectUrl);
+              image.setAttribute("data-nm-google-loaded", "1");
+              image.removeAttribute("data-nm-google-error-at");
+            } catch (_error) {
+              image.setAttribute("data-nm-google-error-at", String(Date.now()));
+            } finally {
+              image.removeAttribute("data-nm-google-loading");
+            }
           }
-          const previous = card._googleTileObjectUrls11.get(image);
-          if (previous && previous !== objectUrl) URL.revokeObjectURL(previous);
-          card._googleTileObjectUrls11.set(image, objectUrl);
-          image.setAttribute("href", objectUrl);
-          image.setAttribute("data-nm-google-loaded", "1");
-          image.removeAttribute("data-nm-google-error-at");
-        } catch (_error) {
-          image.setAttribute("data-nm-google-error-at", String(Date.now()));
-        } finally {
-          image.removeAttribute("data-nm-google-loading");
-        }
-      }
-    };
-    const workers = Array.from({ length: Math.min(GOOGLE_FETCH_CONCURRENCY11, pending.length) }, () => worker());
-    await Promise.all(workers);
-  };
-
-  const viewportBounds11 = (images) => {
-    const tiles = [];
-    for (const image of images) {
-      const zoom = finite11(image.getAttribute("data-nm-google-z"));
-      const x = finite11(image.getAttribute("data-nm-google-x"));
-      const y = finite11(image.getAttribute("data-nm-google-y"));
-      if ([zoom, x, y].some((value) => value === null)) continue;
-      tiles.push({ zoom, ...tileBounds11(x, y, zoom) });
-    }
-    if (!tiles.length) return null;
-    const zoom = Math.round(tiles[0].zoom);
-    return {
-      zoom,
-      north: Math.max(...tiles.map((tile) => tile.north)),
-      south: Math.min(...tiles.map((tile) => tile.south)),
-      east: Math.max(...tiles.map((tile) => tile.east)),
-      west: Math.min(...tiles.map((tile) => tile.west)),
-    };
-  };
-
-  const syncGoogleViewport11 = async (card) => {
-    if (provider11(card) !== "google_satellite") return;
-    const metadata = googleMetadata11(card);
-    const viewportPath = googleViewportPath11(card);
-    const layer = activeUnderlayLayer11(card);
-    if (metadata?.available !== true || !viewportPath || !layer || typeof card?._hass?.callApi !== "function") return;
-    const images = Array.from(layer.querySelectorAll?.('image[data-nm-google-path]') || []);
-    const bounds = viewportBounds11(images);
-    if (!bounds) return;
-    const key = [viewportPath, bounds.zoom, bounds.north.toFixed(6), bounds.south.toFixed(6), bounds.east.toFixed(6), bounds.west.toFixed(6)].join("|");
-    if (card._googleViewportKey11 === key || card._googleViewportPendingKey11 === key) return;
-    card._googleViewportPendingKey11 = key;
-    const params = new URLSearchParams({
-      zoom: String(bounds.zoom),
-      north: bounds.north.toFixed(8),
-      south: bounds.south.toFixed(8),
-      east: bounds.east.toFixed(8),
-      west: bounds.west.toFixed(8),
-    });
-    try {
-      const payload = await card._hass.callApi("GET", apiPath11(viewportPath + "?" + params.toString()));
-      card._googleViewportKey11 = key;
-      const attribution = card.querySelector?.(".nm-osm-attribution");
-      if (attribution && attribution.dataset.provider === "google_satellite") {
-        const copyright = String(payload?.copyright || "").trim();
-        attribution.textContent = copyright ? "Google Maps · " + copyright : "Google Maps";
-      }
-      const maxZoomRects = Array.isArray(payload?.maxZoomRects) ? payload.maxZoomRects : [];
-      const reportedZooms = maxZoomRects
-        .map((item) => finite11(item?.maxZoom ?? item?.max_zoom))
-        .filter((value) => value !== null);
-      if (reportedZooms.length) {
-        // maxZoomRects are overlapping availability regions, not independent
-        // viewport-wide caps. A low-resolution fallback rectangle may overlap a
-        // high-resolution imagery rectangle, so taking the minimum collapses a
-        // sharp z19 view to a much coarser zoom as soon as attribution arrives.
-        const centerLat = (bounds.north + bounds.south) / 2;
-        const centerLon = (bounds.east + bounds.west) / 2;
-        const centerZooms = maxZoomRects
-          .filter((item) => {
-            const north = finite11(item?.north);
-            const south = finite11(item?.south);
-            const east = finite11(item?.east);
-            const west = finite11(item?.west);
-            if ([north, south, east, west].some((value) => value === null)) return false;
-            const latitudeInside = centerLat <= north && centerLat >= south;
-            const longitudeInside = west <= east
-              ? centerLon >= west && centerLon <= east
-              : centerLon >= west || centerLon <= east;
-            return latitudeInside && longitudeInside;
-          })
-          .map((item) => finite11(item?.maxZoom ?? item?.max_zoom))
-          .filter((value) => value !== null);
-        const candidates = centerZooms.length ? centerZooms : reportedZooms;
-        const nextZoom = clamp11(Math.floor(Math.max(...candidates)), MIN_GOOGLE_ZOOM11, DEFAULT_GOOGLE_ZOOM11);
-        const currentZoom = clamp11(card._googleSatelliteMaxZoom11 ?? DEFAULT_GOOGLE_ZOOM11, MIN_GOOGLE_ZOOM11, DEFAULT_GOOGLE_ZOOM11);
-        card._googleSatelliteViewportZoomRange11 = {
-          min: Math.min(...reportedZooms),
-          max: Math.max(...reportedZooms),
-          selected: nextZoom,
         };
-        if (nextZoom !== currentZoom) {
-          card._googleSatelliteMaxZoom11 = nextZoom;
-          queueMicrotask(() => card._syncOsmUnderlay036?.());
+        const workers = Array.from({ length: Math.min(GOOGLE_FETCH_CONCURRENCY11, pending.length) }, () => worker());
+        await Promise.all(workers);
+      };
+    
+      const viewportBounds11 = (images) => {
+        const tiles = [];
+        for (const image of images) {
+          const zoom = finite11(image.getAttribute("data-nm-google-z"));
+          const x = finite11(image.getAttribute("data-nm-google-x"));
+          const y = finite11(image.getAttribute("data-nm-google-y"));
+          if ([zoom, x, y].some((value) => value === null)) continue;
+          tiles.push({ zoom, ...tileBounds11(x, y, zoom) });
         }
+        if (!tiles.length) return null;
+        const zoom = Math.round(tiles[0].zoom);
+        return {
+          zoom,
+          north: Math.max(...tiles.map((tile) => tile.north)),
+          south: Math.min(...tiles.map((tile) => tile.south)),
+          east: Math.max(...tiles.map((tile) => tile.east)),
+          west: Math.min(...tiles.map((tile) => tile.west)),
+        };
+      };
+    
+      const syncGoogleViewport11 = async (card) => {
+        if (provider11(card) !== "google_satellite") return;
+        const metadata = googleMetadata11(card);
+        const viewportPath = googleViewportPath11(card);
+        const layer = activeUnderlayLayer11(card);
+        if (metadata?.available !== true || !viewportPath || !layer || typeof card?._hass?.callApi !== "function") return;
+        const images = Array.from(layer.querySelectorAll?.('image[data-nm-google-path]') || []);
+        const bounds = viewportBounds11(images);
+        if (!bounds) return;
+        const key = [viewportPath, bounds.zoom, bounds.north.toFixed(6), bounds.south.toFixed(6), bounds.east.toFixed(6), bounds.west.toFixed(6)].join("|");
+        if (card._googleViewportKey11 === key || card._googleViewportPendingKey11 === key) return;
+        card._googleViewportPendingKey11 = key;
+        const params = new URLSearchParams({
+          zoom: String(bounds.zoom),
+          north: bounds.north.toFixed(8),
+          south: bounds.south.toFixed(8),
+          east: bounds.east.toFixed(8),
+          west: bounds.west.toFixed(8),
+        });
+        try {
+          const payload = await card._hass.callApi("GET", apiPath11(viewportPath + "?" + params.toString()));
+          card._googleViewportKey11 = key;
+          const attribution = card.querySelector?.(".nm-osm-attribution");
+          if (attribution && attribution.dataset.provider === "google_satellite") {
+            const copyright = String(payload?.copyright || "").trim();
+            attribution.textContent = copyright ? "Google Maps · " + copyright : "Google Maps";
+          }
+          const maxZoomRects = Array.isArray(payload?.maxZoomRects) ? payload.maxZoomRects : [];
+          const reportedZooms = maxZoomRects
+            .map((item) => finite11(item?.maxZoom ?? item?.max_zoom))
+            .filter((value) => value !== null);
+          if (reportedZooms.length) {
+            // maxZoomRects are overlapping availability regions, not independent
+            // viewport-wide caps. A low-resolution fallback rectangle may overlap a
+            // high-resolution imagery rectangle, so taking the minimum collapses a
+            // sharp z19 view to a much coarser zoom as soon as attribution arrives.
+            const centerLat = (bounds.north + bounds.south) / 2;
+            const centerLon = (bounds.east + bounds.west) / 2;
+            const centerZooms = maxZoomRects
+              .filter((item) => {
+                const north = finite11(item?.north);
+                const south = finite11(item?.south);
+                const east = finite11(item?.east);
+                const west = finite11(item?.west);
+                if ([north, south, east, west].some((value) => value === null)) return false;
+                const latitudeInside = centerLat <= north && centerLat >= south;
+                const longitudeInside = west <= east
+                  ? centerLon >= west && centerLon <= east
+                  : centerLon >= west || centerLon <= east;
+                return latitudeInside && longitudeInside;
+              })
+              .map((item) => finite11(item?.maxZoom ?? item?.max_zoom))
+              .filter((value) => value !== null);
+            const candidates = centerZooms.length ? centerZooms : reportedZooms;
+            const nextZoom = clamp11(Math.floor(Math.max(...candidates)), MIN_GOOGLE_ZOOM11, DEFAULT_GOOGLE_ZOOM11);
+            const currentZoom = clamp11(card._googleSatelliteMaxZoom11 ?? DEFAULT_GOOGLE_ZOOM11, MIN_GOOGLE_ZOOM11, DEFAULT_GOOGLE_ZOOM11);
+            card._googleSatelliteViewportZoomRange11 = {
+              min: Math.min(...reportedZooms),
+              max: Math.max(...reportedZooms),
+              selected: nextZoom,
+            };
+            if (nextZoom !== currentZoom) {
+              card._googleSatelliteMaxZoom11 = nextZoom;
+              queueMicrotask(() => card._syncOsmUnderlay036?.());
+            }
+          }
+        } catch (_error) {
+          card._googleViewportKey11 = null;
+        } finally {
+          card._googleViewportPendingKey11 = null;
+        }
+      };
+    
+      const refreshGoogle11 = async (card) => {
+        cleanupGoogleObjectUrls11(card);
+        if (provider11(card) !== "google_satellite") {
+          card._googleViewportKey11 = null;
+          card._googleViewportPendingKey11 = null;
+          return;
+        }
+        await Promise.all([
+          hydrateGoogleTiles11(card),
+          syncGoogleViewport11(card),
+        ]);
+      };
+    
+      const scheduleGoogle11 = (card, delay = 0) => {
+        if (!card) return;
+        if (card._googleRefreshTimer11) return;
+        card._googleRefreshTimer11 = setTimeout(() => {
+          card._googleRefreshTimer11 = null;
+          refreshGoogle11(card).catch(() => {});
+        }, Math.max(0, delay));
+      };
+    
+      const previousSync = proto._syncOsmUnderlay036;
+      if (typeof previousSync === "function") {
+        proto._syncOsmUnderlay036 = function beta11MapUnderlaySync(...args) {
+          const result = previousSync.apply(this, args);
+          scheduleGoogle11(this, 0);
+          return result;
+        };
       }
-    } catch (_error) {
-      card._googleViewportKey11 = null;
-    } finally {
-      card._googleViewportPendingKey11 = null;
-    }
-  };
-
-  const refreshGoogle11 = async (card) => {
-    cleanupGoogleObjectUrls11(card);
-    if (provider11(card) !== "google_satellite") {
-      card._googleViewportKey11 = null;
-      card._googleViewportPendingKey11 = null;
-      return;
-    }
-    await Promise.all([
-      hydrateGoogleTiles11(card),
-      syncGoogleViewport11(card),
-    ]);
-  };
-
-  const scheduleGoogle11 = (card, delay = 0) => {
-    if (!card) return;
-    if (card._googleRefreshTimer11) return;
-    card._googleRefreshTimer11 = setTimeout(() => {
-      card._googleRefreshTimer11 = null;
-      refreshGoogle11(card).catch(() => {});
-    }, Math.max(0, delay));
-  };
-
-  const previousSync = proto._syncOsmUnderlay036;
-  if (typeof previousSync === "function") {
-    proto._syncOsmUnderlay036 = function beta11MapUnderlaySync(...args) {
-      const result = previousSync.apply(this, args);
-      scheduleGoogle11(this, 0);
-      return result;
-    };
-  }
-
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta11MapUnderlaySetConfig(config) {
-      const next = { ...(config || {}) };
-      if (next.underlay_opacity === undefined && next.osm_underlay_opacity !== undefined) {
-        next.underlay_opacity = next.osm_underlay_opacity;
+    
+      const previousSetConfig = proto.setConfig;
+      if (typeof previousSetConfig === "function") {
+        proto.setConfig = function beta11MapUnderlaySetConfig(config) {
+          const next = { ...(config || {}) };
+          if (next.underlay_opacity === undefined && next.osm_underlay_opacity !== undefined) {
+            next.underlay_opacity = next.osm_underlay_opacity;
+          }
+          if (next.underlay_opacity === undefined) next.underlay_opacity = DEFAULT_OPACITY11;
+          const result = previousSetConfig.call(this, next);
+          scheduleGoogle11(this, 0);
+          return result;
+        };
       }
-      if (next.underlay_opacity === undefined) next.underlay_opacity = DEFAULT_OPACITY11;
-      const result = previousSetConfig.call(this, next);
-      scheduleGoogle11(this, 0);
-      return result;
-    };
+    
+      for (const method of ["_renderStatic", "_applyStaticLayers", "_ensureDom", "_applyViewBox"]) {
+        const previous = proto[method];
+        if (typeof previous !== "function") continue;
+        proto[method] = function beta11MapUnderlayRefresh(...args) {
+          const result = previous.apply(this, args);
+          scheduleGoogle11(this, method === "_applyViewBox" ? 80 : 0);
+          return result;
+        };
+      }
+    
+      const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
+      if (hassDescriptor?.set) {
+        Object.defineProperty(proto, "hass", {
+          configurable: true,
+          get: hassDescriptor.get,
+          set(value) {
+            hassDescriptor.set.call(this, value);
+            scheduleGoogle11(this, 0);
+          },
+        });
+      }
+    
+      const previousStub = Card.getStubConfig?.bind(Card);
+      Card.getStubConfig = (...args) => {
+        const config = { ...(previousStub?.(...args) || {}) };
+        const legacyOpacity = config.osm_underlay_opacity;
+        delete config.osm_underlay_opacity;
+        if (config.map_underlay === undefined) config.map_underlay = "none";
+        if (config.underlay_opacity === undefined) config.underlay_opacity = legacyOpacity ?? DEFAULT_OPACITY11;
+        return config;
+      };
+    
+      const previousForm = Card.getConfigForm?.bind(Card);
+      Card.getConfigForm = (...args) => {
+        const form = previousForm?.(...args) || { schema: [] };
+        if (!Array.isArray(form.schema)) return form;
+        const fieldNames = new Set(["map_underlay", "osm_underlay_opacity", "underlay_opacity"]);
+        const strip = (items) => (Array.isArray(items) ? items : []).filter((item) => {
+          if (item?.name === "map_underlay_settings" || fieldNames.has(item?.name)) return false;
+          if (Array.isArray(item?.schema)) item.schema = strip(item.schema);
+          return true;
+        });
+        form.schema = strip(form.schema);
+        form.schema.push({
+          type: "expandable",
+          name: "map_underlay_settings",
+          title: "Map underlay",
+          flatten: true,
+          schema: [{
+            type: "grid",
+            name: "map_underlay_grid",
+            flatten: true,
+            column_min_width: "220px",
+            schema: [
+              { name: "map_underlay", selector: { select: { options: [
+                { value: "none", label: "None" },
+                { value: "openstreetmap", label: "OpenStreetMap" },
+                { value: "estonia_orthophoto", label: "Ortofoto" },
+                { value: "estonia_hybrid", label: "Hübriid" },
+                { value: "google_satellite", label: "Google Satellite" },
+              ] } } },
+              { name: "underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
+            ],
+          }],
+        });
+        const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+        form.computeLabel = (schema, data) => schema?.name === "map_underlay"
+          ? "Map underlay"
+          : schema?.name === "underlay_opacity"
+            ? "Underlay opacity"
+            : baseLabel?.(schema, data) || schema?.name || "";
+        return form;
+      };
   }
 
-  for (const method of ["_renderStatic", "_applyStaticLayers", "_ensureDom", "_applyViewBox"]) {
-    const previous = proto[method];
-    if (typeof previous !== "function") continue;
-    proto[method] = function beta11MapUnderlayRefresh(...args) {
-      const result = previous.apply(this, args);
-      scheduleGoogle11(this, method === "_applyViewBox" ? 80 : 0);
-      return result;
-    };
-  }
-
-  const hassDescriptor = Object.getOwnPropertyDescriptor(proto, "hass");
-  if (hassDescriptor?.set) {
-    Object.defineProperty(proto, "hass", {
-      configurable: true,
-      get: hassDescriptor.get,
-      set(value) {
-        hassDescriptor.set.call(this, value);
-        scheduleGoogle11(this, 0);
-      },
-    });
-  }
-
-  const previousStub = Card.getStubConfig?.bind(Card);
-  Card.getStubConfig = (...args) => {
-    const config = { ...(previousStub?.(...args) || {}) };
-    const legacyOpacity = config.osm_underlay_opacity;
-    delete config.osm_underlay_opacity;
-    if (config.map_underlay === undefined) config.map_underlay = "none";
-    if (config.underlay_opacity === undefined) config.underlay_opacity = legacyOpacity ?? DEFAULT_OPACITY11;
-    return config;
-  };
-
-  const previousForm = Card.getConfigForm?.bind(Card);
-  Card.getConfigForm = (...args) => {
-    const form = previousForm?.(...args) || { schema: [] };
-    if (!Array.isArray(form.schema)) return form;
-    const fieldNames = new Set(["map_underlay", "osm_underlay_opacity", "underlay_opacity"]);
-    const strip = (items) => (Array.isArray(items) ? items : []).filter((item) => {
-      if (item?.name === "map_underlay_settings" || fieldNames.has(item?.name)) return false;
-      if (Array.isArray(item?.schema)) item.schema = strip(item.schema);
-      return true;
-    });
-    form.schema = strip(form.schema);
-    form.schema.push({
-      type: "expandable",
-      name: "map_underlay_settings",
-      title: "Map underlay",
-      flatten: true,
-      schema: [{
-        type: "grid",
-        name: "map_underlay_grid",
-        flatten: true,
-        column_min_width: "220px",
-        schema: [
-          { name: "map_underlay", selector: { select: { options: [
-            { value: "none", label: "None" },
-            { value: "openstreetmap", label: "OpenStreetMap" },
-            { value: "estonia_orthophoto", label: "Ortofoto" },
-            { value: "estonia_hybrid", label: "Hübriid" },
-            { value: "google_satellite", label: "Google Satellite" },
-          ] } } },
-          { name: "underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
-        ],
-      }],
-    });
-    const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema, data) => schema?.name === "map_underlay"
-      ? "Map underlay"
-      : schema?.name === "underlay_opacity"
-        ? "Underlay opacity"
-        : baseLabel?.(schema, data) || schema?.name || "";
-    return form;
-  };
-
-})();
 
 
 // 0.3.6-beta12: Google Satellite sharpness and provider-frame normalization.
@@ -12682,384 +12663,382 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 
 // 0.3.6-beta14: manual underlay position and rotation calibration.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const OFFSET_MIN14 = -10;
-  const OFFSET_MAX14 = 10;
-  const ROTATION_MIN14 = -5;
-  const ROTATION_MAX14 = 5;
-  const STEP14 = 0.1;
-
-  const finite14 = (value, fallback = null) => {
-    if (value === null || value === undefined || value === "") return fallback;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-  const clamp14 = (value, minimum, maximum, fallback = 0) =>
-    Math.min(maximum, Math.max(minimum, finite14(value, fallback)));
-  const provider14 = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
-  const adjustment14 = (card) => ({
-    east: clamp14(card?._config?.underlay_east_offset, OFFSET_MIN14, OFFSET_MAX14, 0),
-    north: clamp14(card?._config?.underlay_north_offset, OFFSET_MIN14, OFFSET_MAX14, 0),
-    rotation: clamp14(card?._config?.underlay_rotation, ROTATION_MIN14, ROTATION_MAX14, 0),
-  });
-
-  const activeGeoreference14 = (card) => card?._mapPayload?.georeference || card?._mapPayload?.map?.georeference || null;
-  const validGeoreference14 = (value) => {
-    if (!value || typeof value !== "object") return false;
-    const ref = value.reference || {};
-    return [ref.local_x, ref.local_y, value.rotation_rad].every((item) => finite14(item) !== null);
-  };
-
-  const mapPoints14 = (map) => {
-    const points = [];
-    const add = (value) => {
-      for (const point of Array.isArray(value) ? value : []) {
-        if (Array.isArray(point) && finite14(point[0]) !== null && finite14(point[1]) !== null) {
-          points.push([Number(point[0]), Number(point[1])]);
-        }
-      }
-    };
-    for (const zone of map?.zones || []) add(zone?.polygon);
-    for (const polygon of map?.off_limit_areas || []) add(polygon);
-    for (const polygon of map?.vf_off_areas || []) add(polygon);
-    for (const channel of map?.channels || []) add(channel?.points);
-    const station = map?.station;
-    if (finite14(station?.x) !== null && finite14(station?.y) !== null) {
-      points.push([Number(station.x), Number(station.y)]);
-    }
-    return points;
-  };
-
-  const svgCenter14 = (card) => {
-    const viewBox = card?._svgEl?.viewBox?.baseVal;
-    if (viewBox && finite14(viewBox.width) !== null && finite14(viewBox.height) !== null) {
-      return {
-        x: Number(viewBox.x) + Number(viewBox.width) / 2,
-        y: Number(viewBox.y) + Number(viewBox.height) / 2,
+  nmRuntimePatch26: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const OFFSET_MIN14 = -10;
+      const OFFSET_MAX14 = 10;
+      const ROTATION_MIN14 = -5;
+      const ROTATION_MAX14 = 5;
+      const STEP14 = 0.1;
+    
+      const finite14 = (value, fallback = null) => {
+        if (value === null || value === undefined || value === "") return fallback;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
       };
-    }
-    return { x: 500, y: 500 };
-  };
-
-  const singleCenter14 = (card) => {
-    const layout = card?._layout;
-    if (!layout?.sx || !layout?.sy) return svgCenter14(card);
-    const screen = mapPoints14(card?._mapPayload?.map || {})
-      .map(([x, y]) => ({ x: finite14(layout.sx(x)), y: finite14(layout.sy(y)) }))
-      .filter((point) => point.x !== null && point.y !== null);
-    if (!screen.length) return svgCenter14(card);
-    return {
-      x: (Math.min(...screen.map((point) => point.x)) + Math.max(...screen.map((point) => point.x))) / 2,
-      y: (Math.min(...screen.map((point) => point.y)) + Math.max(...screen.map((point) => point.y))) / 2,
-    };
-  };
-
-  const siteLayout14 = (site) => {
-    const box = site?.combined_svg_bounds;
-    if (!box || [box.min_x, box.min_y, box.max_x, box.max_y].some((value) => finite14(value) === null)) return null;
-    const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
-    const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
-    const padding = 55;
-    const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
-    return {
-      scale,
-      offsetX: (1000 - width * scale) / 2 - Number(box.min_x) * scale,
-      offsetY: (1000 - height * scale) / 2 - Number(box.min_y) * scale,
-      centerX: 500,
-      centerY: 500,
-    };
-  };
-
-  const singleTranslation14 = (card, east, north) => {
-    const layout = card?._layout;
-    const geo = activeGeoreference14(card);
-    if (!layout?.sx || !layout?.sy || !validGeoreference14(geo)) return { x: 0, y: 0 };
-    const ref = geo.reference || {};
-    const rotation = Number(geo.rotation_rad);
-    const dx = east * Math.cos(rotation) - north * Math.sin(rotation);
-    const dy = east * Math.sin(rotation) + north * Math.cos(rotation);
-    const x0 = finite14(layout.sx(Number(ref.local_x)));
-    const y0 = finite14(layout.sy(Number(ref.local_y)));
-    const x1 = finite14(layout.sx(Number(ref.local_x) + dx));
-    const y1 = finite14(layout.sy(Number(ref.local_y) + dy));
-    if ([x0, y0, x1, y1].some((value) => value === null)) return { x: 0, y: 0 };
-    return { x: x1 - x0, y: y1 - y0 };
-  };
-
-  const multiTranslation14 = (card, east, north) => {
-    const layout = siteLayout14(card?._multi036Site);
-    if (!layout) return { x: 0, y: 0 };
-    return { x: east * layout.scale, y: -north * layout.scale };
-  };
-
-  const transformMatrix14 = (center, translation, rotationDeg) => {
-    const radians = rotationDeg * Math.PI / 180;
-    const cos = Math.cos(radians);
-    const sin = Math.sin(radians);
-    const a = cos;
-    const b = sin;
-    const c = -sin;
-    const d = cos;
-    const e = translation.x + center.x - a * center.x - c * center.y;
-    const f = translation.y + center.y - b * center.x - d * center.y;
-    return [a, b, c, d, e, f].map((value) => Number(value).toFixed(10)).join(" ");
-  };
-
-  const adjustmentNodes14 = (layer) => Array.from(layer?.querySelectorAll?.(
-    ".nm-osm-underlay,.nm-estonia-wms-detail,.nm-estonia-wms-detail-pending"
-  ) || []);
-
-  const applyLayer14 = (card, layer, multi = false) => {
-    if (!layer) return;
-    const nodes = adjustmentNodes14(layer);
-    if (!nodes.length) return;
-    const correction = adjustment14(card);
-    if (provider14(card) === "none" || (Math.abs(correction.east) < 1e-9 && Math.abs(correction.north) < 1e-9 && Math.abs(correction.rotation) < 1e-9)) {
-      for (const node of nodes) {
-        node.removeAttribute("transform");
-        delete node.dataset.nmUnderlayCalibration14;
-      }
-      return;
-    }
-    const center = multi ? { x: 500, y: 500 } : singleCenter14(card);
-    const translation = multi
-      ? multiTranslation14(card, correction.east, correction.north)
-      : singleTranslation14(card, correction.east, correction.north);
-    const matrix = transformMatrix14(center, translation, correction.rotation);
-    for (const node of nodes) {
-      node.setAttribute("transform", "matrix(" + matrix + ")");
-      node.dataset.nmUnderlayCalibration14 = JSON.stringify({
-        east_m: correction.east,
-        north_m: correction.north,
-        rotation_deg_clockwise: correction.rotation,
+      const clamp14 = (value, minimum, maximum, fallback = 0) =>
+        Math.min(maximum, Math.max(minimum, finite14(value, fallback)));
+      const provider14 = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
+      const adjustment14 = (card) => ({
+        east: clamp14(card?._config?.underlay_east_offset, OFFSET_MIN14, OFFSET_MAX14, 0),
+        north: clamp14(card?._config?.underlay_north_offset, OFFSET_MIN14, OFFSET_MAX14, 0),
+        rotation: clamp14(card?._config?.underlay_rotation, ROTATION_MIN14, ROTATION_MAX14, 0),
       });
-    }
-  };
-
-  const ensureObserver14 = (card, key, layer, multi) => {
-    if (!layer || typeof MutationObserver === "undefined") return;
-    const current = card?.[key];
-    if (current?.target === layer) return;
-    current?.observer?.disconnect?.();
-    const observer = new MutationObserver(() => scheduleAdjustment14(card, 0));
-    observer.observe(layer, { childList: true, subtree: true });
-    card[key] = { observer, target: layer, multi };
-  };
-
-  const applyAdjustment14 = (card) => {
-    if (!card || typeof document === "undefined") return;
-    applyLayer14(card, card?._baseEl, false);
-    applyLayer14(card, card?._osm036MultiLayer, true);
-    applyLayer14(card, card?._multi036Layer, true);
-    ensureObserver14(card, "_underlayCalibrationBaseObserver14", card?._baseEl, false);
-    ensureObserver14(card, "_underlayCalibrationMultiBaseObserver14", card?._osm036MultiLayer, true);
-    ensureObserver14(card, "_underlayCalibrationMultiDetailObserver14", card?._multi036Layer, true);
-  };
-
-  const scheduleAdjustment14 = (card, delay = 0) => {
-    if (!card) return;
-    if (card._underlayCalibrationTimer14) clearTimeout(card._underlayCalibrationTimer14);
-    card._underlayCalibrationTimer14 = setTimeout(() => {
-      card._underlayCalibrationTimer14 = null;
-      applyAdjustment14(card);
-    }, Math.max(0, delay));
-  };
-
-  const previousSync = proto._syncOsmUnderlay036;
-  if (typeof previousSync === "function") {
-    proto._syncOsmUnderlay036 = function beta14UnderlayCalibrationSync(...args) {
-      const result = previousSync.apply(this, args);
-      scheduleAdjustment14(this, 0);
-      return result;
-    };
-  }
-
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta14UnderlayCalibrationSetConfig(config) {
-      const next = { ...(config || {}) };
-      next.underlay_east_offset = clamp14(next.underlay_east_offset, OFFSET_MIN14, OFFSET_MAX14, 0);
-      next.underlay_north_offset = clamp14(next.underlay_north_offset, OFFSET_MIN14, OFFSET_MAX14, 0);
-      next.underlay_rotation = clamp14(next.underlay_rotation, ROTATION_MIN14, ROTATION_MAX14, 0);
-      const result = previousSetConfig.call(this, next);
-      scheduleAdjustment14(this, 0);
-      return result;
-    };
-  }
-
-  for (const method of ["_renderStatic", "_applyStaticLayers", "_renderShell", "_ensureDom", "_applyViewBox"]) {
-    const previous = proto[method];
-    if (typeof previous !== "function") continue;
-    proto[method] = function beta14UnderlayCalibrationRefresh(...args) {
-      const result = previous.apply(this, args);
-      scheduleAdjustment14(this, method === "_applyViewBox" ? 80 : 0);
-      return result;
-    };
-  }
-
-  const previousStub = Card.getStubConfig?.bind(Card);
-  Card.getStubConfig = (...args) => ({
-    ...(previousStub?.(...args) || {}),
-    underlay_east_offset: 0,
-    underlay_north_offset: 0,
-    underlay_rotation: 0,
-  });
-
-  const previousForm = Card.getConfigForm?.bind(Card);
-  Card.getConfigForm = (...args) => {
-    const form = previousForm?.(...args) || { schema: [] };
-    if (!Array.isArray(form.schema)) return form;
-    const adjustmentNames = new Set(["underlay_east_offset", "underlay_north_offset", "underlay_rotation"]);
-    let underlayGrid = null;
-    const walk = (items) => {
-      for (const item of Array.isArray(items) ? items : []) {
-        if (Array.isArray(item?.schema)) {
-          item.schema = item.schema.filter((child) => !adjustmentNames.has(child?.name));
-          if (item?.name === "map_underlay_grid") underlayGrid = item;
-          walk(item.schema);
+    
+      const activeGeoreference14 = (card) => card?._mapPayload?.georeference || card?._mapPayload?.map?.georeference || null;
+      const validGeoreference14 = (value) => {
+        if (!value || typeof value !== "object") return false;
+        const ref = value.reference || {};
+        return [ref.local_x, ref.local_y, value.rotation_rad].every((item) => finite14(item) !== null);
+      };
+    
+      const mapPoints14 = (map) => {
+        const points = [];
+        const add = (value) => {
+          for (const point of Array.isArray(value) ? value : []) {
+            if (Array.isArray(point) && finite14(point[0]) !== null && finite14(point[1]) !== null) {
+              points.push([Number(point[0]), Number(point[1])]);
+            }
+          }
+        };
+        for (const zone of map?.zones || []) add(zone?.polygon);
+        for (const polygon of map?.off_limit_areas || []) add(polygon);
+        for (const polygon of map?.vf_off_areas || []) add(polygon);
+        for (const channel of map?.channels || []) add(channel?.points);
+        const station = map?.station;
+        if (finite14(station?.x) !== null && finite14(station?.y) !== null) {
+          points.push([Number(station.x), Number(station.y)]);
         }
+        return points;
+      };
+    
+      const svgCenter14 = (card) => {
+        const viewBox = card?._svgEl?.viewBox?.baseVal;
+        if (viewBox && finite14(viewBox.width) !== null && finite14(viewBox.height) !== null) {
+          return {
+            x: Number(viewBox.x) + Number(viewBox.width) / 2,
+            y: Number(viewBox.y) + Number(viewBox.height) / 2,
+          };
+        }
+        return { x: 500, y: 500 };
+      };
+    
+      const singleCenter14 = (card) => {
+        const layout = card?._layout;
+        if (!layout?.sx || !layout?.sy) return svgCenter14(card);
+        const screen = mapPoints14(card?._mapPayload?.map || {})
+          .map(([x, y]) => ({ x: finite14(layout.sx(x)), y: finite14(layout.sy(y)) }))
+          .filter((point) => point.x !== null && point.y !== null);
+        if (!screen.length) return svgCenter14(card);
+        return {
+          x: (Math.min(...screen.map((point) => point.x)) + Math.max(...screen.map((point) => point.x))) / 2,
+          y: (Math.min(...screen.map((point) => point.y)) + Math.max(...screen.map((point) => point.y))) / 2,
+        };
+      };
+    
+      const siteLayout14 = (site) => {
+        const box = site?.combined_svg_bounds;
+        if (!box || [box.min_x, box.min_y, box.max_x, box.max_y].some((value) => finite14(value) === null)) return null;
+        const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
+        const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
+        const padding = 55;
+        const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
+        return {
+          scale,
+          offsetX: (1000 - width * scale) / 2 - Number(box.min_x) * scale,
+          offsetY: (1000 - height * scale) / 2 - Number(box.min_y) * scale,
+          centerX: 500,
+          centerY: 500,
+        };
+      };
+    
+      const singleTranslation14 = (card, east, north) => {
+        const layout = card?._layout;
+        const geo = activeGeoreference14(card);
+        if (!layout?.sx || !layout?.sy || !validGeoreference14(geo)) return { x: 0, y: 0 };
+        const ref = geo.reference || {};
+        const rotation = Number(geo.rotation_rad);
+        const dx = east * Math.cos(rotation) - north * Math.sin(rotation);
+        const dy = east * Math.sin(rotation) + north * Math.cos(rotation);
+        const x0 = finite14(layout.sx(Number(ref.local_x)));
+        const y0 = finite14(layout.sy(Number(ref.local_y)));
+        const x1 = finite14(layout.sx(Number(ref.local_x) + dx));
+        const y1 = finite14(layout.sy(Number(ref.local_y) + dy));
+        if ([x0, y0, x1, y1].some((value) => value === null)) return { x: 0, y: 0 };
+        return { x: x1 - x0, y: y1 - y0 };
+      };
+    
+      const multiTranslation14 = (card, east, north) => {
+        const layout = siteLayout14(card?._multi036Site);
+        if (!layout) return { x: 0, y: 0 };
+        return { x: east * layout.scale, y: -north * layout.scale };
+      };
+    
+      const transformMatrix14 = (center, translation, rotationDeg) => {
+        const radians = rotationDeg * Math.PI / 180;
+        const cos = Math.cos(radians);
+        const sin = Math.sin(radians);
+        const a = cos;
+        const b = sin;
+        const c = -sin;
+        const d = cos;
+        const e = translation.x + center.x - a * center.x - c * center.y;
+        const f = translation.y + center.y - b * center.x - d * center.y;
+        return [a, b, c, d, e, f].map((value) => Number(value).toFixed(10)).join(" ");
+      };
+    
+      const adjustmentNodes14 = (layer) => Array.from(layer?.querySelectorAll?.(
+        ".nm-osm-underlay,.nm-estonia-wms-detail,.nm-estonia-wms-detail-pending"
+      ) || []);
+    
+      const applyLayer14 = (card, layer, multi = false) => {
+        if (!layer) return;
+        const nodes = adjustmentNodes14(layer);
+        if (!nodes.length) return;
+        const correction = adjustment14(card);
+        if (provider14(card) === "none" || (Math.abs(correction.east) < 1e-9 && Math.abs(correction.north) < 1e-9 && Math.abs(correction.rotation) < 1e-9)) {
+          for (const node of nodes) {
+            node.removeAttribute("transform");
+            delete node.dataset.nmUnderlayCalibration14;
+          }
+          return;
+        }
+        const center = multi ? { x: 500, y: 500 } : singleCenter14(card);
+        const translation = multi
+          ? multiTranslation14(card, correction.east, correction.north)
+          : singleTranslation14(card, correction.east, correction.north);
+        const matrix = transformMatrix14(center, translation, correction.rotation);
+        for (const node of nodes) {
+          node.setAttribute("transform", "matrix(" + matrix + ")");
+          node.dataset.nmUnderlayCalibration14 = JSON.stringify({
+            east_m: correction.east,
+            north_m: correction.north,
+            rotation_deg_clockwise: correction.rotation,
+          });
+        }
+      };
+    
+      const ensureObserver14 = (card, key, layer, multi) => {
+        if (!layer || typeof MutationObserver === "undefined") return;
+        const current = card?.[key];
+        if (current?.target === layer) return;
+        current?.observer?.disconnect?.();
+        const observer = new MutationObserver(() => scheduleAdjustment14(card, 0));
+        observer.observe(layer, { childList: true, subtree: true });
+        card[key] = { observer, target: layer, multi };
+      };
+    
+      const applyAdjustment14 = (card) => {
+        if (!card || typeof document === "undefined") return;
+        applyLayer14(card, card?._baseEl, false);
+        applyLayer14(card, card?._osm036MultiLayer, true);
+        applyLayer14(card, card?._multi036Layer, true);
+        ensureObserver14(card, "_underlayCalibrationBaseObserver14", card?._baseEl, false);
+        ensureObserver14(card, "_underlayCalibrationMultiBaseObserver14", card?._osm036MultiLayer, true);
+        ensureObserver14(card, "_underlayCalibrationMultiDetailObserver14", card?._multi036Layer, true);
+      };
+    
+      const scheduleAdjustment14 = (card, delay = 0) => {
+        if (!card) return;
+        if (card._underlayCalibrationTimer14) clearTimeout(card._underlayCalibrationTimer14);
+        card._underlayCalibrationTimer14 = setTimeout(() => {
+          card._underlayCalibrationTimer14 = null;
+          applyAdjustment14(card);
+        }, Math.max(0, delay));
+      };
+    
+      const previousSync = proto._syncOsmUnderlay036;
+      if (typeof previousSync === "function") {
+        proto._syncOsmUnderlay036 = function beta14UnderlayCalibrationSync(...args) {
+          const result = previousSync.apply(this, args);
+          scheduleAdjustment14(this, 0);
+          return result;
+        };
       }
-    };
-    walk(form.schema);
-    if (underlayGrid?.schema) {
-      underlayGrid.schema.push(
-        { name: "underlay_east_offset", selector: { number: { min: OFFSET_MIN14, max: OFFSET_MAX14, step: STEP14, mode: "slider", unit_of_measurement: "m" } } },
-        { name: "underlay_north_offset", selector: { number: { min: OFFSET_MIN14, max: OFFSET_MAX14, step: STEP14, mode: "slider", unit_of_measurement: "m" } } },
-        { name: "underlay_rotation", selector: { number: { min: ROTATION_MIN14, max: ROTATION_MAX14, step: STEP14, mode: "slider", unit_of_measurement: "°" } } },
-      );
-    }
-    const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema, data) => schema?.name === "underlay_east_offset"
-      ? "East offset"
-      : schema?.name === "underlay_north_offset"
-        ? "North offset"
-        : schema?.name === "underlay_rotation"
-          ? "Rotation"
-          : baseLabel?.(schema, data) || schema?.name || "";
-    return form;
-  };
+    
+      const previousSetConfig = proto.setConfig;
+      if (typeof previousSetConfig === "function") {
+        proto.setConfig = function beta14UnderlayCalibrationSetConfig(config) {
+          const next = { ...(config || {}) };
+          next.underlay_east_offset = clamp14(next.underlay_east_offset, OFFSET_MIN14, OFFSET_MAX14, 0);
+          next.underlay_north_offset = clamp14(next.underlay_north_offset, OFFSET_MIN14, OFFSET_MAX14, 0);
+          next.underlay_rotation = clamp14(next.underlay_rotation, ROTATION_MIN14, ROTATION_MAX14, 0);
+          const result = previousSetConfig.call(this, next);
+          scheduleAdjustment14(this, 0);
+          return result;
+        };
+      }
+    
+      for (const method of ["_renderStatic", "_applyStaticLayers", "_renderShell", "_ensureDom", "_applyViewBox"]) {
+        const previous = proto[method];
+        if (typeof previous !== "function") continue;
+        proto[method] = function beta14UnderlayCalibrationRefresh(...args) {
+          const result = previous.apply(this, args);
+          scheduleAdjustment14(this, method === "_applyViewBox" ? 80 : 0);
+          return result;
+        };
+      }
+    
+      const previousStub = Card.getStubConfig?.bind(Card);
+      Card.getStubConfig = (...args) => ({
+        ...(previousStub?.(...args) || {}),
+        underlay_east_offset: 0,
+        underlay_north_offset: 0,
+        underlay_rotation: 0,
+      });
+    
+      const previousForm = Card.getConfigForm?.bind(Card);
+      Card.getConfigForm = (...args) => {
+        const form = previousForm?.(...args) || { schema: [] };
+        if (!Array.isArray(form.schema)) return form;
+        const adjustmentNames = new Set(["underlay_east_offset", "underlay_north_offset", "underlay_rotation"]);
+        let underlayGrid = null;
+        const walk = (items) => {
+          for (const item of Array.isArray(items) ? items : []) {
+            if (Array.isArray(item?.schema)) {
+              item.schema = item.schema.filter((child) => !adjustmentNames.has(child?.name));
+              if (item?.name === "map_underlay_grid") underlayGrid = item;
+              walk(item.schema);
+            }
+          }
+        };
+        walk(form.schema);
+        if (underlayGrid?.schema) {
+          underlayGrid.schema.push(
+            { name: "underlay_east_offset", selector: { number: { min: OFFSET_MIN14, max: OFFSET_MAX14, step: STEP14, mode: "slider", unit_of_measurement: "m" } } },
+            { name: "underlay_north_offset", selector: { number: { min: OFFSET_MIN14, max: OFFSET_MAX14, step: STEP14, mode: "slider", unit_of_measurement: "m" } } },
+            { name: "underlay_rotation", selector: { number: { min: ROTATION_MIN14, max: ROTATION_MAX14, step: STEP14, mode: "slider", unit_of_measurement: "°" } } },
+          );
+        }
+        const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+        form.computeLabel = (schema, data) => schema?.name === "underlay_east_offset"
+          ? "East offset"
+          : schema?.name === "underlay_north_offset"
+            ? "North offset"
+            : schema?.name === "underlay_rotation"
+              ? "Rotation"
+              : baseLabel?.(schema, data) || schema?.name || "";
+        return form;
+      };
+  }
 
-})();
 
 
 // 0.3.6-beta15: single-underlay metadata isolation and null-safe coordinates.
 
 
 // 0.3.6-beta16: prioritized phased loading and selective multi-mower updates.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const RETRY_MS = 30_000;
-
-  const baseMapPath = (card) => {
-    const raw = card?._v030BaseApiPath || card?._apiPath?.();
-    return String(raw || "").split(/[?#]/, 1)[0];
-  };
-
-  const cyclePath = (card) => {
-    const base = baseMapPath(card);
-    return base ? base + "?current_cycle_only=1" : null;
-  };
-
-  const queueDeferredCycle = (card) => {
-    if (card._zoneArtifactsHandled?.()) return;
-    if (!card?._hass?.callApi) return;
-    const sourceKey = card?._mapPayload?.vendor_trail_debug?.current_cycle_key;
-    if (card?._mapPayload?.current_cycle_render
-        && (sourceKey == null || card._retainedCycleSourceKey === sourceKey)) return;
-    const path = cyclePath(card);
-    if (!path) return;
-    const now = Date.now();
-    if (card._beta16CycleRetryAt && now < card._beta16CycleRetryAt) return;
-    const generation = Number(card._beta16CycleGeneration || 0);
-    const requestKey = path + "|" + generation + "|" + sourceKey;
-    if (card._beta16CycleLoading === requestKey) return;
-    card._beta16CycleLoading = requestKey;
-    const schedule = typeof globalThis.requestIdleCallback === "function"
-      ? (callback) => globalThis.requestIdleCallback(callback, { timeout: 800 })
-      : (callback) => globalThis.setTimeout(callback, 0);
-    schedule(async () => {
-      try {
-        const payload = await card._hass.callApi("GET", String(path).replace(/^\/api\//, "").replace(/^\/+/, ""));
-        if (
-          Number(card._beta16CycleGeneration || 0) !== generation
-          || cyclePath(card) !== path
-          || card?._mapPayload?.vendor_trail_debug?.current_cycle_key !== sourceKey
-        ) return;
+  nmRuntimePatch27: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const RETRY_MS = 30_000;
+    
+      const baseMapPath = (card) => {
+        const raw = card?._v030BaseApiPath || card?._apiPath?.();
+        return String(raw || "").split(/[?#]/, 1)[0];
+      };
+    
+      const cyclePath = (card) => {
+        const base = baseMapPath(card);
+        return base ? base + "?current_cycle_only=1" : null;
+      };
+    
+      const queueDeferredCycle = (card) => {
         if (card._zoneArtifactsHandled?.()) return;
-        const render = payload?.current_cycle_render;
-        if (render?.scope === "current_cycle" && card._mapPayload) {
-          card._mapPayload = { ...card._mapPayload, current_cycle_render: render };
-          card._retainedCycleSourceKey = sourceKey;
-          card._historyRenderKey = null;
-          card._trailRenderKey = null;
-          card._queueRender?.({ history: true, trail: true, sessions: true });
-          card._beta16CycleRetryAt = 0;
-        }
-      } catch (error) {
-        if (Number(card._beta16CycleGeneration || 0) === generation) {
-          card._beta16CycleRetryAt = Date.now() + RETRY_MS;
-          console.debug("[Navimower Map Card] Deferred current-cycle request unavailable", error);
-        }
-      } finally {
-        if (card._beta16CycleLoading === requestKey) {
-          card._beta16CycleLoading = null;
-        }
+        if (!card?._hass?.callApi) return;
+        const sourceKey = card?._mapPayload?.vendor_trail_debug?.current_cycle_key;
+        if (card?._mapPayload?.current_cycle_render
+            && (sourceKey == null || card._retainedCycleSourceKey === sourceKey)) return;
+        const path = cyclePath(card);
+        if (!path) return;
+        const now = Date.now();
+        if (card._beta16CycleRetryAt && now < card._beta16CycleRetryAt) return;
+        const generation = Number(card._beta16CycleGeneration || 0);
+        const requestKey = path + "|" + generation + "|" + sourceKey;
+        if (card._beta16CycleLoading === requestKey) return;
+        card._beta16CycleLoading = requestKey;
+        const schedule = typeof globalThis.requestIdleCallback === "function"
+          ? (callback) => globalThis.requestIdleCallback(callback, { timeout: 800 })
+          : (callback) => globalThis.setTimeout(callback, 0);
+        schedule(async () => {
+          try {
+            const payload = await card._hass.callApi("GET", String(path).replace(/^\/api\//, "").replace(/^\/+/, ""));
+            if (
+              Number(card._beta16CycleGeneration || 0) !== generation
+              || cyclePath(card) !== path
+              || card?._mapPayload?.vendor_trail_debug?.current_cycle_key !== sourceKey
+            ) return;
+            if (card._zoneArtifactsHandled?.()) return;
+            const render = payload?.current_cycle_render;
+            if (render?.scope === "current_cycle" && card._mapPayload) {
+              card._mapPayload = { ...card._mapPayload, current_cycle_render: render };
+              card._retainedCycleSourceKey = sourceKey;
+              card._historyRenderKey = null;
+              card._trailRenderKey = null;
+              card._queueRender?.({ history: true, trail: true, sessions: true });
+              card._beta16CycleRetryAt = 0;
+            }
+          } catch (error) {
+            if (Number(card._beta16CycleGeneration || 0) === generation) {
+              card._beta16CycleRetryAt = Date.now() + RETRY_MS;
+              console.debug("[Navimower Map Card] Deferred current-cycle request unavailable", error);
+            }
+          } finally {
+            if (card._beta16CycleLoading === requestKey) {
+              card._beta16CycleLoading = null;
+            }
+          }
+        });
+      };
+    
+      const previousApply = proto._applyMapPayload;
+      if (typeof previousApply === "function") {
+        proto._applyMapPayload = function beta16ApplyMapPayload(...args) {
+          const result = previousApply.apply(this, args);
+          queueDeferredCycle(this);
+          return result;
+        };
       }
-    });
-  };
-
-  const previousApply = proto._applyMapPayload;
-  if (typeof previousApply === "function") {
-    proto._applyMapPayload = function beta16ApplyMapPayload(...args) {
-      const result = previousApply.apply(this, args);
-      queueDeferredCycle(this);
-      return result;
-    };
-  }
-
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta16SetConfig(config) {
-      const previous = this?._config?.entity || this?._config?.mower_entity || null;
-      const result = previousSetConfig.call(this, config);
-      const current = this?._config?.entity || this?._config?.mower_entity || null;
-      if (previous !== current) {
-        this._historySelectedSessionId = null;
-        this._retainedCycleSourceKey = null;
-        this._retainedCycleEntry = null;
-        if (this._highlightEl) this._highlightEl.innerHTML = "";
+    
+      const previousSetConfig = proto.setConfig;
+      if (typeof previousSetConfig === "function") {
+        proto.setConfig = function beta16SetConfig(config) {
+          const previous = this?._config?.entity || this?._config?.mower_entity || null;
+          const result = previousSetConfig.call(this, config);
+          const current = this?._config?.entity || this?._config?.mower_entity || null;
+          if (previous !== current) {
+            this._historySelectedSessionId = null;
+            this._retainedCycleSourceKey = null;
+            this._retainedCycleEntry = null;
+            if (this._highlightEl) this._highlightEl.innerHTML = "";
+            this._beta16CycleGeneration = Number(this._beta16CycleGeneration || 0) + 1;
+            this._beta16CycleLoading = null;
+            this._beta16CycleRetryAt = 0;
+          }
+          queueDeferredCycle(this);
+          return result;
+        };
+      }
+    
+      const previousDisconnected = proto.disconnectedCallback;
+      proto.disconnectedCallback = function beta16Disconnected(...args) {
         this._beta16CycleGeneration = Number(this._beta16CycleGeneration || 0) + 1;
-        this._beta16CycleLoading = null;
-        this._beta16CycleRetryAt = 0;
-      }
-      queueDeferredCycle(this);
-      return result;
-    };
+        this._multi036Generation = Number(this._multi036Generation || 0) + 1;
+        this._multi036PendingSelectionKey = null;
+        return previousDisconnected?.apply(this, args);
+      };
+    
+      proto._beta16PerformanceContract = () => ({
+        baseMapFirst: true,
+        deferredCurrentCycle: true,
+        multiRequestConcurrency: 2,
+        retryableSessionRenders: true,
+        selectiveMowerUpdates: true,
+        completeDaySessions: true,
+      });
   }
 
-  const previousDisconnected = proto.disconnectedCallback;
-  proto.disconnectedCallback = function beta16Disconnected(...args) {
-    this._beta16CycleGeneration = Number(this._beta16CycleGeneration || 0) + 1;
-    this._multi036Generation = Number(this._multi036Generation || 0) + 1;
-    this._multi036PendingSelectionKey = null;
-    return previousDisconnected?.apply(this, args);
-  };
-
-  proto._beta16PerformanceContract = () => ({
-    baseMapFirst: true,
-    deferredCurrentCycle: true,
-    multiRequestConcurrency: 2,
-    retryableSessionRenders: true,
-    selectiveMowerUpdates: true,
-    completeDaySessions: true,
-  });
-
-})();
 
 
 // 0.3.6-beta17: extended underlay offsets and stable multi-mower notification paging.
@@ -13069,2497 +13048,2493 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 
 // 0.3.6-beta19: visual gate-area polygon editor.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  const MAX_POINTS = 64;
-
-  const esc19 = (value) => String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-
-  const finite19 = (value, fallback = null) => {
-    const number = Number(value);
-    return Number.isFinite(number) ? number : fallback;
-  };
-
-  const round19 = (value) => Math.round(Number(value) * 1000) / 1000;
-  const roundPoint19 = (point) => [round19(point[0]), round19(point[1])];
-
-  const slug19 = (value) => {
-    const slug = String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    return slug || "channel";
-  };
-
-  const normalizePolygon19 = (raw) => (Array.isArray(raw) ? raw : [])
-    .filter((point) => Array.isArray(point) && point.length >= 2)
-    .map((point) => [Number(point[0]), Number(point[1])])
-    .filter((point) => point.every(Number.isFinite));
-
-  const rectanglePolygon19 = (area) => {
-    const x1 = finite19(area?.x_min), x2 = finite19(area?.x_max);
-    const y1 = finite19(area?.y_min), y2 = finite19(area?.y_max);
-    if ([x1, x2, y1, y2].some((value) => value === null)) return [];
-    const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
-    const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
-    return [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
-  };
-
-  const areaPolygon19 = (area) => {
-    const polygon = normalizePolygon19(area?.polygon);
-    return polygon.length >= 3 ? polygon : rectanglePolygon19(area);
-  };
-
-  const gateAreas19 = (payload) => Array.isArray(payload?.gate_areas) ? payload.gate_areas : [];
-
-  const multiActive19 = (card) => Boolean(
-    card?._config?.multi_mower &&
-    card?._multi036Site?.multi_mower &&
-    Array.isArray(card?._multi036Site?.members) &&
-    card._multi036Site.members.length >= 2 &&
-    card?._multi036Layer &&
-    card._multi036Layer.style.display !== "none"
-  );
-
-  const singleEntryId19 = (card) => String(card?._mapPayload?.frontend?.entry_id || "single");
-
-  const targets19 = (card) => {
-    if (multiActive19(card)) {
-      return (card._multi036Site?.members || []).map((member) => {
-        const entryId = String(member?.entry_id || "");
-        const state = card._multi036Members instanceof Map ? card._multi036Members.get(entryId) : null;
-        const frontend = member?.frontend || {};
-        return {
-          mode: "multi",
-          key: "multi:" + entryId,
-          entryId,
-          member,
-          name: String(member?.name || member?.model || "Mower"),
-          deviceId: frontend.device_id || null,
-          mapPath: frontend.map_api_path || member?.map_api_path || null,
-          payload: state?.map || null,
-        };
-      }).filter((target) => target.entryId && target.payload);
-    }
-    if (!card?._mapPayload) return [];
-    return [{
-      mode: "single",
-      key: "single:" + singleEntryId19(card),
-      entryId: singleEntryId19(card),
-      member: null,
-      name: String(card._mapPayload?.frontend?.name || card._mapPayload?.model || "Mower"),
-      deviceId: card._mapPayload?.frontend?.device_id || card._deviceId || null,
-      mapPath: card._mapPayload?.frontend?.map_api_path || card._apiPath?.() || null,
-      payload: card._mapPayload,
-    }];
-  };
-
-  const currentPayload19 = (card, target) => {
-    if (!target) return null;
-    if (target.mode === "multi") {
-      const state = card._multi036Members instanceof Map ? card._multi036Members.get(String(target.entryId)) : null;
-      return state?.map || target.payload || null;
-    }
-    return card._mapPayload || target.payload || null;
-  };
-
-  const memberGroup19 = (card, entryId) => {
-    const groups = card?._multi036Layer?.querySelectorAll?.(".nm-multi-member-map") || [];
-    return Array.from(groups).find((group) => String(group?.dataset?.entryId || "") === String(entryId)) || null;
-  };
-
-  const rootPoint19 = (card, clientX, clientY) => {
-    const svg = card?._svgEl;
-    if (!svg) return null;
-    try {
-      const matrix = svg.getScreenCTM?.();
-      if (matrix && typeof DOMPoint === "function") {
-        const point = new DOMPoint(Number(clientX), Number(clientY)).matrixTransform(matrix.inverse());
-        return [point.x, point.y];
-      }
-    } catch (_error) { /* fall through to viewBox math */ }
-    const rect = svg.getBoundingClientRect?.();
-    const viewBox = svg.viewBox?.baseVal;
-    if (!rect || !viewBox || !rect.width || !rect.height) return null;
-    return [
-      viewBox.x + (Number(clientX) - rect.left) / rect.width * viewBox.width,
-      viewBox.y + (Number(clientY) - rect.top) / rect.height * viewBox.height,
-    ];
-  };
-
-  const localToRoot19 = (card, target, point) => {
-    if (!target || !Array.isArray(point)) return null;
-    const x = Number(point[0]), y = Number(point[1]);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    if (target.mode !== "multi") {
-      const layout = card?._layout;
-      if (!layout?.sx || !layout?.sy) return null;
-      return [layout.sx(x), layout.sy(y)];
-    }
-    const group = memberGroup19(card, target.entryId);
-    const svg = card?._svgEl;
-    if (!group || !svg || typeof DOMPoint !== "function") return null;
-    try {
-      const groupScreen = group.getScreenCTM?.();
-      const svgScreen = svg.getScreenCTM?.();
-      if (!groupScreen || !svgScreen) return null;
-      const screen = new DOMPoint(x, y).matrixTransform(groupScreen);
-      const root = screen.matrixTransform(svgScreen.inverse());
-      return [root.x, root.y];
-    } catch (_error) {
-      return null;
-    }
-  };
-
-  const screenToLocal19 = (card, target, clientX, clientY) => {
-    if (!target) return null;
-    if (target.mode === "multi") {
-      const group = memberGroup19(card, target.entryId);
-      if (!group || typeof DOMPoint !== "function") return null;
-      try {
-        const matrix = group.getScreenCTM?.();
-        if (!matrix) return null;
-        const local = new DOMPoint(Number(clientX), Number(clientY)).matrixTransform(matrix.inverse());
-        return roundPoint19([local.x, local.y]);
-      } catch (_error) {
-        return null;
-      }
-    }
-    const root = rootPoint19(card, clientX, clientY);
-    const layout = card?._layout;
-    if (!root || !layout?.sx || !layout?.sy) return null;
-    const sx0 = Number(layout.sx(0)), sx1 = Number(layout.sx(1));
-    const sy0 = Number(layout.sy(0)), sy1 = Number(layout.sy(1));
-    const dx = sx1 - sx0, dy = sy1 - sy0;
-    if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.abs(dx) < 1e-9 || Math.abs(dy) < 1e-9) return null;
-    return roundPoint19([(root[0] - sx0) / dx, (root[1] - sy0) / dy]);
-  };
-
-  const rootUnitsPerPixel19 = (card) => {
-    const svg = card?._svgEl;
-    const rect = svg?.getBoundingClientRect?.();
-    const viewBox = svg?.viewBox?.baseVal;
-    if (!rect?.width || !viewBox?.width) return 1;
-    return viewBox.width / rect.width;
-  };
-
-  const distanceToSegment20 = (point, start, end) => {
-    const px = Number(point?.[0]), py = Number(point?.[1]);
-    const ax = Number(start?.[0]), ay = Number(start?.[1]);
-    const bx = Number(end?.[0]), by = Number(end?.[1]);
-    if (![px, py, ax, ay, bx, by].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
-    const dx = bx - ax, dy = by - ay;
-    const length2 = dx * dx + dy * dy;
-    if (length2 <= 1e-12) return Math.hypot(px - ax, py - ay);
-    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / length2));
-    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
-  };
-
-  const nearestEdge20 = (card, editor, clientX, clientY) => {
-    const click = rootPoint19(card, clientX, clientY);
-    if (!click || !editor || editor.points.length < 3) return null;
-    const points = editor.points.map((point) => localToRoot19(card, editor.target, point));
-    if (points.some((point) => !point || !point.every(Number.isFinite))) return null;
-    const unit = Math.max(1e-9, rootUnitsPerPixel19(card));
-    let index = null;
-    let distancePx = Number.POSITIVE_INFINITY;
-    for (let current = 0; current < points.length; current += 1) {
-      const next = (current + 1) % points.length;
-      const candidate = distanceToSegment20(click, points[current], points[next]) / unit;
-      if (candidate < distancePx) {
-        distancePx = candidate;
-        index = current;
-      }
-    }
-    return index !== null ? { index, distancePx } : null;
-  };
-
-  const polygonSelfIntersects20 = (points) => {
-    if (!Array.isArray(points) || points.length < 4) return false;
-    const epsilon = 1e-9;
-    const cross = (a, b, c) =>
-      (Number(b[0]) - Number(a[0])) * (Number(c[1]) - Number(a[1])) -
-      (Number(b[1]) - Number(a[1])) * (Number(c[0]) - Number(a[0]));
-    const onSegment = (point, start, end) => {
-      if (Math.abs(cross(start, end, point)) > epsilon) return false;
-      return Number(point[0]) >= Math.min(Number(start[0]), Number(end[0])) - epsilon &&
-        Number(point[0]) <= Math.max(Number(start[0]), Number(end[0])) + epsilon &&
-        Number(point[1]) >= Math.min(Number(start[1]), Number(end[1])) - epsilon &&
-        Number(point[1]) <= Math.max(Number(start[1]), Number(end[1])) + epsilon;
-    };
-    const intersects = (a1, a2, b1, b2) => {
-      const c1 = cross(a1, a2, b1), c2 = cross(a1, a2, b2);
-      const c3 = cross(b1, b2, a1), c4 = cross(b1, b2, a2);
-      if (((c1 > epsilon && c2 < -epsilon) || (c1 < -epsilon && c2 > epsilon)) &&
-          ((c3 > epsilon && c4 < -epsilon) || (c3 < -epsilon && c4 > epsilon))) return true;
-      return (Math.abs(c1) <= epsilon && onSegment(b1, a1, a2)) ||
-        (Math.abs(c2) <= epsilon && onSegment(b2, a1, a2)) ||
-        (Math.abs(c3) <= epsilon && onSegment(a1, b1, b2)) ||
-        (Math.abs(c4) <= epsilon && onSegment(a2, b1, b2));
-    };
-    const count = points.length;
-    for (let first = 0; first < count; first += 1) {
-      const firstNext = (first + 1) % count;
-      for (let second = first + 1; second < count; second += 1) {
-        const secondNext = (second + 1) % count;
-        if (first === second || firstNext === second || secondNext === first) continue;
-        if (intersects(points[first], points[firstNext], points[second], points[secondNext])) return true;
-      }
-    }
-    return false;
-  };
-
-  const defaultName19 = (payload) => {
-    const used = new Set(gateAreas19(payload).map((area) => slug19(area?.name || area?.slug)));
-    if (!used.has("gate_area")) return "Gate area";
-    for (let index = 2; index < 100; index += 1) {
-      if (!used.has("gate_area_" + index)) return "Gate area " + index;
-    }
-    return "Gate area " + Date.now();
-  };
-
-  const areaId19 = (area) => String(area?.slug || slug19(area?.name || "Gate area"));
-
-  const editorRecord19 = (editor) => {
-    const points = editor.points.map(roundPoint19);
-    const xs = points.map((point) => point[0]);
-    const ys = points.map((point) => point[1]);
-    return {
-      name: editor.name.trim(),
-      slug: slug19(editor.name),
-      x_min: Math.min(...xs),
-      x_max: Math.max(...xs),
-      y_min: Math.min(...ys),
-      y_max: Math.max(...ys),
-      polygon: points,
-    };
-  };
-
-  const applyLocalWrite19 = (card, editor, deleting = false) => {
-    const target = editor?.target;
-    const payload = currentPayload19(card, target);
-    if (!payload) return;
-    const existing = gateAreas19(payload).map((item) => ({ ...item }));
-    const matchId = String(editor.areaId || "");
-    const index = matchId ? existing.findIndex((area) => areaId19(area) === matchId) : -1;
-    if (deleting) {
-      if (index >= 0) existing.splice(index, 1);
-    } else {
-      const record = editorRecord19(editor);
-      if (index >= 0) existing[index] = record;
-      else existing.push(record);
-    }
-    const nextPayload = { ...payload, gate_areas: existing };
-
-    if (target.mode === "multi") {
-      if (card._multi036Members instanceof Map) {
-        const state = card._multi036Members.get(String(target.entryId));
-        if (state) {
-          state.map = nextPayload;
-          state.mapAt = Date.now();
+  nmRuntimePatch28: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const MAX_POINTS = 64;
+    
+      const esc19 = (value) => String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    
+      const finite19 = (value, fallback = null) => {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : fallback;
+      };
+    
+      const round19 = (value) => Math.round(Number(value) * 1000) / 1000;
+      const roundPoint19 = (point) => [round19(point[0]), round19(point[1])];
+    
+      const slug19 = (value) => {
+        const slug = String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+        return slug || "channel";
+      };
+    
+      const normalizePolygon19 = (raw) => (Array.isArray(raw) ? raw : [])
+        .filter((point) => Array.isArray(point) && point.length >= 2)
+        .map((point) => [Number(point[0]), Number(point[1])])
+        .filter((point) => point.every(Number.isFinite));
+    
+      const rectanglePolygon19 = (area) => {
+        const x1 = finite19(area?.x_min), x2 = finite19(area?.x_max);
+        const y1 = finite19(area?.y_min), y2 = finite19(area?.y_max);
+        if ([x1, x2, y1, y2].some((value) => value === null)) return [];
+        const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+        const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+        return [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
+      };
+    
+      const areaPolygon19 = (area) => {
+        const polygon = normalizePolygon19(area?.polygon);
+        return polygon.length >= 3 ? polygon : rectanglePolygon19(area);
+      };
+    
+      const gateAreas19 = (payload) => Array.isArray(payload?.gate_areas) ? payload.gate_areas : [];
+    
+      const multiActive19 = (card) => Boolean(
+        card?._config?.multi_mower &&
+        card?._multi036Site?.multi_mower &&
+        Array.isArray(card?._multi036Site?.members) &&
+        card._multi036Site.members.length >= 2 &&
+        card?._multi036Layer &&
+        card._multi036Layer.style.display !== "none"
+      );
+    
+      const singleEntryId19 = (card) => String(card?._mapPayload?.frontend?.entry_id || "single");
+    
+      const targets19 = (card) => {
+        if (multiActive19(card)) {
+          return (card._multi036Site?.members || []).map((member) => {
+            const entryId = String(member?.entry_id || "");
+            const state = card._multi036Members instanceof Map ? card._multi036Members.get(entryId) : null;
+            const frontend = member?.frontend || {};
+            return {
+              mode: "multi",
+              key: "multi:" + entryId,
+              entryId,
+              member,
+              name: String(member?.name || member?.model || "Mower"),
+              deviceId: frontend.device_id || null,
+              mapPath: frontend.map_api_path || member?.map_api_path || null,
+              payload: state?.map || null,
+            };
+          }).filter((target) => target.entryId && target.payload);
         }
-      }
-      if (String(card?._mapPayload?.frontend?.entry_id || "") === String(target.entryId)) {
-        card._mapPayload = nextPayload;
-      }
-      card._multi036MapRenderKey = null;
-      card._applyViewBox?.();
-      return;
-    }
-
-    card._mapPayload = nextPayload;
-    card._mapStaticSignature = card._payloadStaticSignature?.(nextPayload) || null;
-    card._staticRenderKey = null;
-    card._layout = null;
-    card._buildLayout?.();
-    card._renderStatic?.();
-  };
-
-  const editorHint19 = (editor) => {
-    if (!editor) return "";
-    if (editor.creating && editor.points.length < 3) return "Tap the map to add the first 3 corner points.";
-    if (polygonSelfIntersects20(editor.points)) return "Polygon edges cross. Move a corner until the shape no longer intersects itself.";
-    return "Drag corners. Tap anywhere to insert another point on the nearest edge, or use +.";
-  };
-
-  function renderOverlay19(card) {
-    const layer = card?._gate19Layer;
-    const editor = card?._gate19Editor;
-    if (!layer) return;
-    if (!editor) {
-      layer.innerHTML = "";
-      layer.style.display = "none";
-      return;
-    }
-    layer.style.display = "";
-    const rootPoints = editor.points.map((point) => localToRoot19(card, editor.target, point));
-    if (rootPoints.some((point) => !point || !point.every(Number.isFinite))) {
-      layer.innerHTML = "";
-      return;
-    }
-    const unit = rootUnitsPerPixel19(card);
-    const vertexRadius = Math.max(3 * unit, 7 * unit);
-    const midpointRadius = Math.max(3 * unit, 6 * unit);
-    const pointString = rootPoints.map((point) => point[0].toFixed(2) + "," + point[1].toFixed(2)).join(" ");
-    const invalidGeometry = polygonSelfIntersects20(editor.points);
-    const color = esc19(invalidGeometry ? "var(--error-color,#db4437)" : (card?._config?.gate_area_color || "#8e24aa"));
-    const parts = [];
-    if (rootPoints.length >= 3) {
-      parts.push('<polygon class="nm-gate19-preview" points="' + pointString + '" fill="' + color + '" fill-opacity=".22" stroke="' + color + '" stroke-width="3" stroke-dasharray="10 6" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>');
-    } else if (rootPoints.length >= 2) {
-      parts.push('<polyline class="nm-gate19-preview" points="' + pointString + '" fill="none" stroke="' + color + '" stroke-width="3" stroke-dasharray="10 6" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>');
-    }
-
-    if (rootPoints.length >= 3 && rootPoints.length < MAX_POINTS) {
-      rootPoints.forEach((point, index) => {
-        const next = rootPoints[(index + 1) % rootPoints.length];
-        const mx = (point[0] + next[0]) / 2;
-        const my = (point[1] + next[1]) / 2;
-        parts.push('<g class="nm-gate19-midpoint" data-gate19-midpoint="' + index + '" tabindex="0" role="button" aria-label="Add gate-area point"><circle cx="' + mx.toFixed(2) + '" cy="' + my.toFixed(2) + '" r="' + midpointRadius.toFixed(2) + '" fill="var(--card-background-color,#fff)" stroke="' + color + '" stroke-width="2" vector-effect="non-scaling-stroke"/><text x="' + mx.toFixed(2) + '" y="' + my.toFixed(2) + '" text-anchor="middle" dominant-baseline="central" font-size="' + (11 * unit).toFixed(2) + '" font-weight="800" fill="' + color + '" pointer-events="none">+</text></g>');
-      });
-    }
-
-    rootPoints.forEach((point, index) => {
-      const selected = Number(editor.selected) === index;
-      parts.push('<circle class="nm-gate19-vertex' + (selected ? ' selected' : '') + '" data-gate19-vertex="' + index + '" cx="' + point[0].toFixed(2) + '" cy="' + point[1].toFixed(2) + '" r="' + vertexRadius.toFixed(2) + '" fill="' + (selected ? '#FF5A00' : color) + '" stroke="var(--card-background-color,#fff)" stroke-width="2.5" vector-effect="non-scaling-stroke"/>');
-    });
-    layer.innerHTML = parts.join("");
-  }
-
-  function updatePanelState19(card) {
-    const panel = card?._gate19Panel;
-    const editor = card?._gate19Editor;
-    if (!panel || !editor) return;
-    const meta = panel.querySelector("[data-gate19-meta]");
-    const hint = panel.querySelector("[data-gate19-hint]");
-    const status = panel.querySelector("[data-gate19-status]");
-    const save = panel.querySelector("[data-gate19-save]");
-    const remove = panel.querySelector("[data-gate19-remove]");
-    const deletion = panel.querySelector("[data-gate19-delete]");
-    const selected = Number.isInteger(editor.selected) && editor.selected >= 0 && editor.selected < editor.points.length ? editor.points[editor.selected] : null;
-    const invalidGeometry = polygonSelfIntersects20(editor.points);
-    if (meta) meta.textContent = editor.points.length + " points" + (selected ? " · X " + selected[0].toFixed(2) + " · Y " + selected[1].toFixed(2) : "");
-    if (hint) hint.textContent = editorHint19(editor);
-    if (status) {
-      status.textContent = editor.status || (invalidGeometry ? "Fix crossing edges before saving." : "");
-      status.className = "nm-gate19-status " + (editor.statusKind || (invalidGeometry ? "error" : ""));
-    }
-    if (save) save.disabled = editor.busy || editor.points.length < 3 || invalidGeometry || !String(editor.name || "").trim();
-    if (remove) remove.disabled = editor.busy || !selected || editor.points.length <= 3;
-    if (deletion) {
-      deletion.disabled = editor.busy;
-      deletion.textContent = editor.confirmDelete ? "Confirm delete" : "Delete area";
-    }
-  }
-
-  function renderPanel19(card) {
-    const panel = card?._gate19Panel;
-    const editor = card?._gate19Editor;
-    if (!panel) return;
-    if (!editor) {
-      panel.hidden = true;
-      panel.innerHTML = "";
-      return;
-    }
-    panel.hidden = false;
-    panel.innerHTML =
-      '<div class="nm-gate19-panel-head"><div class="nm-gate19-panel-title">' + (editor.creating ? 'Add gate area' : 'Edit gate area') + '</div><div class="nm-gate19-meta" data-gate19-meta></div></div>' +
-      '<label class="nm-gate19-name"><span>Name</span><input type="text" maxlength="64" data-gate19-name value="' + esc19(editor.name) + '"></label>' +
-      '<div class="nm-gate19-hint" data-gate19-hint></div>' +
-      '<div class="nm-gate19-status" data-gate19-status aria-live="polite"></div>' +
-      '<div class="nm-gate19-actions">' +
-        '<button type="button" class="secondary" data-gate19-remove><ha-icon icon="mdi:minus-circle-outline"></ha-icon><span>Remove point</span></button>' +
-        (editor.areaId ? '<button type="button" class="danger" data-gate19-delete>Delete area</button>' : '') +
-        '<span class="nm-gate19-spacer"></span>' +
-        '<button type="button" class="secondary" data-gate19-cancel>Cancel</button>' +
-        '<button type="button" class="primary" data-gate19-save>Save</button>' +
-      '</div>';
-
-    panel.querySelector("[data-gate19-name]")?.addEventListener("input", (event) => {
-      editor.name = String(event.target?.value || "");
-      editor.confirmDelete = false;
-      updatePanelState19(card);
-    });
-    panel.querySelector("[data-gate19-cancel]")?.addEventListener("click", () => closeEditor19(card));
-    panel.querySelector("[data-gate19-remove]")?.addEventListener("click", () => {
-      if (!Number.isInteger(editor.selected) || editor.points.length <= 3 || editor.busy) return;
-      editor.points.splice(editor.selected, 1);
-      editor.selected = null;
-      editor.confirmDelete = false;
-      renderOverlay19(card);
-      updatePanelState19(card);
-    });
-    panel.querySelector("[data-gate19-save]")?.addEventListener("click", () => { void saveEditor19(card); });
-    panel.querySelector("[data-gate19-delete]")?.addEventListener("click", () => {
-      if (editor.busy) return;
-      if (!editor.confirmDelete) {
-        editor.confirmDelete = true;
-        editor.status = "Tap Confirm delete again to remove this gate area.";
-        editor.statusKind = "warning";
-        updatePanelState19(card);
-        return;
-      }
-      void deleteEditor19(card);
-    });
-    updatePanelState19(card);
-  }
-
-  function startEditor19(card, target, area = null) {
-    if (!target) return;
-    const polygon = area ? areaPolygon19(area) : [];
-    card._gate19Editor = {
-      target: { ...target },
-      areaId: area ? areaId19(area) : null,
-      name: area ? String(area.name || "Gate area") : defaultName19(currentPayload19(card, target)),
-      points: polygon.map(roundPoint19),
-      creating: !area,
-      selected: null,
-      busy: false,
-      status: "",
-      statusKind: "",
-      confirmDelete: false,
-    };
-    card._gate19Drag = null;
-    if (card._gate19Menu) card._gate19Menu.hidden = true;
-    card._gate19Button?.classList?.add?.("active");
-    card._svgEl?.classList?.add?.("nm-gate19-editing");
-    if (card._zoneInfoEl) card._zoneInfoEl.hidden = true;
-    renderPanel19(card);
-    renderOverlay19(card);
-  }
-
-  function closeEditor19(card) {
-    card._gate19Editor = null;
-    card._gate19Drag = null;
-    card._gate19Button?.classList?.remove?.("active");
-    card._svgEl?.classList?.remove?.("nm-gate19-editing");
-    if (card._gate19Panel) {
-      card._gate19Panel.hidden = true;
-      card._gate19Panel.innerHTML = "";
-    }
-    renderOverlay19(card);
-  }
-
-  function renderMenu19(card) {
-    const menu = card?._gate19Menu;
-    if (!menu) return;
-    const targets = targets19(card);
-    card._gate19Targets = targets;
-    if (!targets.length) {
-      menu.innerHTML = '<div class="nm-gate19-menu-title">Gate areas</div><div class="nm-gate19-empty">Waiting for map data…</div>';
-      return;
-    }
-    const multi = targets.length > 1 || multiActive19(card);
-    const groups = targets.map((target, targetIndex) => {
-      const areas = gateAreas19(currentPayload19(card, target));
-      const areaButtons = areas.map((area, areaIndex) =>
-        '<button type="button" class="nm-gate19-menu-item" data-gate19-edit="' + areaIndex + '" data-gate19-target="' + targetIndex + '"><ha-icon icon="mdi:vector-polygon"></ha-icon><span>' + esc19(area?.name || "Gate area") + '</span></button>'
-      ).join("");
-      return '<div class="nm-gate19-group">' +
-        (multi ? '<div class="nm-gate19-group-title">' + esc19(target.name) + '</div>' : '') +
-        '<button type="button" class="nm-gate19-menu-item add" data-gate19-add="1" data-gate19-target="' + targetIndex + '"><ha-icon icon="mdi:plus"></ha-icon><span>Add gate area</span></button>' +
-        areaButtons +
-      '</div>';
-    }).join("");
-    menu.innerHTML = '<div class="nm-gate19-menu-title">Gate areas</div>' + groups;
-  }
-
-  async function saveEditor19(card) {
-    const editor = card?._gate19Editor;
-    if (!editor || editor.busy) return;
-    editor.name = String(editor.name || "").trim();
-    if (!editor.name || editor.points.length < 3) {
-      editor.status = "Name and at least 3 points are required.";
-      editor.statusKind = "error";
-      updatePanelState19(card);
-      return;
-    }
-    if (editor.points.length > MAX_POINTS) {
-      editor.status = "A gate area can contain at most " + MAX_POINTS + " points.";
-      editor.statusKind = "error";
-      updatePanelState19(card);
-      return;
-    }
-    if (polygonSelfIntersects20(editor.points)) {
-      editor.status = "Polygon edges must not cross.";
-      editor.statusKind = "error";
-      updatePanelState19(card);
-      return;
-    }
-    if (editor.target.mode === "multi" && !editor.target.deviceId) {
-      editor.status = "Mower device ID is unavailable. Refresh the map and try again.";
-      editor.statusKind = "error";
-      updatePanelState19(card);
-      return;
-    }
-    editor.busy = true;
-    editor.status = "Saving…";
-    editor.statusKind = "saving";
-    editor.confirmDelete = false;
-    updatePanelState19(card);
-    const data = {
-      name: editor.name,
-      polygon: editor.points.map(roundPoint19),
-    };
-    if (editor.areaId) data.gate_area_id = editor.areaId;
-    if (editor.target.deviceId) data.device_id = editor.target.deviceId;
-    try {
-      await card._hass.callService("navimower", "set_gate_area", data);
-      applyLocalWrite19(card, editor, false);
-      closeEditor19(card);
-    } catch (error) {
-      editor.busy = false;
-      editor.status = "Save failed: " + String(error?.message || error || "Unknown error");
-      editor.statusKind = "error";
-      updatePanelState19(card);
-    }
-  }
-
-  async function deleteEditor19(card) {
-    const editor = card?._gate19Editor;
-    if (!editor?.areaId || editor.busy) return;
-    if (editor.target.mode === "multi" && !editor.target.deviceId) {
-      editor.status = "Mower device ID is unavailable. Refresh the map and try again.";
-      editor.statusKind = "error";
-      editor.confirmDelete = false;
-      updatePanelState19(card);
-      return;
-    }
-    editor.busy = true;
-    editor.status = "Deleting…";
-    editor.statusKind = "saving";
-    updatePanelState19(card);
-    const data = { gate_area_id: editor.areaId };
-    if (editor.target.deviceId) data.device_id = editor.target.deviceId;
-    try {
-      await card._hass.callService("navimower", "delete_gate_area", data);
-      applyLocalWrite19(card, editor, true);
-      closeEditor19(card);
-    } catch (error) {
-      editor.busy = false;
-      editor.confirmDelete = false;
-      editor.status = "Delete failed: " + String(error?.message || error || "Unknown error");
-      editor.statusKind = "error";
-      updatePanelState19(card);
-    }
-  }
-
-  function handlePointerDown19(card, event) {
-    const editor = card?._gate19Editor;
-    if (!editor || editor.busy) return;
-    const vertex = event.target?.closest?.("[data-gate19-vertex]");
-    const midpoint = event.target?.closest?.("[data-gate19-midpoint]");
-    const local = screenToLocal19(card, editor.target, event.clientX, event.clientY);
-    event.preventDefault();
-    event.stopImmediatePropagation();
-
-    if (midpoint && editor.points.length >= 3 && editor.points.length < MAX_POINTS) {
-      const edge = Number(midpoint.dataset.gate19Midpoint);
-      if (!Number.isInteger(edge) || edge < 0 || edge >= editor.points.length) return;
-      const a = editor.points[edge];
-      const b = editor.points[(edge + 1) % editor.points.length];
-      const point = roundPoint19([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
-      const index = edge + 1;
-      editor.points.splice(index, 0, point);
-      editor.selected = index;
-      editor.confirmDelete = false;
-      card._gate19Drag = { pointerId: event.pointerId, index };
-      try { card._svgEl?.setPointerCapture?.(event.pointerId); } catch (_error) { /* optional */ }
-      renderOverlay19(card);
-      updatePanelState19(card);
-      return;
-    }
-
-    if (vertex) {
-      const index = Number(vertex.dataset.gate19Vertex);
-      if (!Number.isInteger(index) || index < 0 || index >= editor.points.length) return;
-      editor.selected = index;
-      editor.confirmDelete = false;
-      card._gate19Drag = { pointerId: event.pointerId, index };
-      try { card._svgEl?.setPointerCapture?.(event.pointerId); } catch (_error) { /* optional */ }
-      renderOverlay19(card);
-      updatePanelState19(card);
-      return;
-    }
-
-    if (!local || editor.points.length >= MAX_POINTS) return;
-
-    if (editor.creating && editor.points.length < 3) {
-      editor.points.push(local);
-      editor.selected = editor.points.length - 1;
-      editor.confirmDelete = false;
-      editor.status = "";
-      editor.statusKind = "";
-      renderOverlay19(card);
-      updatePanelState19(card);
-      return;
-    }
-
-    if (editor.points.length >= 3) {
-      const nearest = nearestEdge20(card, editor, event.clientX, event.clientY);
-      if (!nearest) {
-        editor.status = "Could not determine the nearest polygon edge. Try again.";
-        editor.statusKind = "warning";
-        updatePanelState19(card);
-        return;
-      }
-      const index = nearest.index + 1;
-      editor.points.splice(index, 0, local);
-      editor.selected = index;
-      editor.confirmDelete = false;
-      editor.status = "";
-      editor.statusKind = "";
-      renderOverlay19(card);
-      updatePanelState19(card);
-    }
-  }
-
-  function handlePointerMove19(card, event) {
-    const editor = card?._gate19Editor;
-    const drag = card?._gate19Drag;
-    if (!editor || !drag || drag.pointerId !== event.pointerId || editor.busy) return;
-    const local = screenToLocal19(card, editor.target, event.clientX, event.clientY);
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (!local || drag.index < 0 || drag.index >= editor.points.length) return;
-    editor.points[drag.index] = local;
-    editor.selected = drag.index;
-    editor.confirmDelete = false;
-    renderOverlay19(card);
-    updatePanelState19(card);
-  }
-
-  function handlePointerUp19(card, event) {
-    const editor = card?._gate19Editor;
-    if (!editor) return;
-    const drag = card?._gate19Drag;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (drag?.pointerId === event.pointerId) {
-      card._gate19Drag = null;
-      try { card._svgEl?.releasePointerCapture?.(event.pointerId); } catch (_error) { /* optional */ }
-      updatePanelState19(card);
-    }
-  }
-
-  function ensureUi19(card) {
-    if (!card?._domReady || typeof document === "undefined") return;
-    const wrap = card.querySelector?.(".nm-wrap");
-    if (!wrap || !card._svgEl) return;
-
-    if (!card._gate19Button) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "nm-gate19-button";
-      button.setAttribute("aria-label", "Edit gate areas");
-      button.setAttribute("title", "Edit gate areas");
-      button.innerHTML = '<ha-icon icon="mdi:pencil"></ha-icon>';
-      wrap.appendChild(button);
-      button.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (card._gate19Editor) return;
-        renderMenu19(card);
-        card._gate19Menu.hidden = !card._gate19Menu.hidden;
-        button.classList.toggle("active", !card._gate19Menu.hidden);
-      });
-      card._gate19Button = button;
-    }
-
-    if (!card._gate19Menu) {
-      const menu = document.createElement("div");
-      menu.className = "nm-gate19-menu";
-      menu.hidden = true;
-      wrap.appendChild(menu);
-      menu.addEventListener("click", (event) => {
-        const add = event.target?.closest?.("[data-gate19-add]");
-        const edit = event.target?.closest?.("[data-gate19-edit]");
-        const button = add || edit;
-        if (!button) return;
-        event.preventDefault();
-        event.stopPropagation();
-        const target = card._gate19Targets?.[Number(button.dataset.gate19Target)];
-        if (!target) return;
-        if (add) {
-          startEditor19(card, target, null);
+        if (!card?._mapPayload) return [];
+        return [{
+          mode: "single",
+          key: "single:" + singleEntryId19(card),
+          entryId: singleEntryId19(card),
+          member: null,
+          name: String(card._mapPayload?.frontend?.name || card._mapPayload?.model || "Mower"),
+          deviceId: card._mapPayload?.frontend?.device_id || card._deviceId || null,
+          mapPath: card._mapPayload?.frontend?.map_api_path || card._apiPath?.() || null,
+          payload: card._mapPayload,
+        }];
+      };
+    
+      const currentPayload19 = (card, target) => {
+        if (!target) return null;
+        if (target.mode === "multi") {
+          const state = card._multi036Members instanceof Map ? card._multi036Members.get(String(target.entryId)) : null;
+          return state?.map || target.payload || null;
+        }
+        return card._mapPayload || target.payload || null;
+      };
+    
+      const memberGroup19 = (card, entryId) => {
+        const groups = card?._multi036Layer?.querySelectorAll?.(".nm-multi-member-map") || [];
+        return Array.from(groups).find((group) => String(group?.dataset?.entryId || "") === String(entryId)) || null;
+      };
+    
+      const rootPoint19 = (card, clientX, clientY) => {
+        const svg = card?._svgEl;
+        if (!svg) return null;
+        try {
+          const matrix = svg.getScreenCTM?.();
+          if (matrix && typeof DOMPoint === "function") {
+            const point = new DOMPoint(Number(clientX), Number(clientY)).matrixTransform(matrix.inverse());
+            return [point.x, point.y];
+          }
+        } catch (_error) { /* fall through to viewBox math */ }
+        const rect = svg.getBoundingClientRect?.();
+        const viewBox = svg.viewBox?.baseVal;
+        if (!rect || !viewBox || !rect.width || !rect.height) return null;
+        return [
+          viewBox.x + (Number(clientX) - rect.left) / rect.width * viewBox.width,
+          viewBox.y + (Number(clientY) - rect.top) / rect.height * viewBox.height,
+        ];
+      };
+    
+      const localToRoot19 = (card, target, point) => {
+        if (!target || !Array.isArray(point)) return null;
+        const x = Number(point[0]), y = Number(point[1]);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        if (target.mode !== "multi") {
+          const layout = card?._layout;
+          if (!layout?.sx || !layout?.sy) return null;
+          return [layout.sx(x), layout.sy(y)];
+        }
+        const group = memberGroup19(card, target.entryId);
+        const svg = card?._svgEl;
+        if (!group || !svg || typeof DOMPoint !== "function") return null;
+        try {
+          const groupScreen = group.getScreenCTM?.();
+          const svgScreen = svg.getScreenCTM?.();
+          if (!groupScreen || !svgScreen) return null;
+          const screen = new DOMPoint(x, y).matrixTransform(groupScreen);
+          const root = screen.matrixTransform(svgScreen.inverse());
+          return [root.x, root.y];
+        } catch (_error) {
+          return null;
+        }
+      };
+    
+      const screenToLocal19 = (card, target, clientX, clientY) => {
+        if (!target) return null;
+        if (target.mode === "multi") {
+          const group = memberGroup19(card, target.entryId);
+          if (!group || typeof DOMPoint !== "function") return null;
+          try {
+            const matrix = group.getScreenCTM?.();
+            if (!matrix) return null;
+            const local = new DOMPoint(Number(clientX), Number(clientY)).matrixTransform(matrix.inverse());
+            return roundPoint19([local.x, local.y]);
+          } catch (_error) {
+            return null;
+          }
+        }
+        const root = rootPoint19(card, clientX, clientY);
+        const layout = card?._layout;
+        if (!root || !layout?.sx || !layout?.sy) return null;
+        const sx0 = Number(layout.sx(0)), sx1 = Number(layout.sx(1));
+        const sy0 = Number(layout.sy(0)), sy1 = Number(layout.sy(1));
+        const dx = sx1 - sx0, dy = sy1 - sy0;
+        if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.abs(dx) < 1e-9 || Math.abs(dy) < 1e-9) return null;
+        return roundPoint19([(root[0] - sx0) / dx, (root[1] - sy0) / dy]);
+      };
+    
+      const rootUnitsPerPixel19 = (card) => {
+        const svg = card?._svgEl;
+        const rect = svg?.getBoundingClientRect?.();
+        const viewBox = svg?.viewBox?.baseVal;
+        if (!rect?.width || !viewBox?.width) return 1;
+        return viewBox.width / rect.width;
+      };
+    
+      const distanceToSegment20 = (point, start, end) => {
+        const px = Number(point?.[0]), py = Number(point?.[1]);
+        const ax = Number(start?.[0]), ay = Number(start?.[1]);
+        const bx = Number(end?.[0]), by = Number(end?.[1]);
+        if (![px, py, ax, ay, bx, by].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
+        const dx = bx - ax, dy = by - ay;
+        const length2 = dx * dx + dy * dy;
+        if (length2 <= 1e-12) return Math.hypot(px - ax, py - ay);
+        const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / length2));
+        return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+      };
+    
+      const nearestEdge20 = (card, editor, clientX, clientY) => {
+        const click = rootPoint19(card, clientX, clientY);
+        if (!click || !editor || editor.points.length < 3) return null;
+        const points = editor.points.map((point) => localToRoot19(card, editor.target, point));
+        if (points.some((point) => !point || !point.every(Number.isFinite))) return null;
+        const unit = Math.max(1e-9, rootUnitsPerPixel19(card));
+        let index = null;
+        let distancePx = Number.POSITIVE_INFINITY;
+        for (let current = 0; current < points.length; current += 1) {
+          const next = (current + 1) % points.length;
+          const candidate = distanceToSegment20(click, points[current], points[next]) / unit;
+          if (candidate < distancePx) {
+            distancePx = candidate;
+            index = current;
+          }
+        }
+        return index !== null ? { index, distancePx } : null;
+      };
+    
+      const polygonSelfIntersects20 = (points) => {
+        if (!Array.isArray(points) || points.length < 4) return false;
+        const epsilon = 1e-9;
+        const cross = (a, b, c) =>
+          (Number(b[0]) - Number(a[0])) * (Number(c[1]) - Number(a[1])) -
+          (Number(b[1]) - Number(a[1])) * (Number(c[0]) - Number(a[0]));
+        const onSegment = (point, start, end) => {
+          if (Math.abs(cross(start, end, point)) > epsilon) return false;
+          return Number(point[0]) >= Math.min(Number(start[0]), Number(end[0])) - epsilon &&
+            Number(point[0]) <= Math.max(Number(start[0]), Number(end[0])) + epsilon &&
+            Number(point[1]) >= Math.min(Number(start[1]), Number(end[1])) - epsilon &&
+            Number(point[1]) <= Math.max(Number(start[1]), Number(end[1])) + epsilon;
+        };
+        const intersects = (a1, a2, b1, b2) => {
+          const c1 = cross(a1, a2, b1), c2 = cross(a1, a2, b2);
+          const c3 = cross(b1, b2, a1), c4 = cross(b1, b2, a2);
+          if (((c1 > epsilon && c2 < -epsilon) || (c1 < -epsilon && c2 > epsilon)) &&
+              ((c3 > epsilon && c4 < -epsilon) || (c3 < -epsilon && c4 > epsilon))) return true;
+          return (Math.abs(c1) <= epsilon && onSegment(b1, a1, a2)) ||
+            (Math.abs(c2) <= epsilon && onSegment(b2, a1, a2)) ||
+            (Math.abs(c3) <= epsilon && onSegment(a1, b1, b2)) ||
+            (Math.abs(c4) <= epsilon && onSegment(a2, b1, b2));
+        };
+        const count = points.length;
+        for (let first = 0; first < count; first += 1) {
+          const firstNext = (first + 1) % count;
+          for (let second = first + 1; second < count; second += 1) {
+            const secondNext = (second + 1) % count;
+            if (first === second || firstNext === second || secondNext === first) continue;
+            if (intersects(points[first], points[firstNext], points[second], points[secondNext])) return true;
+          }
+        }
+        return false;
+      };
+    
+      const defaultName19 = (payload) => {
+        const used = new Set(gateAreas19(payload).map((area) => slug19(area?.name || area?.slug)));
+        if (!used.has("gate_area")) return "Gate area";
+        for (let index = 2; index < 100; index += 1) {
+          if (!used.has("gate_area_" + index)) return "Gate area " + index;
+        }
+        return "Gate area " + Date.now();
+      };
+    
+      const areaId19 = (area) => String(area?.slug || slug19(area?.name || "Gate area"));
+    
+      const editorRecord19 = (editor) => {
+        const points = editor.points.map(roundPoint19);
+        const xs = points.map((point) => point[0]);
+        const ys = points.map((point) => point[1]);
+        return {
+          name: editor.name.trim(),
+          slug: slug19(editor.name),
+          x_min: Math.min(...xs),
+          x_max: Math.max(...xs),
+          y_min: Math.min(...ys),
+          y_max: Math.max(...ys),
+          polygon: points,
+        };
+      };
+    
+      const applyLocalWrite19 = (card, editor, deleting = false) => {
+        const target = editor?.target;
+        const payload = currentPayload19(card, target);
+        if (!payload) return;
+        const existing = gateAreas19(payload).map((item) => ({ ...item }));
+        const matchId = String(editor.areaId || "");
+        const index = matchId ? existing.findIndex((area) => areaId19(area) === matchId) : -1;
+        if (deleting) {
+          if (index >= 0) existing.splice(index, 1);
+        } else {
+          const record = editorRecord19(editor);
+          if (index >= 0) existing[index] = record;
+          else existing.push(record);
+        }
+        const nextPayload = { ...payload, gate_areas: existing };
+    
+        if (target.mode === "multi") {
+          if (card._multi036Members instanceof Map) {
+            const state = card._multi036Members.get(String(target.entryId));
+            if (state) {
+              state.map = nextPayload;
+              state.mapAt = Date.now();
+            }
+          }
+          if (String(card?._mapPayload?.frontend?.entry_id || "") === String(target.entryId)) {
+            card._mapPayload = nextPayload;
+          }
+          card._multi036MapRenderKey = null;
+          card._applyViewBox?.();
           return;
         }
-        const payload = currentPayload19(card, target);
-        const area = gateAreas19(payload)[Number(button.dataset.gate19Edit)];
-        if (area) startEditor19(card, target, area);
-      });
-      card._gate19Menu = menu;
-    }
-
-    if (!card._gate19Panel) {
-      const panel = document.createElement("div");
-      panel.className = "nm-gate19-panel";
-      panel.hidden = true;
-      wrap.appendChild(panel);
-      card._gate19Panel = panel;
-    }
-
-    if (!card._gate19Layer) {
-      const layer = document.createElementNS(SVG_NS, "g");
-      layer.setAttribute("class", "nm-gate19-layer");
-      layer.style.display = "none";
-      card._svgEl.appendChild(layer);
-      card._gate19Layer = layer;
-    } else if (card._gate19Layer.parentNode !== card._svgEl) {
-      card._svgEl.appendChild(card._gate19Layer);
-    } else {
-      card._svgEl.appendChild(card._gate19Layer);
-    }
-
-    if (!card._gate19PointerBound) {
-      card._gate19PointerBound = true;
-      card._svgEl.addEventListener("pointerdown", (event) => handlePointerDown19(card, event), true);
-      card._svgEl.addEventListener("pointermove", (event) => handlePointerMove19(card, event), true);
-      card._svgEl.addEventListener("pointerup", (event) => handlePointerUp19(card, event), true);
-      card._svgEl.addEventListener("pointercancel", (event) => handlePointerUp19(card, event), true);
-      card.addEventListener("pointerdown", (event) => {
-        if (!card._gate19Menu || card._gate19Menu.hidden || card._gate19Editor) return;
-        const path = typeof event.composedPath === "function" ? event.composedPath() : [];
-        if (path.includes(card._gate19Menu) || path.includes(card._gate19Button)) return;
-        card._gate19Menu.hidden = true;
+    
+        card._mapPayload = nextPayload;
+        card._mapStaticSignature = card._payloadStaticSignature?.(nextPayload) || null;
+        card._staticRenderKey = null;
+        card._layout = null;
+        card._buildLayout?.();
+        card._renderStatic?.();
+      };
+    
+      const editorHint19 = (editor) => {
+        if (!editor) return "";
+        if (editor.creating && editor.points.length < 3) return "Tap the map to add the first 3 corner points.";
+        if (polygonSelfIntersects20(editor.points)) return "Polygon edges cross. Move a corner until the shape no longer intersects itself.";
+        return "Drag corners. Tap anywhere to insert another point on the nearest edge, or use +.";
+      };
+    
+      function renderOverlay19(card) {
+        const layer = card?._gate19Layer;
+        const editor = card?._gate19Editor;
+        if (!layer) return;
+        if (!editor) {
+          layer.innerHTML = "";
+          layer.style.display = "none";
+          return;
+        }
+        layer.style.display = "";
+        const rootPoints = editor.points.map((point) => localToRoot19(card, editor.target, point));
+        if (rootPoints.some((point) => !point || !point.every(Number.isFinite))) {
+          layer.innerHTML = "";
+          return;
+        }
+        const unit = rootUnitsPerPixel19(card);
+        const vertexRadius = Math.max(3 * unit, 7 * unit);
+        const midpointRadius = Math.max(3 * unit, 6 * unit);
+        const pointString = rootPoints.map((point) => point[0].toFixed(2) + "," + point[1].toFixed(2)).join(" ");
+        const invalidGeometry = polygonSelfIntersects20(editor.points);
+        const color = esc19(invalidGeometry ? "var(--error-color,#db4437)" : (card?._config?.gate_area_color || "#8e24aa"));
+        const parts = [];
+        if (rootPoints.length >= 3) {
+          parts.push('<polygon class="nm-gate19-preview" points="' + pointString + '" fill="' + color + '" fill-opacity=".22" stroke="' + color + '" stroke-width="3" stroke-dasharray="10 6" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>');
+        } else if (rootPoints.length >= 2) {
+          parts.push('<polyline class="nm-gate19-preview" points="' + pointString + '" fill="none" stroke="' + color + '" stroke-width="3" stroke-dasharray="10 6" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>');
+        }
+    
+        if (rootPoints.length >= 3 && rootPoints.length < MAX_POINTS) {
+          rootPoints.forEach((point, index) => {
+            const next = rootPoints[(index + 1) % rootPoints.length];
+            const mx = (point[0] + next[0]) / 2;
+            const my = (point[1] + next[1]) / 2;
+            parts.push('<g class="nm-gate19-midpoint" data-gate19-midpoint="' + index + '" tabindex="0" role="button" aria-label="Add gate-area point"><circle cx="' + mx.toFixed(2) + '" cy="' + my.toFixed(2) + '" r="' + midpointRadius.toFixed(2) + '" fill="var(--card-background-color,#fff)" stroke="' + color + '" stroke-width="2" vector-effect="non-scaling-stroke"/><text x="' + mx.toFixed(2) + '" y="' + my.toFixed(2) + '" text-anchor="middle" dominant-baseline="central" font-size="' + (11 * unit).toFixed(2) + '" font-weight="800" fill="' + color + '" pointer-events="none">+</text></g>');
+          });
+        }
+    
+        rootPoints.forEach((point, index) => {
+          const selected = Number(editor.selected) === index;
+          parts.push('<circle class="nm-gate19-vertex' + (selected ? ' selected' : '') + '" data-gate19-vertex="' + index + '" cx="' + point[0].toFixed(2) + '" cy="' + point[1].toFixed(2) + '" r="' + vertexRadius.toFixed(2) + '" fill="' + (selected ? '#FF5A00' : color) + '" stroke="var(--card-background-color,#fff)" stroke-width="2.5" vector-effect="non-scaling-stroke"/>');
+        });
+        layer.innerHTML = parts.join("");
+      }
+    
+      function updatePanelState19(card) {
+        const panel = card?._gate19Panel;
+        const editor = card?._gate19Editor;
+        if (!panel || !editor) return;
+        const meta = panel.querySelector("[data-gate19-meta]");
+        const hint = panel.querySelector("[data-gate19-hint]");
+        const status = panel.querySelector("[data-gate19-status]");
+        const save = panel.querySelector("[data-gate19-save]");
+        const remove = panel.querySelector("[data-gate19-remove]");
+        const deletion = panel.querySelector("[data-gate19-delete]");
+        const selected = Number.isInteger(editor.selected) && editor.selected >= 0 && editor.selected < editor.points.length ? editor.points[editor.selected] : null;
+        const invalidGeometry = polygonSelfIntersects20(editor.points);
+        if (meta) meta.textContent = editor.points.length + " points" + (selected ? " · X " + selected[0].toFixed(2) + " · Y " + selected[1].toFixed(2) : "");
+        if (hint) hint.textContent = editorHint19(editor);
+        if (status) {
+          status.textContent = editor.status || (invalidGeometry ? "Fix crossing edges before saving." : "");
+          status.className = "nm-gate19-status " + (editor.statusKind || (invalidGeometry ? "error" : ""));
+        }
+        if (save) save.disabled = editor.busy || editor.points.length < 3 || invalidGeometry || !String(editor.name || "").trim();
+        if (remove) remove.disabled = editor.busy || !selected || editor.points.length <= 3;
+        if (deletion) {
+          deletion.disabled = editor.busy;
+          deletion.textContent = editor.confirmDelete ? "Confirm delete" : "Delete area";
+        }
+      }
+    
+      function renderPanel19(card) {
+        const panel = card?._gate19Panel;
+        const editor = card?._gate19Editor;
+        if (!panel) return;
+        if (!editor) {
+          panel.hidden = true;
+          panel.innerHTML = "";
+          return;
+        }
+        panel.hidden = false;
+        panel.innerHTML =
+          '<div class="nm-gate19-panel-head"><div class="nm-gate19-panel-title">' + (editor.creating ? 'Add gate area' : 'Edit gate area') + '</div><div class="nm-gate19-meta" data-gate19-meta></div></div>' +
+          '<label class="nm-gate19-name"><span>Name</span><input type="text" maxlength="64" data-gate19-name value="' + esc19(editor.name) + '"></label>' +
+          '<div class="nm-gate19-hint" data-gate19-hint></div>' +
+          '<div class="nm-gate19-status" data-gate19-status aria-live="polite"></div>' +
+          '<div class="nm-gate19-actions">' +
+            '<button type="button" class="secondary" data-gate19-remove><ha-icon icon="mdi:minus-circle-outline"></ha-icon><span>Remove point</span></button>' +
+            (editor.areaId ? '<button type="button" class="danger" data-gate19-delete>Delete area</button>' : '') +
+            '<span class="nm-gate19-spacer"></span>' +
+            '<button type="button" class="secondary" data-gate19-cancel>Cancel</button>' +
+            '<button type="button" class="primary" data-gate19-save>Save</button>' +
+          '</div>';
+    
+        panel.querySelector("[data-gate19-name]")?.addEventListener("input", (event) => {
+          editor.name = String(event.target?.value || "");
+          editor.confirmDelete = false;
+          updatePanelState19(card);
+        });
+        panel.querySelector("[data-gate19-cancel]")?.addEventListener("click", () => closeEditor19(card));
+        panel.querySelector("[data-gate19-remove]")?.addEventListener("click", () => {
+          if (!Number.isInteger(editor.selected) || editor.points.length <= 3 || editor.busy) return;
+          editor.points.splice(editor.selected, 1);
+          editor.selected = null;
+          editor.confirmDelete = false;
+          renderOverlay19(card);
+          updatePanelState19(card);
+        });
+        panel.querySelector("[data-gate19-save]")?.addEventListener("click", () => { void saveEditor19(card); });
+        panel.querySelector("[data-gate19-delete]")?.addEventListener("click", () => {
+          if (editor.busy) return;
+          if (!editor.confirmDelete) {
+            editor.confirmDelete = true;
+            editor.status = "Tap Confirm delete again to remove this gate area.";
+            editor.statusKind = "warning";
+            updatePanelState19(card);
+            return;
+          }
+          void deleteEditor19(card);
+        });
+        updatePanelState19(card);
+      }
+    
+      function startEditor19(card, target, area = null) {
+        if (!target) return;
+        const polygon = area ? areaPolygon19(area) : [];
+        card._gate19Editor = {
+          target: { ...target },
+          areaId: area ? areaId19(area) : null,
+          name: area ? String(area.name || "Gate area") : defaultName19(currentPayload19(card, target)),
+          points: polygon.map(roundPoint19),
+          creating: !area,
+          selected: null,
+          busy: false,
+          status: "",
+          statusKind: "",
+          confirmDelete: false,
+        };
+        card._gate19Drag = null;
+        if (card._gate19Menu) card._gate19Menu.hidden = true;
+        card._gate19Button?.classList?.add?.("active");
+        card._svgEl?.classList?.add?.("nm-gate19-editing");
+        if (card._zoneInfoEl) card._zoneInfoEl.hidden = true;
+        renderPanel19(card);
+        renderOverlay19(card);
+      }
+    
+      function closeEditor19(card) {
+        card._gate19Editor = null;
+        card._gate19Drag = null;
         card._gate19Button?.classList?.remove?.("active");
-      }, true);
-    }
-
-    if (!card._gate19Styles) {
-      const style = document.createElement("style");
-      style.dataset.gateEditor19 = "true";
-      style.textContent = [
-        ".nm-gate19-button{position:absolute;top:10px;right:10px;z-index:8;width:40px;height:40px;display:grid;place-items:center;padding:0;border:1px solid color-mix(in srgb,var(--divider-color) 75%,transparent);border-radius:50%;cursor:pointer;color:var(--primary-text-color);background:color-mix(in srgb,var(--card-background-color,#fff) 88%,transparent);box-shadow:0 2px 8px rgba(0,0,0,.22);backdrop-filter:blur(5px)}",
-        ".nm-gate19-button:hover,.nm-gate19-button:focus-visible,.nm-gate19-button.active{color:#8e24aa;background:color-mix(in srgb,var(--card-background-color,#fff) 94%,#8e24aa 6%);outline:none}.nm-gate19-button ha-icon{--mdc-icon-size:21px}",
-        ".nm-gate19-menu{position:absolute;top:56px;right:10px;z-index:8;width:min(270px,calc(100% - 20px));max-height:min(58%,360px);overflow:auto;padding:8px;border:1px solid var(--divider-color);border-radius:12px;color:var(--primary-text-color);background:color-mix(in srgb,var(--card-background-color,#fff) 94%,transparent);box-shadow:0 4px 18px rgba(0,0,0,.28);backdrop-filter:blur(7px)}.nm-gate19-menu[hidden]{display:none}",
-        ".nm-gate19-menu-title{padding:5px 8px 7px;font-size:.86rem;font-weight:750}.nm-gate19-group+.nm-gate19-group{margin-top:7px;padding-top:7px;border-top:1px solid var(--divider-color)}.nm-gate19-group-title{padding:3px 8px;color:var(--secondary-text-color);font-size:.74rem;font-weight:750;text-transform:uppercase}",
-        ".nm-gate19-menu-item{width:100%;min-height:38px;display:flex;align-items:center;gap:9px;padding:7px 9px;border:0;border-radius:9px;cursor:pointer;text-align:left;color:var(--primary-text-color);background:transparent;font:inherit;font-size:.86rem}.nm-gate19-menu-item:hover,.nm-gate19-menu-item:focus-visible{background:var(--secondary-background-color);outline:none}.nm-gate19-menu-item.add{color:#8e24aa;font-weight:700}.nm-gate19-menu-item ha-icon{--mdc-icon-size:19px}.nm-gate19-empty{padding:10px 8px;color:var(--secondary-text-color);font-size:.82rem}",
-        ".nm-gate19-panel{position:absolute;left:10px;right:10px;bottom:10px;z-index:9;padding:11px;border:1px solid var(--divider-color);border-radius:12px;color:var(--primary-text-color);background:color-mix(in srgb,var(--card-background-color,#fff) 95%,transparent);box-shadow:0 4px 18px rgba(0,0,0,.30);backdrop-filter:blur(7px)}.nm-gate19-panel[hidden]{display:none}",
-        ".nm-gate19-panel-head{display:flex;align-items:baseline;gap:10px}.nm-gate19-panel-title{flex:1;font-size:.92rem;font-weight:750}.nm-gate19-meta{color:var(--secondary-text-color);font-size:.72rem;white-space:nowrap}.nm-gate19-name{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;margin-top:8px;color:var(--secondary-text-color);font-size:.76rem}.nm-gate19-name input{min-width:0;height:34px;box-sizing:border-box;padding:6px 9px;border:1px solid var(--divider-color);border-radius:8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit}",
-        ".nm-gate19-hint{margin-top:7px;color:var(--secondary-text-color);font-size:.73rem;line-height:1.3}.nm-gate19-status{min-height:0;margin-top:5px;font-size:.73rem}.nm-gate19-status:empty{display:none}.nm-gate19-status.error{color:var(--error-color,#db4437)}.nm-gate19-status.saving{color:var(--primary-color)}.nm-gate19-status.warning{color:#f57c00}",
-        ".nm-gate19-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}.nm-gate19-actions button{min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 10px;border:0;border-radius:8px;cursor:pointer;font:inherit;font-size:.76rem;font-weight:700}.nm-gate19-actions button:disabled{opacity:.42;cursor:default}.nm-gate19-actions .secondary{color:var(--primary-text-color);background:var(--secondary-background-color)}.nm-gate19-actions .primary{color:var(--text-primary-color,#fff);background:var(--primary-color)}.nm-gate19-actions .danger{color:var(--error-color,#db4437);background:color-mix(in srgb,var(--error-color,#db4437) 10%,transparent)}.nm-gate19-actions ha-icon{--mdc-icon-size:18px}.nm-gate19-spacer{flex:1}",
-        ".nm-map.nm-gate19-editing{touch-action:none!important;cursor:crosshair}.nm-gate19-layer{pointer-events:none}.nm-gate19-vertex,.nm-gate19-midpoint{pointer-events:all;cursor:grab;touch-action:none}.nm-gate19-vertex:active,.nm-gate19-midpoint:active{cursor:grabbing}",
-        "@media(max-width:520px){.nm-gate19-panel{left:6px;right:6px;bottom:6px;padding:9px}.nm-gate19-actions{gap:5px}.nm-gate19-actions button{padding:6px 8px}.nm-gate19-actions button span{display:none}.nm-gate19-name{grid-template-columns:1fr}.nm-gate19-name span{display:none}.nm-gate19-meta{font-size:.68rem}}"
-      ].join("\n");
-      card.appendChild(style);
-      card._gate19Styles = style;
-    }
+        card._svgEl?.classList?.remove?.("nm-gate19-editing");
+        if (card._gate19Panel) {
+          card._gate19Panel.hidden = true;
+          card._gate19Panel.innerHTML = "";
+        }
+        renderOverlay19(card);
+      }
+    
+      function renderMenu19(card) {
+        const menu = card?._gate19Menu;
+        if (!menu) return;
+        const targets = targets19(card);
+        card._gate19Targets = targets;
+        if (!targets.length) {
+          menu.innerHTML = '<div class="nm-gate19-menu-title">Gate areas</div><div class="nm-gate19-empty">Waiting for map data…</div>';
+          return;
+        }
+        const multi = targets.length > 1 || multiActive19(card);
+        const groups = targets.map((target, targetIndex) => {
+          const areas = gateAreas19(currentPayload19(card, target));
+          const areaButtons = areas.map((area, areaIndex) =>
+            '<button type="button" class="nm-gate19-menu-item" data-gate19-edit="' + areaIndex + '" data-gate19-target="' + targetIndex + '"><ha-icon icon="mdi:vector-polygon"></ha-icon><span>' + esc19(area?.name || "Gate area") + '</span></button>'
+          ).join("");
+          return '<div class="nm-gate19-group">' +
+            (multi ? '<div class="nm-gate19-group-title">' + esc19(target.name) + '</div>' : '') +
+            '<button type="button" class="nm-gate19-menu-item add" data-gate19-add="1" data-gate19-target="' + targetIndex + '"><ha-icon icon="mdi:plus"></ha-icon><span>Add gate area</span></button>' +
+            areaButtons +
+          '</div>';
+        }).join("");
+        menu.innerHTML = '<div class="nm-gate19-menu-title">Gate areas</div>' + groups;
+      }
+    
+      async function saveEditor19(card) {
+        const editor = card?._gate19Editor;
+        if (!editor || editor.busy) return;
+        editor.name = String(editor.name || "").trim();
+        if (!editor.name || editor.points.length < 3) {
+          editor.status = "Name and at least 3 points are required.";
+          editor.statusKind = "error";
+          updatePanelState19(card);
+          return;
+        }
+        if (editor.points.length > MAX_POINTS) {
+          editor.status = "A gate area can contain at most " + MAX_POINTS + " points.";
+          editor.statusKind = "error";
+          updatePanelState19(card);
+          return;
+        }
+        if (polygonSelfIntersects20(editor.points)) {
+          editor.status = "Polygon edges must not cross.";
+          editor.statusKind = "error";
+          updatePanelState19(card);
+          return;
+        }
+        if (editor.target.mode === "multi" && !editor.target.deviceId) {
+          editor.status = "Mower device ID is unavailable. Refresh the map and try again.";
+          editor.statusKind = "error";
+          updatePanelState19(card);
+          return;
+        }
+        editor.busy = true;
+        editor.status = "Saving…";
+        editor.statusKind = "saving";
+        editor.confirmDelete = false;
+        updatePanelState19(card);
+        const data = {
+          name: editor.name,
+          polygon: editor.points.map(roundPoint19),
+        };
+        if (editor.areaId) data.gate_area_id = editor.areaId;
+        if (editor.target.deviceId) data.device_id = editor.target.deviceId;
+        try {
+          await card._hass.callService("navimower", "set_gate_area", data);
+          applyLocalWrite19(card, editor, false);
+          closeEditor19(card);
+        } catch (error) {
+          editor.busy = false;
+          editor.status = "Save failed: " + String(error?.message || error || "Unknown error");
+          editor.statusKind = "error";
+          updatePanelState19(card);
+        }
+      }
+    
+      async function deleteEditor19(card) {
+        const editor = card?._gate19Editor;
+        if (!editor?.areaId || editor.busy) return;
+        if (editor.target.mode === "multi" && !editor.target.deviceId) {
+          editor.status = "Mower device ID is unavailable. Refresh the map and try again.";
+          editor.statusKind = "error";
+          editor.confirmDelete = false;
+          updatePanelState19(card);
+          return;
+        }
+        editor.busy = true;
+        editor.status = "Deleting…";
+        editor.statusKind = "saving";
+        updatePanelState19(card);
+        const data = { gate_area_id: editor.areaId };
+        if (editor.target.deviceId) data.device_id = editor.target.deviceId;
+        try {
+          await card._hass.callService("navimower", "delete_gate_area", data);
+          applyLocalWrite19(card, editor, true);
+          closeEditor19(card);
+        } catch (error) {
+          editor.busy = false;
+          editor.confirmDelete = false;
+          editor.status = "Delete failed: " + String(error?.message || error || "Unknown error");
+          editor.statusKind = "error";
+          updatePanelState19(card);
+        }
+      }
+    
+      function handlePointerDown19(card, event) {
+        const editor = card?._gate19Editor;
+        if (!editor || editor.busy) return;
+        const vertex = event.target?.closest?.("[data-gate19-vertex]");
+        const midpoint = event.target?.closest?.("[data-gate19-midpoint]");
+        const local = screenToLocal19(card, editor.target, event.clientX, event.clientY);
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    
+        if (midpoint && editor.points.length >= 3 && editor.points.length < MAX_POINTS) {
+          const edge = Number(midpoint.dataset.gate19Midpoint);
+          if (!Number.isInteger(edge) || edge < 0 || edge >= editor.points.length) return;
+          const a = editor.points[edge];
+          const b = editor.points[(edge + 1) % editor.points.length];
+          const point = roundPoint19([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
+          const index = edge + 1;
+          editor.points.splice(index, 0, point);
+          editor.selected = index;
+          editor.confirmDelete = false;
+          card._gate19Drag = { pointerId: event.pointerId, index };
+          try { card._svgEl?.setPointerCapture?.(event.pointerId); } catch (_error) { /* optional */ }
+          renderOverlay19(card);
+          updatePanelState19(card);
+          return;
+        }
+    
+        if (vertex) {
+          const index = Number(vertex.dataset.gate19Vertex);
+          if (!Number.isInteger(index) || index < 0 || index >= editor.points.length) return;
+          editor.selected = index;
+          editor.confirmDelete = false;
+          card._gate19Drag = { pointerId: event.pointerId, index };
+          try { card._svgEl?.setPointerCapture?.(event.pointerId); } catch (_error) { /* optional */ }
+          renderOverlay19(card);
+          updatePanelState19(card);
+          return;
+        }
+    
+        if (!local || editor.points.length >= MAX_POINTS) return;
+    
+        if (editor.creating && editor.points.length < 3) {
+          editor.points.push(local);
+          editor.selected = editor.points.length - 1;
+          editor.confirmDelete = false;
+          editor.status = "";
+          editor.statusKind = "";
+          renderOverlay19(card);
+          updatePanelState19(card);
+          return;
+        }
+    
+        if (editor.points.length >= 3) {
+          const nearest = nearestEdge20(card, editor, event.clientX, event.clientY);
+          if (!nearest) {
+            editor.status = "Could not determine the nearest polygon edge. Try again.";
+            editor.statusKind = "warning";
+            updatePanelState19(card);
+            return;
+          }
+          const index = nearest.index + 1;
+          editor.points.splice(index, 0, local);
+          editor.selected = index;
+          editor.confirmDelete = false;
+          editor.status = "";
+          editor.statusKind = "";
+          renderOverlay19(card);
+          updatePanelState19(card);
+        }
+      }
+    
+      function handlePointerMove19(card, event) {
+        const editor = card?._gate19Editor;
+        const drag = card?._gate19Drag;
+        if (!editor || !drag || drag.pointerId !== event.pointerId || editor.busy) return;
+        const local = screenToLocal19(card, editor.target, event.clientX, event.clientY);
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!local || drag.index < 0 || drag.index >= editor.points.length) return;
+        editor.points[drag.index] = local;
+        editor.selected = drag.index;
+        editor.confirmDelete = false;
+        renderOverlay19(card);
+        updatePanelState19(card);
+      }
+    
+      function handlePointerUp19(card, event) {
+        const editor = card?._gate19Editor;
+        if (!editor) return;
+        const drag = card?._gate19Drag;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (drag?.pointerId === event.pointerId) {
+          card._gate19Drag = null;
+          try { card._svgEl?.releasePointerCapture?.(event.pointerId); } catch (_error) { /* optional */ }
+          updatePanelState19(card);
+        }
+      }
+    
+      function ensureUi19(card) {
+        if (!card?._domReady || typeof document === "undefined") return;
+        const wrap = card.querySelector?.(".nm-wrap");
+        if (!wrap || !card._svgEl) return;
+    
+        if (!card._gate19Button) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "nm-gate19-button";
+          button.setAttribute("aria-label", "Edit gate areas");
+          button.setAttribute("title", "Edit gate areas");
+          button.innerHTML = '<ha-icon icon="mdi:pencil"></ha-icon>';
+          wrap.appendChild(button);
+          button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (card._gate19Editor) return;
+            renderMenu19(card);
+            card._gate19Menu.hidden = !card._gate19Menu.hidden;
+            button.classList.toggle("active", !card._gate19Menu.hidden);
+          });
+          card._gate19Button = button;
+        }
+    
+        if (!card._gate19Menu) {
+          const menu = document.createElement("div");
+          menu.className = "nm-gate19-menu";
+          menu.hidden = true;
+          wrap.appendChild(menu);
+          menu.addEventListener("click", (event) => {
+            const add = event.target?.closest?.("[data-gate19-add]");
+            const edit = event.target?.closest?.("[data-gate19-edit]");
+            const button = add || edit;
+            if (!button) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const target = card._gate19Targets?.[Number(button.dataset.gate19Target)];
+            if (!target) return;
+            if (add) {
+              startEditor19(card, target, null);
+              return;
+            }
+            const payload = currentPayload19(card, target);
+            const area = gateAreas19(payload)[Number(button.dataset.gate19Edit)];
+            if (area) startEditor19(card, target, area);
+          });
+          card._gate19Menu = menu;
+        }
+    
+        if (!card._gate19Panel) {
+          const panel = document.createElement("div");
+          panel.className = "nm-gate19-panel";
+          panel.hidden = true;
+          wrap.appendChild(panel);
+          card._gate19Panel = panel;
+        }
+    
+        if (!card._gate19Layer) {
+          const layer = document.createElementNS(SVG_NS, "g");
+          layer.setAttribute("class", "nm-gate19-layer");
+          layer.style.display = "none";
+          card._svgEl.appendChild(layer);
+          card._gate19Layer = layer;
+        } else if (card._gate19Layer.parentNode !== card._svgEl) {
+          card._svgEl.appendChild(card._gate19Layer);
+        } else {
+          card._svgEl.appendChild(card._gate19Layer);
+        }
+    
+        if (!card._gate19PointerBound) {
+          card._gate19PointerBound = true;
+          card._svgEl.addEventListener("pointerdown", (event) => handlePointerDown19(card, event), true);
+          card._svgEl.addEventListener("pointermove", (event) => handlePointerMove19(card, event), true);
+          card._svgEl.addEventListener("pointerup", (event) => handlePointerUp19(card, event), true);
+          card._svgEl.addEventListener("pointercancel", (event) => handlePointerUp19(card, event), true);
+          card.addEventListener("pointerdown", (event) => {
+            if (!card._gate19Menu || card._gate19Menu.hidden || card._gate19Editor) return;
+            const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+            if (path.includes(card._gate19Menu) || path.includes(card._gate19Button)) return;
+            card._gate19Menu.hidden = true;
+            card._gate19Button?.classList?.remove?.("active");
+          }, true);
+        }
+    
+        if (!card._gate19Styles) {
+          const style = document.createElement("style");
+          style.dataset.gateEditor19 = "true";
+          style.textContent = [
+            ".nm-gate19-button{position:absolute;top:10px;right:10px;z-index:8;width:40px;height:40px;display:grid;place-items:center;padding:0;border:1px solid color-mix(in srgb,var(--divider-color) 75%,transparent);border-radius:50%;cursor:pointer;color:var(--primary-text-color);background:color-mix(in srgb,var(--card-background-color,#fff) 88%,transparent);box-shadow:0 2px 8px rgba(0,0,0,.22);backdrop-filter:blur(5px)}",
+            ".nm-gate19-button:hover,.nm-gate19-button:focus-visible,.nm-gate19-button.active{color:#8e24aa;background:color-mix(in srgb,var(--card-background-color,#fff) 94%,#8e24aa 6%);outline:none}.nm-gate19-button ha-icon{--mdc-icon-size:21px}",
+            ".nm-gate19-menu{position:absolute;top:56px;right:10px;z-index:8;width:min(270px,calc(100% - 20px));max-height:min(58%,360px);overflow:auto;padding:8px;border:1px solid var(--divider-color);border-radius:12px;color:var(--primary-text-color);background:color-mix(in srgb,var(--card-background-color,#fff) 94%,transparent);box-shadow:0 4px 18px rgba(0,0,0,.28);backdrop-filter:blur(7px)}.nm-gate19-menu[hidden]{display:none}",
+            ".nm-gate19-menu-title{padding:5px 8px 7px;font-size:.86rem;font-weight:750}.nm-gate19-group+.nm-gate19-group{margin-top:7px;padding-top:7px;border-top:1px solid var(--divider-color)}.nm-gate19-group-title{padding:3px 8px;color:var(--secondary-text-color);font-size:.74rem;font-weight:750;text-transform:uppercase}",
+            ".nm-gate19-menu-item{width:100%;min-height:38px;display:flex;align-items:center;gap:9px;padding:7px 9px;border:0;border-radius:9px;cursor:pointer;text-align:left;color:var(--primary-text-color);background:transparent;font:inherit;font-size:.86rem}.nm-gate19-menu-item:hover,.nm-gate19-menu-item:focus-visible{background:var(--secondary-background-color);outline:none}.nm-gate19-menu-item.add{color:#8e24aa;font-weight:700}.nm-gate19-menu-item ha-icon{--mdc-icon-size:19px}.nm-gate19-empty{padding:10px 8px;color:var(--secondary-text-color);font-size:.82rem}",
+            ".nm-gate19-panel{position:absolute;left:10px;right:10px;bottom:10px;z-index:9;padding:11px;border:1px solid var(--divider-color);border-radius:12px;color:var(--primary-text-color);background:color-mix(in srgb,var(--card-background-color,#fff) 95%,transparent);box-shadow:0 4px 18px rgba(0,0,0,.30);backdrop-filter:blur(7px)}.nm-gate19-panel[hidden]{display:none}",
+            ".nm-gate19-panel-head{display:flex;align-items:baseline;gap:10px}.nm-gate19-panel-title{flex:1;font-size:.92rem;font-weight:750}.nm-gate19-meta{color:var(--secondary-text-color);font-size:.72rem;white-space:nowrap}.nm-gate19-name{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;margin-top:8px;color:var(--secondary-text-color);font-size:.76rem}.nm-gate19-name input{min-width:0;height:34px;box-sizing:border-box;padding:6px 9px;border:1px solid var(--divider-color);border-radius:8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit}",
+            ".nm-gate19-hint{margin-top:7px;color:var(--secondary-text-color);font-size:.73rem;line-height:1.3}.nm-gate19-status{min-height:0;margin-top:5px;font-size:.73rem}.nm-gate19-status:empty{display:none}.nm-gate19-status.error{color:var(--error-color,#db4437)}.nm-gate19-status.saving{color:var(--primary-color)}.nm-gate19-status.warning{color:#f57c00}",
+            ".nm-gate19-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}.nm-gate19-actions button{min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 10px;border:0;border-radius:8px;cursor:pointer;font:inherit;font-size:.76rem;font-weight:700}.nm-gate19-actions button:disabled{opacity:.42;cursor:default}.nm-gate19-actions .secondary{color:var(--primary-text-color);background:var(--secondary-background-color)}.nm-gate19-actions .primary{color:var(--text-primary-color,#fff);background:var(--primary-color)}.nm-gate19-actions .danger{color:var(--error-color,#db4437);background:color-mix(in srgb,var(--error-color,#db4437) 10%,transparent)}.nm-gate19-actions ha-icon{--mdc-icon-size:18px}.nm-gate19-spacer{flex:1}",
+            ".nm-map.nm-gate19-editing{touch-action:none!important;cursor:crosshair}.nm-gate19-layer{pointer-events:none}.nm-gate19-vertex,.nm-gate19-midpoint{pointer-events:all;cursor:grab;touch-action:none}.nm-gate19-vertex:active,.nm-gate19-midpoint:active{cursor:grabbing}",
+            "@media(max-width:520px){.nm-gate19-panel{left:6px;right:6px;bottom:6px;padding:9px}.nm-gate19-actions{gap:5px}.nm-gate19-actions button{padding:6px 8px}.nm-gate19-actions button span{display:none}.nm-gate19-name{grid-template-columns:1fr}.nm-gate19-name span{display:none}.nm-gate19-meta{font-size:.68rem}}"
+          ].join("\n");
+          card.appendChild(style);
+          card._gate19Styles = style;
+        }
+      }
+    
+      const previousEnsure19 = proto._ensureDom;
+      if (typeof previousEnsure19 === "function") {
+        proto._ensureDom = function beta19EnsureDom(...args) {
+          const result = previousEnsure19.apply(this, args);
+          ensureUi19(this);
+          return result;
+        };
+      }
+    
+      const previousSetConfig19 = proto.setConfig;
+      if (typeof previousSetConfig19 === "function") {
+        proto.setConfig = function beta19SetConfig(...args) {
+          if (this._gate19Editor) closeEditor19(this);
+          const result = previousSetConfig19.apply(this, args);
+          ensureUi19(this);
+          return result;
+        };
+      }
+    
+      for (const method of ["_renderStatic", "_applyStaticLayers", "_applyViewBox"]) {
+        const previous = proto[method];
+        if (typeof previous !== "function") continue;
+        proto[method] = function beta19GateEditorRefresh(...args) {
+          const result = previous.apply(this, args);
+          ensureUi19(this);
+          renderOverlay19(this);
+          return result;
+        };
+      }
+    
+      const previousDisconnect19 = proto.disconnectedCallback;
+      proto.disconnectedCallback = function beta19Disconnected(...args) {
+        if (this._gate19Editor) closeEditor19(this);
+        return previousDisconnect19?.apply(this, args);
+      };
   }
 
-  const previousEnsure19 = proto._ensureDom;
-  if (typeof previousEnsure19 === "function") {
-    proto._ensureDom = function beta19EnsureDom(...args) {
-      const result = previousEnsure19.apply(this, args);
-      ensureUi19(this);
-      return result;
-    };
-  }
-
-  const previousSetConfig19 = proto.setConfig;
-  if (typeof previousSetConfig19 === "function") {
-    proto.setConfig = function beta19SetConfig(...args) {
-      if (this._gate19Editor) closeEditor19(this);
-      const result = previousSetConfig19.apply(this, args);
-      ensureUi19(this);
-      return result;
-    };
-  }
-
-  for (const method of ["_renderStatic", "_applyStaticLayers", "_applyViewBox"]) {
-    const previous = proto[method];
-    if (typeof previous !== "function") continue;
-    proto[method] = function beta19GateEditorRefresh(...args) {
-      const result = previous.apply(this, args);
-      ensureUi19(this);
-      renderOverlay19(this);
-      return result;
-    };
-  }
-
-  const previousDisconnect19 = proto.disconnectedCallback;
-  proto.disconnectedCallback = function beta19Disconnected(...args) {
-    if (this._gate19Editor) closeEditor19(this);
-    return previousDisconnect19?.apply(this, args);
-  };
-
-})();
 
 // 0.3.6-beta20: edge-aware gate-area point insertion and geometry guard.
 
 // 0.3.6-beta21: unrestricted nearest-edge gate-area insertion.
 
 // 0.3.7-beta2: stable vendor backbone / MQTT tail and authenticated OSM tiles.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const MATCH_RADIUS_M = 1.0;
-  const SPLIT_DISTANCE_SQ = 25;
-  const OSM_FETCH_CONCURRENCY = 6;
-  const OSM_RETRY_MS = 15000;
-
-  const finite = (value) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const normalizePoint = (raw) => {
-    if (Array.isArray(raw) && raw.length >= 2) {
-      const x = finite(raw[0]);
-      const y = finite(raw[1]);
-      return x === null || y === null ? null : [x, y];
-    }
-    if (raw && typeof raw === "object") {
-      const x = finite(raw.x);
-      const y = finite(raw.y);
-      return x === null || y === null ? null : [x, y];
-    }
-    return null;
-  };
-
-  const normalizeTailSegments = (raw) => {
-    if (!Array.isArray(raw) || !raw.length) return [];
-    const firstPoint = normalizePoint(raw[0]);
-    const input = firstPoint ? [raw] : raw;
-    return input
-      .filter((segment) => Array.isArray(segment))
-      .map((segment) => segment.map(normalizePoint).filter(Boolean))
-      .filter((segment) => segment.length);
-  };
-
-  const copySegments = (segments) =>
-    (segments || []).map((segment) => segment.map((point) => [...point]));
-
-  const trailSessionKey = (card) => [card?._mapPayload?.vendor_trail_debug?.active_zone_id, card?._mapPayload?.vendor_trail_debug?.active_cycle_id, String(
-    card?._mapPayload?.trail_session
-      ?? card?._mapPayload?.active_session?.id
-      ?? card?._mapPayload?.active_session?.sequence
-      ?? "",
-  )].join(":");
-
-  const resetTailCache = (card, sessionKey = "") => {
-    card._nm037Beta2TailSession = sessionKey;
-    card._nm037Beta2ServerTail = [];
-  };
-
-  const appendLiveAfterAnchor = (segments, live, anchor) => {
-    if (!Array.isArray(anchor) || anchor.length < 2 || !Array.isArray(live)) {
-      return segments;
-    }
-
-    // Pick the spatially closest MQTT sample inside the tolerance. If the mower
-    // visited the same coordinate more than once, prefer the newest equally-good
-    // match. A simple backwards first-match can otherwise consume a point that is
-    // already *ahead* of the vendor anchor (for example 1 m ahead with a 1 m
-    // tolerance), making the live tail appear to stop behind the mower.
-    let anchorIndex = -1;
-    let anchorDistance = Infinity;
-    for (let index = live.length - 1; index >= 0; index -= 1) {
-      const point = normalizePoint(live[index]);
-      if (!point) continue;
-      const distance = Math.hypot(point[0] - anchor[0], point[1] - anchor[1]);
-      if (distance > MATCH_RADIUS_M) continue;
-      if (distance < anchorDistance - 1e-9) {
-        anchorIndex = index;
-        anchorDistance = distance;
-      }
-    }
-
-    // The integration has already trimmed the server-side MQTT trail to the
-    // vendor endpoint. If the browser cannot match that anchor, never fall back
-    // to the full local session because doing so would redraw the vendor-owned
-    // backbone from MQTT again.
-    if (anchorIndex < 0) return segments;
-
-    for (const raw of live.slice(anchorIndex + 1)) {
-      const point = normalizePoint(raw);
-      if (!point) continue;
-      let current = segments.at(-1);
-      if (!current) {
-        current = [];
-        segments.push(current);
-      }
-      const previous = current.at(-1);
-      if (
-        previous
-        && (point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2
-          > SPLIT_DISTANCE_SQ
-      ) {
-        current = [];
-        segments.push(current);
-      }
-      const last = current.at(-1);
-      if (!last || last[0] !== point[0] || last[1] !== point[1]) {
-        current.push(point);
-      }
-    }
-    return segments;
-  };
-
-  const previousActiveTrailSegments = proto._activeTrailSegments;
-  if (typeof previousActiveTrailSegments === "function") {
-    proto._activeTrailSegments = function stableVendorTailSegments(...args) {
-      const debug = this?._mapPayload?.vendor_trail_debug;
-      const sessionKey = trailSessionKey(this);
-      if (this._nm037Beta2TailSession !== sessionKey) {
-        resetTailCache(this, sessionKey);
-      }
-      if (!debug?.backend_tail_authoritative) {
-        resetTailCache(this, sessionKey);
-        return previousActiveTrailSegments.apply(this, args);
-      }
-
-      const currentServerTail = normalizeTailSegments(this?._mapPayload?.trail_segments);
-      if (debug.store_version === 1) {
-        // The persistent backend explicitly owns every confirmation, including
-        // an empty tail. Missing phased payloads retain the previous map object;
-        // an explicit [] must never revive the older browser/server tail.
-        this._nm037Beta2ServerTail = copySegments(currentServerTail);
-        if (debug.live_tail_allowed === false) return [];
-        const segments = copySegments(currentServerTail);
-        const anchor = segments.at(-1)?.at(-1);
-        appendLiveAfterAnchor(segments, this._trail, anchor);
-        return segments.filter((segment) => segment.length >= 2);
-      }
-      if (currentServerTail.length) {
-        this._nm037Beta2ServerTail = copySegments(currentServerTail);
-      }
-      const stableServerTail = currentServerTail.length
-        ? currentServerTail
-        : copySegments(this._nm037Beta2ServerTail || []);
-      if (!stableServerTail.length) return [];
-
-      const segments = copySegments(stableServerTail);
-      const anchor = segments.at(-1)?.at(-1) || debug?.anchor_xy || null;
-      appendLiveAfterAnchor(segments, this._trail, anchor);
-      return segments.filter((segment) => segment.length >= 2);
-    };
-  }
-
-  const previousRenderTrail = proto._renderTrail;
-  if (typeof previousRenderTrail === "function") {
-    proto._renderTrail = function stableTrailRender(...args) {
-      const result = previousRenderTrail.apply(this, args);
-      const color = String(this?._config?.trail_color || "#43a047");
-      this._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
-        line.setAttribute("stroke", color);
-        line.setAttribute("data-trail-source", "mqtt-tail");
-      });
-      return result;
-    };
-  }
-
-  const apiPath = (path) => String(path || "")
-    .replace(/^\/api\//, "")
-    .replace(/^\/+/, "");
-
-  const provider = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
-  const frontend = (card) => card?._multi036Site?.anchor_frontend
-    || card?._mapPayload?.frontend
-    || {};
-  const mapApiPath = (card) => String(frontend(card)?.map_api_path || "");
-  const activeUnderlayLayer = (card) => {
-    const multiVisible = Boolean(
-      card?._multi036Layer && card._multi036Layer.style.display !== "none",
-    );
-    return multiVisible ? card?._osm036MultiLayer : card?._baseEl;
-  };
-
-  const rawGet = async (card, path) => {
-    const hass = card?._hass;
-    if (!hass || !path) throw new Error("OpenStreetMap backend is unavailable");
-    const relative = apiPath(path);
-    if (typeof hass.callApiRaw === "function") {
-      return await hass.callApiRaw("GET", relative);
-    }
-    if (typeof hass.fetchWithAuth === "function") {
-      return await hass.fetchWithAuth("/api/" + relative);
-    }
-    throw new Error("Authenticated binary requests are unavailable");
-  };
-
-  const releaseOsmObjectUrls = (card, all = false) => {
-    const urls = card?._nm037Beta2OsmObjectUrls;
-    if (!(urls instanceof Map)) return;
-    for (const [image, url] of urls.entries()) {
-      if (!all && image?.isConnected) continue;
-      try { URL.revokeObjectURL(url); } catch (_error) { /* no-op */ }
-      urls.delete(image);
-    }
-  };
-
-  const osmMarker = (image) => {
-    const href = String(image?.getAttribute?.("href") || "");
-    const match = href.match(/^#nm-osm-(\d+)-(\d+)-(\d+)$/);
-    if (!match) return null;
-    return {
-      z: Number(match[1]),
-      x: Number(match[2]),
-      y: Number(match[3]),
-    };
-  };
-
-  const osmProxyPath = (card, tile) => {
-    const base = mapApiPath(card);
-    if (!base || !tile) return "";
-    const separator = base.includes("?") ? "&" : "?";
-    return base + separator
-      + "osm_tile=1&z=" + encodeURIComponent(tile.z)
-      + "&x=" + encodeURIComponent(tile.x)
-      + "&y=" + encodeURIComponent(tile.y);
-  };
-
-  const hydrateOsmTiles = async (card) => {
-    releaseOsmObjectUrls(card);
-    if (provider(card) !== "openstreetmap") {
-      releaseOsmObjectUrls(card, true);
-      return;
-    }
-    const layer = activeUnderlayLayer(card);
-    if (!layer || !mapApiPath(card)) return;
-    const images = Array.from(
-      layer.querySelectorAll?.('image[href^="#nm-osm-"]') || [],
-    );
-    if (!images.length) return;
-    if (!(card._nm037Beta2OsmObjectUrls instanceof Map)) {
-      card._nm037Beta2OsmObjectUrls = new Map();
-    }
-    const now = Date.now();
-    const pending = images.filter((image) => {
-      if (image.getAttribute("data-nm-osm-loading") === "1") return false;
-      const errorAt = Number(image.getAttribute("data-nm-osm-error-at") || 0);
-      return !errorAt || now - errorAt >= OSM_RETRY_MS;
-    });
-    let cursor = 0;
-    const worker = async () => {
-      while (cursor < pending.length) {
-        const image = pending[cursor];
-        cursor += 1;
-        const tile = osmMarker(image);
-        const path = osmProxyPath(card, tile);
-        if (!tile || !path) continue;
-        image.setAttribute("data-nm-osm-loading", "1");
-        try {
-          const response = await rawGet(card, path);
-          if (!response?.ok) throw new Error("OpenStreetMap tile request failed");
-          const blob = await response.blob();
-          const objectUrl = URL.createObjectURL(blob);
-          if (!image.isConnected || provider(card) !== "openstreetmap") {
-            URL.revokeObjectURL(objectUrl);
-            continue;
-          }
-          const previous = card._nm037Beta2OsmObjectUrls.get(image);
-          if (previous && previous !== objectUrl) URL.revokeObjectURL(previous);
-          card._nm037Beta2OsmObjectUrls.set(image, objectUrl);
-          image.setAttribute("href", objectUrl);
-          image.removeAttribute("data-nm-osm-error-at");
-        } catch (_error) {
-          image.setAttribute("data-nm-osm-error-at", String(Date.now()));
-        } finally {
-          image.removeAttribute("data-nm-osm-loading");
+  nmRuntimePatch29: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const MATCH_RADIUS_M = 1.0;
+      const SPLIT_DISTANCE_SQ = 25;
+      const OSM_FETCH_CONCURRENCY = 6;
+      const OSM_RETRY_MS = 15000;
+    
+      const finite = (value) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
+    
+      const normalizePoint = (raw) => {
+        if (Array.isArray(raw) && raw.length >= 2) {
+          const x = finite(raw[0]);
+          const y = finite(raw[1]);
+          return x === null || y === null ? null : [x, y];
         }
+        if (raw && typeof raw === "object") {
+          const x = finite(raw.x);
+          const y = finite(raw.y);
+          return x === null || y === null ? null : [x, y];
+        }
+        return null;
+      };
+    
+      const normalizeTailSegments = (raw) => {
+        if (!Array.isArray(raw) || !raw.length) return [];
+        const firstPoint = normalizePoint(raw[0]);
+        const input = firstPoint ? [raw] : raw;
+        return input
+          .filter((segment) => Array.isArray(segment))
+          .map((segment) => segment.map(normalizePoint).filter(Boolean))
+          .filter((segment) => segment.length);
+      };
+    
+      const copySegments = (segments) =>
+        (segments || []).map((segment) => segment.map((point) => [...point]));
+    
+      const trailSessionKey = (card) => [card?._mapPayload?.vendor_trail_debug?.active_zone_id, card?._mapPayload?.vendor_trail_debug?.active_cycle_id, String(
+        card?._mapPayload?.trail_session
+          ?? card?._mapPayload?.active_session?.id
+          ?? card?._mapPayload?.active_session?.sequence
+          ?? "",
+      )].join(":");
+    
+      const resetTailCache = (card, sessionKey = "") => {
+        card._nm037Beta2TailSession = sessionKey;
+        card._nm037Beta2ServerTail = [];
+      };
+    
+      const appendLiveAfterAnchor = (segments, live, anchor) => {
+        if (!Array.isArray(anchor) || anchor.length < 2 || !Array.isArray(live)) {
+          return segments;
+        }
+    
+        // Pick the spatially closest MQTT sample inside the tolerance. If the mower
+        // visited the same coordinate more than once, prefer the newest equally-good
+        // match. A simple backwards first-match can otherwise consume a point that is
+        // already *ahead* of the vendor anchor (for example 1 m ahead with a 1 m
+        // tolerance), making the live tail appear to stop behind the mower.
+        let anchorIndex = -1;
+        let anchorDistance = Infinity;
+        for (let index = live.length - 1; index >= 0; index -= 1) {
+          const point = normalizePoint(live[index]);
+          if (!point) continue;
+          const distance = Math.hypot(point[0] - anchor[0], point[1] - anchor[1]);
+          if (distance > MATCH_RADIUS_M) continue;
+          if (distance < anchorDistance - 1e-9) {
+            anchorIndex = index;
+            anchorDistance = distance;
+          }
+        }
+    
+        // The integration has already trimmed the server-side MQTT trail to the
+        // vendor endpoint. If the browser cannot match that anchor, never fall back
+        // to the full local session because doing so would redraw the vendor-owned
+        // backbone from MQTT again.
+        if (anchorIndex < 0) return segments;
+    
+        for (const raw of live.slice(anchorIndex + 1)) {
+          const point = normalizePoint(raw);
+          if (!point) continue;
+          let current = segments.at(-1);
+          if (!current) {
+            current = [];
+            segments.push(current);
+          }
+          const previous = current.at(-1);
+          if (
+            previous
+            && (point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2
+              > SPLIT_DISTANCE_SQ
+          ) {
+            current = [];
+            segments.push(current);
+          }
+          const last = current.at(-1);
+          if (!last || last[0] !== point[0] || last[1] !== point[1]) {
+            current.push(point);
+          }
+        }
+        return segments;
+      };
+    
+      const previousActiveTrailSegments = proto._activeTrailSegments;
+      if (typeof previousActiveTrailSegments === "function") {
+        proto._activeTrailSegments = function stableVendorTailSegments(...args) {
+          const debug = this?._mapPayload?.vendor_trail_debug;
+          const sessionKey = trailSessionKey(this);
+          if (this._nm037Beta2TailSession !== sessionKey) {
+            resetTailCache(this, sessionKey);
+          }
+          if (!debug?.backend_tail_authoritative) {
+            resetTailCache(this, sessionKey);
+            return previousActiveTrailSegments.apply(this, args);
+          }
+    
+          const currentServerTail = normalizeTailSegments(this?._mapPayload?.trail_segments);
+          if (debug.store_version === 1) {
+            // The persistent backend explicitly owns every confirmation, including
+            // an empty tail. Missing phased payloads retain the previous map object;
+            // an explicit [] must never revive the older browser/server tail.
+            this._nm037Beta2ServerTail = copySegments(currentServerTail);
+            if (debug.live_tail_allowed === false) return [];
+            const segments = copySegments(currentServerTail);
+            const anchor = segments.at(-1)?.at(-1);
+            appendLiveAfterAnchor(segments, this._trail, anchor);
+            return segments.filter((segment) => segment.length >= 2);
+          }
+          if (currentServerTail.length) {
+            this._nm037Beta2ServerTail = copySegments(currentServerTail);
+          }
+          const stableServerTail = currentServerTail.length
+            ? currentServerTail
+            : copySegments(this._nm037Beta2ServerTail || []);
+          if (!stableServerTail.length) return [];
+    
+          const segments = copySegments(stableServerTail);
+          const anchor = segments.at(-1)?.at(-1) || debug?.anchor_xy || null;
+          appendLiveAfterAnchor(segments, this._trail, anchor);
+          return segments.filter((segment) => segment.length >= 2);
+        };
       }
-    };
-    const count = Math.min(OSM_FETCH_CONCURRENCY, pending.length);
-    await Promise.all(Array.from({ length: count }, () => worker()));
-  };
-
-  const scheduleOsm = (card, delay = 0) => {
-    if (!card || card._nm037Beta2OsmTimer) return;
-    card._nm037Beta2OsmTimer = setTimeout(() => {
-      card._nm037Beta2OsmTimer = null;
-      hydrateOsmTiles(card).catch(() => {});
-    }, Math.max(0, delay));
-  };
-
-  const previousUnderlaySync = proto._syncOsmUnderlay036;
-  if (typeof previousUnderlaySync === "function") {
-    proto._syncOsmUnderlay036 = function stableOsmUnderlaySync(...args) {
-      const result = previousUnderlaySync.apply(this, args);
-      scheduleOsm(this, 0);
-      return result;
-    };
+    
+      const previousRenderTrail = proto._renderTrail;
+      if (typeof previousRenderTrail === "function") {
+        proto._renderTrail = function stableTrailRender(...args) {
+          const result = previousRenderTrail.apply(this, args);
+          const color = String(this?._config?.trail_color || "#43a047");
+          this._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
+            line.setAttribute("stroke", color);
+            line.setAttribute("data-trail-source", "mqtt-tail");
+          });
+          return result;
+        };
+      }
+    
+      const apiPath = (path) => String(path || "")
+        .replace(/^\/api\//, "")
+        .replace(/^\/+/, "");
+    
+      const provider = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
+      const frontend = (card) => card?._multi036Site?.anchor_frontend
+        || card?._mapPayload?.frontend
+        || {};
+      const mapApiPath = (card) => String(frontend(card)?.map_api_path || "");
+      const activeUnderlayLayer = (card) => {
+        const multiVisible = Boolean(
+          card?._multi036Layer && card._multi036Layer.style.display !== "none",
+        );
+        return multiVisible ? card?._osm036MultiLayer : card?._baseEl;
+      };
+    
+      const rawGet = async (card, path) => {
+        const hass = card?._hass;
+        if (!hass || !path) throw new Error("OpenStreetMap backend is unavailable");
+        const relative = apiPath(path);
+        if (typeof hass.callApiRaw === "function") {
+          return await hass.callApiRaw("GET", relative);
+        }
+        if (typeof hass.fetchWithAuth === "function") {
+          return await hass.fetchWithAuth("/api/" + relative);
+        }
+        throw new Error("Authenticated binary requests are unavailable");
+      };
+    
+      const releaseOsmObjectUrls = (card, all = false) => {
+        const urls = card?._nm037Beta2OsmObjectUrls;
+        if (!(urls instanceof Map)) return;
+        for (const [image, url] of urls.entries()) {
+          if (!all && image?.isConnected) continue;
+          try { URL.revokeObjectURL(url); } catch (_error) { /* no-op */ }
+          urls.delete(image);
+        }
+      };
+    
+      const osmMarker = (image) => {
+        const href = String(image?.getAttribute?.("href") || "");
+        const match = href.match(/^#nm-osm-(\d+)-(\d+)-(\d+)$/);
+        if (!match) return null;
+        return {
+          z: Number(match[1]),
+          x: Number(match[2]),
+          y: Number(match[3]),
+        };
+      };
+    
+      const osmProxyPath = (card, tile) => {
+        const base = mapApiPath(card);
+        if (!base || !tile) return "";
+        const separator = base.includes("?") ? "&" : "?";
+        return base + separator
+          + "osm_tile=1&z=" + encodeURIComponent(tile.z)
+          + "&x=" + encodeURIComponent(tile.x)
+          + "&y=" + encodeURIComponent(tile.y);
+      };
+    
+      const hydrateOsmTiles = async (card) => {
+        releaseOsmObjectUrls(card);
+        if (provider(card) !== "openstreetmap") {
+          releaseOsmObjectUrls(card, true);
+          return;
+        }
+        const layer = activeUnderlayLayer(card);
+        if (!layer || !mapApiPath(card)) return;
+        const images = Array.from(
+          layer.querySelectorAll?.('image[href^="#nm-osm-"]') || [],
+        );
+        if (!images.length) return;
+        if (!(card._nm037Beta2OsmObjectUrls instanceof Map)) {
+          card._nm037Beta2OsmObjectUrls = new Map();
+        }
+        const now = Date.now();
+        const pending = images.filter((image) => {
+          if (image.getAttribute("data-nm-osm-loading") === "1") return false;
+          const errorAt = Number(image.getAttribute("data-nm-osm-error-at") || 0);
+          return !errorAt || now - errorAt >= OSM_RETRY_MS;
+        });
+        let cursor = 0;
+        const worker = async () => {
+          while (cursor < pending.length) {
+            const image = pending[cursor];
+            cursor += 1;
+            const tile = osmMarker(image);
+            const path = osmProxyPath(card, tile);
+            if (!tile || !path) continue;
+            image.setAttribute("data-nm-osm-loading", "1");
+            try {
+              const response = await rawGet(card, path);
+              if (!response?.ok) throw new Error("OpenStreetMap tile request failed");
+              const blob = await response.blob();
+              const objectUrl = URL.createObjectURL(blob);
+              if (!image.isConnected || provider(card) !== "openstreetmap") {
+                URL.revokeObjectURL(objectUrl);
+                continue;
+              }
+              const previous = card._nm037Beta2OsmObjectUrls.get(image);
+              if (previous && previous !== objectUrl) URL.revokeObjectURL(previous);
+              card._nm037Beta2OsmObjectUrls.set(image, objectUrl);
+              image.setAttribute("href", objectUrl);
+              image.removeAttribute("data-nm-osm-error-at");
+            } catch (_error) {
+              image.setAttribute("data-nm-osm-error-at", String(Date.now()));
+            } finally {
+              image.removeAttribute("data-nm-osm-loading");
+            }
+          }
+        };
+        const count = Math.min(OSM_FETCH_CONCURRENCY, pending.length);
+        await Promise.all(Array.from({ length: count }, () => worker()));
+      };
+    
+      const scheduleOsm = (card, delay = 0) => {
+        if (!card || card._nm037Beta2OsmTimer) return;
+        card._nm037Beta2OsmTimer = setTimeout(() => {
+          card._nm037Beta2OsmTimer = null;
+          hydrateOsmTiles(card).catch(() => {});
+        }, Math.max(0, delay));
+      };
+    
+      const previousUnderlaySync = proto._syncOsmUnderlay036;
+      if (typeof previousUnderlaySync === "function") {
+        proto._syncOsmUnderlay036 = function stableOsmUnderlaySync(...args) {
+          const result = previousUnderlaySync.apply(this, args);
+          scheduleOsm(this, 0);
+          return result;
+        };
+      }
+    
+      for (const method of ["_renderStatic", "_applyStaticLayers", "_applyViewBox"]) {
+        const previous = proto[method];
+        if (typeof previous !== "function") continue;
+        proto[method] = function stableOsmRefresh(...args) {
+          const result = previous.apply(this, args);
+          scheduleOsm(this, method === "_applyViewBox" ? 80 : 0);
+          return result;
+        };
+      }
   }
 
-  for (const method of ["_renderStatic", "_applyStaticLayers", "_applyViewBox"]) {
-    const previous = proto[method];
-    if (typeof previous !== "function") continue;
-    proto[method] = function stableOsmRefresh(...args) {
-      const result = previous.apply(this, args);
-      scheduleOsm(this, method === "_applyViewBox" ? 80 : 0);
-      return result;
-    };
-  }
-
-})();
 
 // 0.3.7-beta3: selectable LiDAR terrain overlay.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  const DEFAULT_OPACITY = 0.65;
-  const RETRY_MS = 15000;
-
-  const finite = (value, fallback = null) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-  const clamp = (value, minimum, maximum) => Math.min(
-    maximum,
-    Math.max(minimum, finite(value, minimum)),
-  );
-  const apiPath = (path) => String(path || "")
-    .replace(/^\/api\//, "")
-    .replace(/^\/+/, "");
-
-  const overlayKind = (card) => {
-    const value = String(card?._config?.terrain_overlay || "none").toLowerCase();
-    return value === "terrain" || value === "elevation" ? value : "none";
-  };
-  const overlayOpacity = (card) => clamp(
-    card?._config?.terrain_overlay_opacity ?? DEFAULT_OPACITY,
-    0.1,
-    1,
-  );
-
-  const validExtent = (value) => {
-    if (!value || typeof value !== "object") return null;
-    const minX = finite(value.min_x);
-    const maxX = finite(value.max_x);
-    const minY = finite(value.min_y);
-    const maxY = finite(value.max_y);
-    if ([minX, maxX, minY, maxY].some((item) => item === null)) return null;
-    if (!(minX < maxX && minY < maxY)) return null;
-    return { minX, maxX, minY, maxY };
-  };
-
-  const validMetadata = (metadata, kind) => {
-    if (!metadata || metadata.available !== true) return null;
-    if (String(metadata.reference_frame || "") !== "mower_local_xy") return null;
-    const extent = validExtent(metadata.extent);
-    const resource = metadata?.[kind];
-    if (!extent || resource?.available !== true || !resource?.api_path) return null;
-    return {
-      extent,
-      version: String(metadata.version || "unknown"),
-      apiPath: String(resource.api_path),
-    };
-  };
-
-  const singleMetadata = (card) => card?._mapPayload?.frontend?.terrain_overlay || null;
-  const multiPayload = (card, entryId) => {
-    const states = card?._multi036Members;
-    if (!(states instanceof Map)) return null;
-    return states.get(String(entryId))?.map || null;
-  };
-  const memberMetadata = (card, member) => (
-    member?.frontend?.terrain_overlay
-      || multiPayload(card, member?.entry_id)?.frontend?.terrain_overlay
-      || null
-  );
-
-  const rawGet = async (card, path) => {
-    const hass = card?._hass;
-    if (!hass || !path) throw new Error("LiDAR terrain backend is unavailable");
-    const relative = apiPath(path);
-    if (typeof hass.callApiRaw === "function") {
-      return await hass.callApiRaw("GET", relative);
-    }
-    if (typeof hass.fetchWithAuth === "function") {
-      return await hass.fetchWithAuth("/api/" + relative);
-    }
-    throw new Error("Authenticated binary requests are unavailable");
-  };
-
-  const resourceMaps = (card) => {
-    if (!(card._nm037Beta3TerrainUrls instanceof Map)) {
-      card._nm037Beta3TerrainUrls = new Map();
-    }
-    if (!(card._nm037Beta3TerrainPending instanceof Map)) {
-      card._nm037Beta3TerrainPending = new Map();
-    }
-    if (!(card._nm037Beta3TerrainErrors instanceof Map)) {
-      card._nm037Beta3TerrainErrors = new Map();
-    }
-    return {
-      urls: card._nm037Beta3TerrainUrls,
-      pending: card._nm037Beta3TerrainPending,
-      errors: card._nm037Beta3TerrainErrors,
-    };
-  };
-
-  const resourceKey = (entryId, kind, metadata) => [
-    String(entryId || "single"),
-    kind,
-    String(metadata?.version || metadata?.apiPath || "unknown"),
-  ].join("|");
-
-  const revokeEntryKindOldVersions = (card, entryId, kind, keepKey) => {
-    const { urls } = resourceMaps(card);
-    const prefix = String(entryId || "single") + "|" + kind + "|";
-    for (const [key, url] of urls.entries()) {
-      if (!key.startsWith(prefix) || key === keepKey) continue;
-      try { URL.revokeObjectURL(url); } catch (_error) { /* no-op */ }
-      urls.delete(key);
-    }
-  };
-
-  const releaseAllResources = (card) => {
-    const urls = card?._nm037Beta3TerrainUrls;
-    if (urls instanceof Map) {
-      for (const url of urls.values()) {
-        try { URL.revokeObjectURL(url); } catch (_error) { /* no-op */ }
-      }
-      urls.clear();
-    }
-    card?._nm037Beta3TerrainPending?.clear?.();
-    card?._nm037Beta3TerrainErrors?.clear?.();
-  };
-
-  const requestResource = (card, entryId, kind, metadata) => {
-    const key = resourceKey(entryId, kind, metadata);
-    const { urls, pending, errors } = resourceMaps(card);
-    if (urls.has(key)) return urls.get(key);
-    if (pending.has(key)) return null;
-    const errorAt = Number(errors.get(key) || 0);
-    if (errorAt && Date.now() - errorAt < RETRY_MS) return null;
-
-    const task = (async () => {
-      try {
-        const response = await rawGet(card, metadata.apiPath);
-        if (!response?.ok) throw new Error("LiDAR terrain image request failed");
-        const blob = await response.blob();
-        if (!blob || !Number.isFinite(Number(blob.size)) || Number(blob.size) <= 0) {
-          throw new Error("LiDAR terrain image is empty");
-        }
-        const objectUrl = URL.createObjectURL(blob);
-        const currentKind = overlayKind(card);
-        if (currentKind === "none") {
-          URL.revokeObjectURL(objectUrl);
-          return;
-        }
-        const previous = urls.get(key);
-        if (previous && previous !== objectUrl) {
-          try { URL.revokeObjectURL(previous); } catch (_error) { /* no-op */ }
-        }
-        urls.set(key, objectUrl);
-        errors.delete(key);
-        revokeEntryKindOldVersions(card, entryId, kind, key);
-        scheduleTerrain(card, 0);
-      } catch (_error) {
-        errors.set(key, Date.now());
-      } finally {
-        pending.delete(key);
-      }
-    })();
-    pending.set(key, task);
-    return null;
-  };
-
-  const placeSingleLayer = (card, group) => {
-    const parent = card?._baseEl;
-    if (!parent || !group) return;
-    const underlays = Array.from(parent.querySelectorAll?.(
-      ".nm-osm-underlay,.nm-estonia-wms-detail,.nm-estonia-wms-detail-pending",
-    ) || []).filter((node) => node?.parentNode === parent && node !== group);
-    const anchor = underlays.at(-1) || parent.firstElementChild;
-    if (anchor?.parentNode === parent) {
-      if (anchor.nextSibling !== group) anchor.after(group);
-    } else if (parent.firstChild !== group) {
-      parent.insertBefore(group, parent.firstChild || null);
-    }
-  };
-
-  const ensureSingleGroup = (card) => {
-    const parent = card?._baseEl;
-    if (!parent || typeof document === "undefined") return null;
-    let group = card._nm037Beta3SingleTerrainLayer;
-    if (!group || !group.isConnected || group.parentNode !== parent) {
-      group = document.createElementNS(SVG_NS, "g");
-      group.setAttribute("class", "nm-lidar-terrain-overlay");
-      group.setAttribute("pointer-events", "none");
-      card._nm037Beta3SingleTerrainLayer = group;
-    }
-    placeSingleLayer(card, group);
-    return group;
-  };
-
-  const singleTransform = (card, extent) => {
-    if (!card?._layout?.sx || !card?._layout?.sy || !extent) return null;
-    const topLeft = {
-      x: finite(card._layout.sx(extent.minX)),
-      y: finite(card._layout.sy(extent.maxY)),
-    };
-    const topRight = {
-      x: finite(card._layout.sx(extent.maxX)),
-      y: finite(card._layout.sy(extent.maxY)),
-    };
-    const bottomLeft = {
-      x: finite(card._layout.sx(extent.minX)),
-      y: finite(card._layout.sy(extent.minY)),
-    };
-    if ([topLeft.x, topLeft.y, topRight.x, topRight.y, bottomLeft.x, bottomLeft.y].some((value) => value === null)) {
-      return null;
-    }
-    return [
-      topRight.x - topLeft.x,
-      topRight.y - topLeft.y,
-      bottomLeft.x - topLeft.x,
-      bottomLeft.y - topLeft.y,
-      topLeft.x,
-      topLeft.y,
-    ];
-  };
-
-  const appendImage = (parent, url, transform, opacity, entryId, kind, version) => {
-    if (!parent || !url || !Array.isArray(transform) || transform.length < 6) return null;
-    const image = document.createElementNS(SVG_NS, "image");
-    image.setAttribute("href", url);
-    image.setAttribute("x", "0");
-    image.setAttribute("y", "0");
-    image.setAttribute("width", "1");
-    image.setAttribute("height", "1");
-    image.setAttribute("preserveAspectRatio", "none");
-    image.setAttribute("opacity", Number(opacity).toFixed(2));
-    image.setAttribute(
-      "transform",
-      "matrix(" + transform.map((value) => Number(value).toFixed(10)).join(" ") + ")",
-    );
-    image.setAttribute("data-nm-terrain-entry", String(entryId || "single"));
-    image.setAttribute("data-nm-terrain-kind", kind);
-    image.setAttribute("data-nm-terrain-version", String(version || "unknown"));
-    parent.appendChild(image);
-    return image;
-  };
-
-  const syncSingle = (card, kind) => {
-    const group = ensureSingleGroup(card);
-    if (!group) return false;
-    const metadata = validMetadata(singleMetadata(card), kind);
-    if (kind === "none" || !metadata) {
-      group.innerHTML = "";
-      group.style.display = "none";
-      return false;
-    }
-    const transform = singleTransform(card, metadata.extent);
-    if (!transform) {
-      group.innerHTML = "";
-      group.style.display = "none";
-      return false;
-    }
-    const entryId = card?._mapPayload?.frontend?.entry_id || "single";
-    const url = requestResource(card, entryId, kind, metadata);
-    if (!url) {
-      group.innerHTML = "";
-      group.style.display = "none";
-      return false;
-    }
-    group.innerHTML = "";
-    group.style.display = "";
-    appendImage(group, url, transform, overlayOpacity(card), entryId, kind, metadata.version);
-    placeSingleLayer(card, group);
-    return true;
-  };
-
-  const siteLayout = (site) => {
-    const box = site?.combined_svg_bounds;
-    if (!box || [box.min_x, box.min_y, box.max_x, box.max_y].some((value) => finite(value) === null)) {
-      return null;
-    }
-    const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
-    const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
-    const padding = 55;
-    const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
-    const drawnWidth = width * scale;
-    const drawnHeight = height * scale;
-    return {
-      scale,
-      offsetX: (1000 - drawnWidth) / 2 - Number(box.min_x) * scale,
-      offsetY: (1000 - drawnHeight) / 2 - Number(box.min_y) * scale,
-    };
-  };
-
-  const memberMatrix = (member, layout) => {
-    const source = Array.isArray(member?.svg_matrix) && member.svg_matrix.length >= 6
-      ? member.svg_matrix.slice(0, 6).map(Number)
-      : null;
-    if (!source || source.some((value) => !Number.isFinite(value)) || !layout) return null;
-    const scale = layout.scale;
-    return [
-      scale * source[0],
-      scale * source[1],
-      scale * source[2],
-      scale * source[3],
-      scale * source[4] + layout.offsetX,
-      scale * source[5] + layout.offsetY,
-    ];
-  };
-
-  const localRasterTransform = (extent) => [
-    extent.maxX - extent.minX,
-    0,
-    0,
-    extent.minY - extent.maxY,
-    extent.minX,
-    extent.maxY,
-  ];
-
-  const ensureMultiGroup = (card) => {
-    const svg = card?._svgEl;
-    const multi = card?._multi036Layer;
-    if (!svg || !multi || typeof document === "undefined") return null;
-    let group = card._nm037Beta3MultiTerrainLayer;
-    if (!group || !group.isConnected || group.parentNode !== svg) {
-      group = document.createElementNS(SVG_NS, "g");
-      group.setAttribute("class", "nm-lidar-terrain-multi-layer");
-      group.setAttribute("pointer-events", "none");
-      card._nm037Beta3MultiTerrainLayer = group;
-    }
-    if (group.nextSibling !== multi) svg.insertBefore(group, multi);
-    return group;
-  };
-
-  const syncMulti = (card, kind) => {
-    const group = ensureMultiGroup(card);
-    const multi = card?._multi036Layer;
-    if (!group || !multi || multi.style.display === "none" || kind === "none") {
-      if (group) {
-        group.innerHTML = "";
-        group.style.display = "none";
-      }
-      return false;
-    }
-    const site = card?._multi036Site;
-    const layout = siteLayout(site);
-    if (!layout) {
-      group.innerHTML = "";
-      group.style.display = "none";
-      return false;
-    }
-
-    group.innerHTML = "";
-    let rendered = 0;
-    for (const member of site?.members || []) {
-      const metadata = validMetadata(memberMetadata(card, member), kind);
-      const matrix = memberMatrix(member, layout);
-      if (!metadata || !matrix) continue;
-      const entryId = String(member?.entry_id || "");
-      const url = requestResource(card, entryId, kind, metadata);
-      if (!url) continue;
-      const memberGroup = document.createElementNS(SVG_NS, "g");
-      memberGroup.setAttribute("class", "nm-lidar-terrain-member");
-      memberGroup.setAttribute("data-entry-id", entryId);
-      memberGroup.setAttribute(
-        "transform",
-        "matrix(" + matrix.map((value) => Number(value).toFixed(10)).join(" ") + ")",
+  nmRuntimePatch30: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const DEFAULT_OPACITY = 0.65;
+      const RETRY_MS = 15000;
+    
+      const finite = (value, fallback = null) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+      const clamp = (value, minimum, maximum) => Math.min(
+        maximum,
+        Math.max(minimum, finite(value, minimum)),
       );
-      appendImage(
-        memberGroup,
-        url,
-        localRasterTransform(metadata.extent),
-        overlayOpacity(card),
-        entryId,
+      const apiPath = (path) => String(path || "")
+        .replace(/^\/api\//, "")
+        .replace(/^\/+/, "");
+    
+      const overlayKind = (card) => {
+        const value = String(card?._config?.terrain_overlay || "none").toLowerCase();
+        return value === "terrain" || value === "elevation" ? value : "none";
+      };
+      const overlayOpacity = (card) => clamp(
+        card?._config?.terrain_overlay_opacity ?? DEFAULT_OPACITY,
+        0.1,
+        1,
+      );
+    
+      const validExtent = (value) => {
+        if (!value || typeof value !== "object") return null;
+        const minX = finite(value.min_x);
+        const maxX = finite(value.max_x);
+        const minY = finite(value.min_y);
+        const maxY = finite(value.max_y);
+        if ([minX, maxX, minY, maxY].some((item) => item === null)) return null;
+        if (!(minX < maxX && minY < maxY)) return null;
+        return { minX, maxX, minY, maxY };
+      };
+    
+      const validMetadata = (metadata, kind) => {
+        if (!metadata || metadata.available !== true) return null;
+        if (String(metadata.reference_frame || "") !== "mower_local_xy") return null;
+        const extent = validExtent(metadata.extent);
+        const resource = metadata?.[kind];
+        if (!extent || resource?.available !== true || !resource?.api_path) return null;
+        return {
+          extent,
+          version: String(metadata.version || "unknown"),
+          apiPath: String(resource.api_path),
+        };
+      };
+    
+      const singleMetadata = (card) => card?._mapPayload?.frontend?.terrain_overlay || null;
+      const multiPayload = (card, entryId) => {
+        const states = card?._multi036Members;
+        if (!(states instanceof Map)) return null;
+        return states.get(String(entryId))?.map || null;
+      };
+      const memberMetadata = (card, member) => (
+        member?.frontend?.terrain_overlay
+          || multiPayload(card, member?.entry_id)?.frontend?.terrain_overlay
+          || null
+      );
+    
+      const rawGet = async (card, path) => {
+        const hass = card?._hass;
+        if (!hass || !path) throw new Error("LiDAR terrain backend is unavailable");
+        const relative = apiPath(path);
+        if (typeof hass.callApiRaw === "function") {
+          return await hass.callApiRaw("GET", relative);
+        }
+        if (typeof hass.fetchWithAuth === "function") {
+          return await hass.fetchWithAuth("/api/" + relative);
+        }
+        throw new Error("Authenticated binary requests are unavailable");
+      };
+    
+      const resourceMaps = (card) => {
+        if (!(card._nm037Beta3TerrainUrls instanceof Map)) {
+          card._nm037Beta3TerrainUrls = new Map();
+        }
+        if (!(card._nm037Beta3TerrainPending instanceof Map)) {
+          card._nm037Beta3TerrainPending = new Map();
+        }
+        if (!(card._nm037Beta3TerrainErrors instanceof Map)) {
+          card._nm037Beta3TerrainErrors = new Map();
+        }
+        return {
+          urls: card._nm037Beta3TerrainUrls,
+          pending: card._nm037Beta3TerrainPending,
+          errors: card._nm037Beta3TerrainErrors,
+        };
+      };
+    
+      const resourceKey = (entryId, kind, metadata) => [
+        String(entryId || "single"),
         kind,
-        metadata.version,
-      );
-      group.appendChild(memberGroup);
-      rendered += 1;
-    }
-    group.style.display = rendered ? "" : "none";
-    if (group.nextSibling !== multi) card._svgEl?.insertBefore?.(group, multi);
-    return rendered > 0;
-  };
-
-  const ensureMultiObserver = (card) => {
-    const target = card?._multi036Layer;
-    if (!target || typeof MutationObserver === "undefined") return;
-    const previous = card._nm037Beta3MultiObserver;
-    if (previous?.target === target) return;
-    previous?.observer?.disconnect?.();
-    const observer = new MutationObserver(() => scheduleTerrain(card, 0));
-    observer.observe(target, { childList: true, subtree: true });
-    card._nm037Beta3MultiObserver = { observer, target };
-  };
-
-  const ensureBaseObserver = (card) => {
-    const target = card?._baseEl;
-    if (!target || typeof MutationObserver === "undefined") return;
-    const previous = card._nm037Beta3BaseObserver;
-    if (previous?.target === target) return;
-    previous?.observer?.disconnect?.();
-    const observer = new MutationObserver((mutations) => {
-      const externalChange = mutations.some((mutation) => Array.from(mutation.addedNodes || [])
-        .concat(Array.from(mutation.removedNodes || []))
-        .some((node) => node !== card._nm037Beta3SingleTerrainLayer));
-      if (externalChange) scheduleTerrain(card, 0);
-    });
-    observer.observe(target, { childList: true });
-    card._nm037Beta3BaseObserver = { observer, target };
-  };
-
-  const syncTerrain = (card) => {
-    if (!card || typeof document === "undefined") return;
-    ensureMultiObserver(card);
-    ensureBaseObserver(card);
-    const kind = overlayKind(card);
-    const multiVisible = Boolean(
-      card?._multi036Layer && card._multi036Layer.style.display !== "none",
-    );
-    if (multiVisible) {
-      const single = card._nm037Beta3SingleTerrainLayer;
-      if (single) single.style.display = "none";
-      syncMulti(card, kind);
-    } else {
-      const multi = card._nm037Beta3MultiTerrainLayer;
-      if (multi) multi.style.display = "none";
-      syncSingle(card, kind);
-    }
-  };
-
-  function scheduleTerrain(card, delay = 0) {
-    if (!card || card._nm037Beta3TerrainTimer) return;
-    card._nm037Beta3TerrainTimer = setTimeout(() => {
-      card._nm037Beta3TerrainTimer = null;
-      syncTerrain(card);
-    }, Math.max(0, delay));
+        String(metadata?.version || metadata?.apiPath || "unknown"),
+      ].join("|");
+    
+      const revokeEntryKindOldVersions = (card, entryId, kind, keepKey) => {
+        const { urls } = resourceMaps(card);
+        const prefix = String(entryId || "single") + "|" + kind + "|";
+        for (const [key, url] of urls.entries()) {
+          if (!key.startsWith(prefix) || key === keepKey) continue;
+          try { URL.revokeObjectURL(url); } catch (_error) { /* no-op */ }
+          urls.delete(key);
+        }
+      };
+    
+      const releaseAllResources = (card) => {
+        const urls = card?._nm037Beta3TerrainUrls;
+        if (urls instanceof Map) {
+          for (const url of urls.values()) {
+            try { URL.revokeObjectURL(url); } catch (_error) { /* no-op */ }
+          }
+          urls.clear();
+        }
+        card?._nm037Beta3TerrainPending?.clear?.();
+        card?._nm037Beta3TerrainErrors?.clear?.();
+      };
+    
+      const requestResource = (card, entryId, kind, metadata) => {
+        const key = resourceKey(entryId, kind, metadata);
+        const { urls, pending, errors } = resourceMaps(card);
+        if (urls.has(key)) return urls.get(key);
+        if (pending.has(key)) return null;
+        const errorAt = Number(errors.get(key) || 0);
+        if (errorAt && Date.now() - errorAt < RETRY_MS) return null;
+    
+        const task = (async () => {
+          try {
+            const response = await rawGet(card, metadata.apiPath);
+            if (!response?.ok) throw new Error("LiDAR terrain image request failed");
+            const blob = await response.blob();
+            if (!blob || !Number.isFinite(Number(blob.size)) || Number(blob.size) <= 0) {
+              throw new Error("LiDAR terrain image is empty");
+            }
+            const objectUrl = URL.createObjectURL(blob);
+            const currentKind = overlayKind(card);
+            if (currentKind === "none") {
+              URL.revokeObjectURL(objectUrl);
+              return;
+            }
+            const previous = urls.get(key);
+            if (previous && previous !== objectUrl) {
+              try { URL.revokeObjectURL(previous); } catch (_error) { /* no-op */ }
+            }
+            urls.set(key, objectUrl);
+            errors.delete(key);
+            revokeEntryKindOldVersions(card, entryId, kind, key);
+            scheduleTerrain(card, 0);
+          } catch (_error) {
+            errors.set(key, Date.now());
+          } finally {
+            pending.delete(key);
+          }
+        })();
+        pending.set(key, task);
+        return null;
+      };
+    
+      const placeSingleLayer = (card, group) => {
+        const parent = card?._baseEl;
+        if (!parent || !group) return;
+        const underlays = Array.from(parent.querySelectorAll?.(
+          ".nm-osm-underlay,.nm-estonia-wms-detail,.nm-estonia-wms-detail-pending",
+        ) || []).filter((node) => node?.parentNode === parent && node !== group);
+        const anchor = underlays.at(-1) || parent.firstElementChild;
+        if (anchor?.parentNode === parent) {
+          if (anchor.nextSibling !== group) anchor.after(group);
+        } else if (parent.firstChild !== group) {
+          parent.insertBefore(group, parent.firstChild || null);
+        }
+      };
+    
+      const ensureSingleGroup = (card) => {
+        const parent = card?._baseEl;
+        if (!parent || typeof document === "undefined") return null;
+        let group = card._nm037Beta3SingleTerrainLayer;
+        if (!group || !group.isConnected || group.parentNode !== parent) {
+          group = document.createElementNS(SVG_NS, "g");
+          group.setAttribute("class", "nm-lidar-terrain-overlay");
+          group.setAttribute("pointer-events", "none");
+          card._nm037Beta3SingleTerrainLayer = group;
+        }
+        placeSingleLayer(card, group);
+        return group;
+      };
+    
+      const singleTransform = (card, extent) => {
+        if (!card?._layout?.sx || !card?._layout?.sy || !extent) return null;
+        const topLeft = {
+          x: finite(card._layout.sx(extent.minX)),
+          y: finite(card._layout.sy(extent.maxY)),
+        };
+        const topRight = {
+          x: finite(card._layout.sx(extent.maxX)),
+          y: finite(card._layout.sy(extent.maxY)),
+        };
+        const bottomLeft = {
+          x: finite(card._layout.sx(extent.minX)),
+          y: finite(card._layout.sy(extent.minY)),
+        };
+        if ([topLeft.x, topLeft.y, topRight.x, topRight.y, bottomLeft.x, bottomLeft.y].some((value) => value === null)) {
+          return null;
+        }
+        return [
+          topRight.x - topLeft.x,
+          topRight.y - topLeft.y,
+          bottomLeft.x - topLeft.x,
+          bottomLeft.y - topLeft.y,
+          topLeft.x,
+          topLeft.y,
+        ];
+      };
+    
+      const appendImage = (parent, url, transform, opacity, entryId, kind, version) => {
+        if (!parent || !url || !Array.isArray(transform) || transform.length < 6) return null;
+        const image = document.createElementNS(SVG_NS, "image");
+        image.setAttribute("href", url);
+        image.setAttribute("x", "0");
+        image.setAttribute("y", "0");
+        image.setAttribute("width", "1");
+        image.setAttribute("height", "1");
+        image.setAttribute("preserveAspectRatio", "none");
+        image.setAttribute("opacity", Number(opacity).toFixed(2));
+        image.setAttribute(
+          "transform",
+          "matrix(" + transform.map((value) => Number(value).toFixed(10)).join(" ") + ")",
+        );
+        image.setAttribute("data-nm-terrain-entry", String(entryId || "single"));
+        image.setAttribute("data-nm-terrain-kind", kind);
+        image.setAttribute("data-nm-terrain-version", String(version || "unknown"));
+        parent.appendChild(image);
+        return image;
+      };
+    
+      const syncSingle = (card, kind) => {
+        const group = ensureSingleGroup(card);
+        if (!group) return false;
+        const metadata = validMetadata(singleMetadata(card), kind);
+        if (kind === "none" || !metadata) {
+          group.innerHTML = "";
+          group.style.display = "none";
+          return false;
+        }
+        const transform = singleTransform(card, metadata.extent);
+        if (!transform) {
+          group.innerHTML = "";
+          group.style.display = "none";
+          return false;
+        }
+        const entryId = card?._mapPayload?.frontend?.entry_id || "single";
+        const url = requestResource(card, entryId, kind, metadata);
+        if (!url) {
+          group.innerHTML = "";
+          group.style.display = "none";
+          return false;
+        }
+        group.innerHTML = "";
+        group.style.display = "";
+        appendImage(group, url, transform, overlayOpacity(card), entryId, kind, metadata.version);
+        placeSingleLayer(card, group);
+        return true;
+      };
+    
+      const siteLayout = (site) => {
+        const box = site?.combined_svg_bounds;
+        if (!box || [box.min_x, box.min_y, box.max_x, box.max_y].some((value) => finite(value) === null)) {
+          return null;
+        }
+        const width = Math.max(1, Number(box.max_x) - Number(box.min_x));
+        const height = Math.max(1, Number(box.max_y) - Number(box.min_y));
+        const padding = 55;
+        const scale = Math.min((1000 - padding * 2) / width, (1000 - padding * 2) / height);
+        const drawnWidth = width * scale;
+        const drawnHeight = height * scale;
+        return {
+          scale,
+          offsetX: (1000 - drawnWidth) / 2 - Number(box.min_x) * scale,
+          offsetY: (1000 - drawnHeight) / 2 - Number(box.min_y) * scale,
+        };
+      };
+    
+      const memberMatrix = (member, layout) => {
+        const source = Array.isArray(member?.svg_matrix) && member.svg_matrix.length >= 6
+          ? member.svg_matrix.slice(0, 6).map(Number)
+          : null;
+        if (!source || source.some((value) => !Number.isFinite(value)) || !layout) return null;
+        const scale = layout.scale;
+        return [
+          scale * source[0],
+          scale * source[1],
+          scale * source[2],
+          scale * source[3],
+          scale * source[4] + layout.offsetX,
+          scale * source[5] + layout.offsetY,
+        ];
+      };
+    
+      const localRasterTransform = (extent) => [
+        extent.maxX - extent.minX,
+        0,
+        0,
+        extent.minY - extent.maxY,
+        extent.minX,
+        extent.maxY,
+      ];
+    
+      const ensureMultiGroup = (card) => {
+        const svg = card?._svgEl;
+        const multi = card?._multi036Layer;
+        if (!svg || !multi || typeof document === "undefined") return null;
+        let group = card._nm037Beta3MultiTerrainLayer;
+        if (!group || !group.isConnected || group.parentNode !== svg) {
+          group = document.createElementNS(SVG_NS, "g");
+          group.setAttribute("class", "nm-lidar-terrain-multi-layer");
+          group.setAttribute("pointer-events", "none");
+          card._nm037Beta3MultiTerrainLayer = group;
+        }
+        if (group.nextSibling !== multi) svg.insertBefore(group, multi);
+        return group;
+      };
+    
+      const syncMulti = (card, kind) => {
+        const group = ensureMultiGroup(card);
+        const multi = card?._multi036Layer;
+        if (!group || !multi || multi.style.display === "none" || kind === "none") {
+          if (group) {
+            group.innerHTML = "";
+            group.style.display = "none";
+          }
+          return false;
+        }
+        const site = card?._multi036Site;
+        const layout = siteLayout(site);
+        if (!layout) {
+          group.innerHTML = "";
+          group.style.display = "none";
+          return false;
+        }
+    
+        group.innerHTML = "";
+        let rendered = 0;
+        for (const member of site?.members || []) {
+          const metadata = validMetadata(memberMetadata(card, member), kind);
+          const matrix = memberMatrix(member, layout);
+          if (!metadata || !matrix) continue;
+          const entryId = String(member?.entry_id || "");
+          const url = requestResource(card, entryId, kind, metadata);
+          if (!url) continue;
+          const memberGroup = document.createElementNS(SVG_NS, "g");
+          memberGroup.setAttribute("class", "nm-lidar-terrain-member");
+          memberGroup.setAttribute("data-entry-id", entryId);
+          memberGroup.setAttribute(
+            "transform",
+            "matrix(" + matrix.map((value) => Number(value).toFixed(10)).join(" ") + ")",
+          );
+          appendImage(
+            memberGroup,
+            url,
+            localRasterTransform(metadata.extent),
+            overlayOpacity(card),
+            entryId,
+            kind,
+            metadata.version,
+          );
+          group.appendChild(memberGroup);
+          rendered += 1;
+        }
+        group.style.display = rendered ? "" : "none";
+        if (group.nextSibling !== multi) card._svgEl?.insertBefore?.(group, multi);
+        return rendered > 0;
+      };
+    
+      const ensureMultiObserver = (card) => {
+        const target = card?._multi036Layer;
+        if (!target || typeof MutationObserver === "undefined") return;
+        const previous = card._nm037Beta3MultiObserver;
+        if (previous?.target === target) return;
+        previous?.observer?.disconnect?.();
+        const observer = new MutationObserver(() => scheduleTerrain(card, 0));
+        observer.observe(target, { childList: true, subtree: true });
+        card._nm037Beta3MultiObserver = { observer, target };
+      };
+    
+      const ensureBaseObserver = (card) => {
+        const target = card?._baseEl;
+        if (!target || typeof MutationObserver === "undefined") return;
+        const previous = card._nm037Beta3BaseObserver;
+        if (previous?.target === target) return;
+        previous?.observer?.disconnect?.();
+        const observer = new MutationObserver((mutations) => {
+          const externalChange = mutations.some((mutation) => Array.from(mutation.addedNodes || [])
+            .concat(Array.from(mutation.removedNodes || []))
+            .some((node) => node !== card._nm037Beta3SingleTerrainLayer));
+          if (externalChange) scheduleTerrain(card, 0);
+        });
+        observer.observe(target, { childList: true });
+        card._nm037Beta3BaseObserver = { observer, target };
+      };
+    
+      const syncTerrain = (card) => {
+        if (!card || typeof document === "undefined") return;
+        ensureMultiObserver(card);
+        ensureBaseObserver(card);
+        const kind = overlayKind(card);
+        const multiVisible = Boolean(
+          card?._multi036Layer && card._multi036Layer.style.display !== "none",
+        );
+        if (multiVisible) {
+          const single = card._nm037Beta3SingleTerrainLayer;
+          if (single) single.style.display = "none";
+          syncMulti(card, kind);
+        } else {
+          const multi = card._nm037Beta3MultiTerrainLayer;
+          if (multi) multi.style.display = "none";
+          syncSingle(card, kind);
+        }
+      };
+    
+      function scheduleTerrain(card, delay = 0) {
+        if (!card || card._nm037Beta3TerrainTimer) return;
+        card._nm037Beta3TerrainTimer = setTimeout(() => {
+          card._nm037Beta3TerrainTimer = null;
+          syncTerrain(card);
+        }, Math.max(0, delay));
+      }
+    
+      const previousStub = Card.getStubConfig?.bind(Card);
+      Card.getStubConfig = (...args) => ({
+        ...(previousStub?.(...args) || {}),
+        terrain_overlay: "none",
+        terrain_overlay_opacity: DEFAULT_OPACITY,
+      });
+    
+      const previousForm = Card.getConfigForm?.bind(Card);
+      Card.getConfigForm = (...args) => {
+        const form = previousForm?.(...args) || { schema: [] };
+        if (!Array.isArray(form.schema)) return form;
+        const fieldNames = new Set(["terrain_overlay", "terrain_overlay_opacity"]);
+        const strip = (items) => (Array.isArray(items) ? items : []).filter((item) => {
+          if (item?.name === "terrain_overlay_settings" || fieldNames.has(item?.name)) return false;
+          if (Array.isArray(item?.schema)) item.schema = strip(item.schema);
+          return true;
+        });
+        form.schema = strip(form.schema);
+        const settings = {
+          type: "expandable",
+          name: "terrain_overlay_settings",
+          title: "LiDAR overlay",
+          flatten: true,
+          schema: [{
+            type: "grid",
+            name: "terrain_overlay_grid",
+            flatten: true,
+            column_min_width: "220px",
+            schema: [
+              { name: "terrain_overlay", selector: { select: { options: [
+                { value: "none", label: "None" },
+                { value: "terrain", label: "LiDAR terrain" },
+                { value: "elevation", label: "LiDAR elevation" },
+              ] } } },
+              { name: "terrain_overlay_opacity", selector: { number: {
+                min: 0.1,
+                max: 1,
+                step: 0.05,
+                mode: "slider",
+              } } },
+            ],
+          }],
+        };
+        const underlayIndex = form.schema.findIndex((item) => item?.name === "map_underlay_settings");
+        if (underlayIndex >= 0) form.schema.splice(underlayIndex + 1, 0, settings);
+        else form.schema.push(settings);
+        const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
+        form.computeLabel = (schema, data) => schema?.name === "terrain_overlay"
+          ? "LiDAR overlay"
+          : schema?.name === "terrain_overlay_opacity"
+            ? "LiDAR opacity"
+            : baseLabel?.(schema, data) || schema?.name || "";
+        return form;
+      };
+    
+      for (const method of [
+        "setConfig",
+        "_ensureDom",
+        "_applyMapPayload",
+        "_renderStatic",
+        "_applyStaticLayers",
+        "_applyViewBox",
+        "_syncOsmUnderlay036",
+      ]) {
+        const previous = proto[method];
+        if (typeof previous !== "function") continue;
+        proto[method] = function lidarTerrainRefresh(...args) {
+          const result = previous.apply(this, args);
+          scheduleTerrain(this, method === "_applyViewBox" ? 60 : 0);
+          return result;
+        };
+      }
+    
+      const previousDisconnected = proto.disconnectedCallback;
+      proto.disconnectedCallback = function lidarTerrainDisconnected(...args) {
+        clearTimeout(this._nm037Beta3TerrainTimer);
+        this._nm037Beta3TerrainTimer = null;
+        this._nm037Beta3MultiObserver?.observer?.disconnect?.();
+        this._nm037Beta3BaseObserver?.observer?.disconnect?.();
+        this._nm037Beta3MultiObserver = null;
+        this._nm037Beta3BaseObserver = null;
+        releaseAllResources(this);
+        if (typeof previousDisconnected === "function") {
+          return previousDisconnected.apply(this, args);
+        }
+        return undefined;
+      };
   }
 
-  const previousStub = Card.getStubConfig?.bind(Card);
-  Card.getStubConfig = (...args) => ({
-    ...(previousStub?.(...args) || {}),
-    terrain_overlay: "none",
-    terrain_overlay_opacity: DEFAULT_OPACITY,
-  });
-
-  const previousForm = Card.getConfigForm?.bind(Card);
-  Card.getConfigForm = (...args) => {
-    const form = previousForm?.(...args) || { schema: [] };
-    if (!Array.isArray(form.schema)) return form;
-    const fieldNames = new Set(["terrain_overlay", "terrain_overlay_opacity"]);
-    const strip = (items) => (Array.isArray(items) ? items : []).filter((item) => {
-      if (item?.name === "terrain_overlay_settings" || fieldNames.has(item?.name)) return false;
-      if (Array.isArray(item?.schema)) item.schema = strip(item.schema);
-      return true;
-    });
-    form.schema = strip(form.schema);
-    const settings = {
-      type: "expandable",
-      name: "terrain_overlay_settings",
-      title: "LiDAR overlay",
-      flatten: true,
-      schema: [{
-        type: "grid",
-        name: "terrain_overlay_grid",
-        flatten: true,
-        column_min_width: "220px",
-        schema: [
-          { name: "terrain_overlay", selector: { select: { options: [
-            { value: "none", label: "None" },
-            { value: "terrain", label: "LiDAR terrain" },
-            { value: "elevation", label: "LiDAR elevation" },
-          ] } } },
-          { name: "terrain_overlay_opacity", selector: { number: {
-            min: 0.1,
-            max: 1,
-            step: 0.05,
-            mode: "slider",
-          } } },
-        ],
-      }],
-    };
-    const underlayIndex = form.schema.findIndex((item) => item?.name === "map_underlay_settings");
-    if (underlayIndex >= 0) form.schema.splice(underlayIndex + 1, 0, settings);
-    else form.schema.push(settings);
-    const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema, data) => schema?.name === "terrain_overlay"
-      ? "LiDAR overlay"
-      : schema?.name === "terrain_overlay_opacity"
-        ? "LiDAR opacity"
-        : baseLabel?.(schema, data) || schema?.name || "";
-    return form;
-  };
-
-  for (const method of [
-    "setConfig",
-    "_ensureDom",
-    "_applyMapPayload",
-    "_renderStatic",
-    "_applyStaticLayers",
-    "_applyViewBox",
-    "_syncOsmUnderlay036",
-  ]) {
-    const previous = proto[method];
-    if (typeof previous !== "function") continue;
-    proto[method] = function lidarTerrainRefresh(...args) {
-      const result = previous.apply(this, args);
-      scheduleTerrain(this, method === "_applyViewBox" ? 60 : 0);
-      return result;
-    };
-  }
-
-  const previousDisconnected = proto.disconnectedCallback;
-  proto.disconnectedCallback = function lidarTerrainDisconnected(...args) {
-    clearTimeout(this._nm037Beta3TerrainTimer);
-    this._nm037Beta3TerrainTimer = null;
-    this._nm037Beta3MultiObserver?.observer?.disconnect?.();
-    this._nm037Beta3BaseObserver?.observer?.disconnect?.();
-    this._nm037Beta3MultiObserver = null;
-    this._nm037Beta3BaseObserver = null;
-    releaseAllResources(this);
-    if (typeof previousDisconnected === "function") {
-      return previousDisconnected.apply(this, args);
-    }
-    return undefined;
-  };
-
-})();
 
 // 0.3.7-beta6: flicker-free incremental map refreshes.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-
-  const stableHash = (value) => {
-    const text = String(value ?? "");
-    let hash = 2166136261;
-    for (let index = 0; index < text.length; index += 1) {
-      hash ^= text.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(36);
-  };
-
-  const staticSignature = (payload) => {
-    const map = payload?.map || {};
-    return stableHash(JSON.stringify({
-      mapVersion: payload?.map_version ?? map.version ?? null,
-      zones: map.zones || [],
-      offLimits: map.off_limit_areas || [],
-      vfOff: map.vf_off_areas || [],
-      channels: map.channels || [],
-      station: map.station || null,
-      gateAreas: payload?.gate_areas || [],
-    }));
-  };
-
-  const cycleSignature = (payload) => {
-    const current = payload?.current_cycle_render;
-    if (current?.scope !== "current_cycle") return "";
-    const path = String(current?.mowed_area?.path_d || "");
-    return [current.revision ?? "", path.length, path.slice(-64)].join("|");
-  };
-
-  const trailSignature = (card) => {
-    try {
-      return (card?._activeTrailSegments?.() || []).map((segment) => {
-        const first = segment?.[0] || [];
-        const last = segment?.at?.(-1) || [];
-        return `${segment?.length || 0}:${first?.[0] ?? ""},${first?.[1] ?? ""}:${last?.[0] ?? ""},${last?.[1] ?? ""}`;
-      }).join(";");
-    } catch (_error) {
-      return "";
-    }
-  };
-
-  const zoneProgress = (card, zoneId) => {
-    const direct = card?._zoneDetails?.(zoneId)?.progress;
-    if (direct !== null && direct !== undefined) return direct;
-    const coverage = card?._mapPayload?.coverage?.zones;
-    const row = Array.isArray(coverage)
-      ? coverage.find((item) => Number(item?.id) === Number(zoneId))
-      : null;
-    if (row?.pct !== null && row?.pct !== undefined) return row.pct;
-    const states = card?._mapPayload?.zone_states;
-    const state = Array.isArray(states)
-      ? states.find((item) => Number(item?.id) === Number(zoneId))
-      : null;
-    return state?.coverage_pct ?? null;
-  };
-
-  const syncZoneLabels = (card) => {
-    const labels = card?._labelsEl?.querySelectorAll?.(".nm-zone-label[data-zone-id]") || [];
-    for (const label of labels) {
-      const zoneId = Number(label?.dataset?.zoneId ?? label?.getAttribute?.("data-zone-id"));
-      if (!Number.isFinite(zoneId)) continue;
-      const zone = card?._layout?.zones?.find?.((item) => Number(item?.id) === zoneId);
-      const name = zone?.name || `Zone ${zoneId}`;
-      const progress = zoneProgress(card, zoneId);
-      const value = progress === null || progress === undefined ? name : `${name} · ${progress}%`;
-      const text = label?.querySelector?.("text");
-      if (!text || text.textContent === value) continue;
-      text.textContent = value;
-
-      const metrics = card?._pillMetrics?.(value);
-      const rect = label?.querySelector?.("rect");
-      const cx = Number(label?.dataset?.markerCx ?? text.getAttribute?.("x"));
-      const cy = Number(label?.dataset?.markerCy);
-      if (!metrics || !rect || !Number.isFinite(cx) || !Number.isFinite(cy)) continue;
-      rect.setAttribute("x", (cx - metrics.width / 2).toFixed(1));
-      rect.setAttribute("y", (cy - metrics.height / 2).toFixed(1));
-      rect.setAttribute("width", metrics.width.toFixed(1));
-      rect.setAttribute("height", metrics.height.toFixed(1));
-      rect.setAttribute("rx", (metrics.height / 2).toFixed(1));
-      text.setAttribute("y", (cy + metrics.fontSize * 0.34).toFixed(1));
-      text.setAttribute("font-size", metrics.fontSize.toFixed(1));
-    }
-  };
-
-  const previousStaticSignature = proto._payloadStaticSignature;
-  if (typeof previousStaticSignature === "function") {
-    proto._payloadStaticSignature = function beta6StaticSignature(payload = this._mapPayload) {
-      return staticSignature(payload);
-    };
-  }
-
-  const previousApplyStaticLayers = proto._applyStaticLayers;
-  if (typeof previousApplyStaticLayers === "function") {
-    proto._applyStaticLayers = function beta6ApplyStaticLayers(entry) {
-      const key = this._staticCacheKey?.() || "";
-      const mounted = Boolean(
-        this._baseEl?.childNodes?.length
-        || this._detailsEl?.childNodes?.length
-        || this._labelsEl?.childNodes?.length
-        || this._uiEl?.childNodes?.length
-      );
-      if (mounted && key && this._nm037Beta6StaticKey === key) {
-        syncZoneLabels(this);
-        return;
+  nmRuntimePatch31: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+    
+      const stableHash = (value) => {
+        const text = String(value ?? "");
+        let hash = 2166136261;
+        for (let index = 0; index < text.length; index += 1) {
+          hash ^= text.charCodeAt(index);
+          hash = Math.imul(hash, 16777619);
+        }
+        return (hash >>> 0).toString(36);
+      };
+    
+      const staticSignature = (payload) => {
+        const map = payload?.map || {};
+        return stableHash(JSON.stringify({
+          mapVersion: payload?.map_version ?? map.version ?? null,
+          zones: map.zones || [],
+          offLimits: map.off_limit_areas || [],
+          vfOff: map.vf_off_areas || [],
+          channels: map.channels || [],
+          station: map.station || null,
+          gateAreas: payload?.gate_areas || [],
+        }));
+      };
+    
+      const cycleSignature = (payload) => {
+        const current = payload?.current_cycle_render;
+        if (current?.scope !== "current_cycle") return "";
+        const path = String(current?.mowed_area?.path_d || "");
+        return [current.revision ?? "", path.length, path.slice(-64)].join("|");
+      };
+    
+      const trailSignature = (card) => {
+        try {
+          return (card?._activeTrailSegments?.() || []).map((segment) => {
+            const first = segment?.[0] || [];
+            const last = segment?.at?.(-1) || [];
+            return `${segment?.length || 0}:${first?.[0] ?? ""},${first?.[1] ?? ""}:${last?.[0] ?? ""},${last?.[1] ?? ""}`;
+          }).join(";");
+        } catch (_error) {
+          return "";
+        }
+      };
+    
+      const zoneProgress = (card, zoneId) => {
+        const direct = card?._zoneDetails?.(zoneId)?.progress;
+        if (direct !== null && direct !== undefined) return direct;
+        const coverage = card?._mapPayload?.coverage?.zones;
+        const row = Array.isArray(coverage)
+          ? coverage.find((item) => Number(item?.id) === Number(zoneId))
+          : null;
+        if (row?.pct !== null && row?.pct !== undefined) return row.pct;
+        const states = card?._mapPayload?.zone_states;
+        const state = Array.isArray(states)
+          ? states.find((item) => Number(item?.id) === Number(zoneId))
+          : null;
+        return state?.coverage_pct ?? null;
+      };
+    
+      const syncZoneLabels = (card) => {
+        const labels = card?._labelsEl?.querySelectorAll?.(".nm-zone-label[data-zone-id]") || [];
+        for (const label of labels) {
+          const zoneId = Number(label?.dataset?.zoneId ?? label?.getAttribute?.("data-zone-id"));
+          if (!Number.isFinite(zoneId)) continue;
+          const zone = card?._layout?.zones?.find?.((item) => Number(item?.id) === zoneId);
+          const name = zone?.name || `Zone ${zoneId}`;
+          const progress = zoneProgress(card, zoneId);
+          const value = progress === null || progress === undefined ? name : `${name} · ${progress}%`;
+          const text = label?.querySelector?.("text");
+          if (!text || text.textContent === value) continue;
+          text.textContent = value;
+    
+          const metrics = card?._pillMetrics?.(value);
+          const rect = label?.querySelector?.("rect");
+          const cx = Number(label?.dataset?.markerCx ?? text.getAttribute?.("x"));
+          const cy = Number(label?.dataset?.markerCy);
+          if (!metrics || !rect || !Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+          rect.setAttribute("x", (cx - metrics.width / 2).toFixed(1));
+          rect.setAttribute("y", (cy - metrics.height / 2).toFixed(1));
+          rect.setAttribute("width", metrics.width.toFixed(1));
+          rect.setAttribute("height", metrics.height.toFixed(1));
+          rect.setAttribute("rx", (metrics.height / 2).toFixed(1));
+          text.setAttribute("y", (cy + metrics.fontSize * 0.34).toFixed(1));
+          text.setAttribute("font-size", metrics.fontSize.toFixed(1));
+        }
+      };
+    
+      const previousStaticSignature = proto._payloadStaticSignature;
+      if (typeof previousStaticSignature === "function") {
+        proto._payloadStaticSignature = function beta6StaticSignature(payload = this._mapPayload) {
+          return staticSignature(payload);
+        };
       }
-      const result = previousApplyStaticLayers.call(this, entry);
-      this._nm037Beta6StaticKey = key;
-      syncZoneLabels(this);
-      return result;
-    };
-  }
-
-  const previousApplyMapPayload = proto._applyMapPayload;
-  if (typeof previousApplyMapPayload === "function") {
-    proto._applyMapPayload = function beta6ApplyMapPayload(...args) {
-      const previousHistoryKey = this._historyRenderKey;
-      const previousTrailKey = this._trailRenderKey;
-      const beforeCycle = cycleSignature(this._mapPayload);
-      const beforeTrail = trailSignature(this);
-      const result = previousApplyMapPayload.apply(this, args);
-      const afterCycle = cycleSignature(this._mapPayload);
-      const afterTrail = trailSignature(this);
-      if (beforeCycle && beforeCycle === afterCycle) this._historyRenderKey = previousHistoryKey;
-      if (beforeTrail === afterTrail) this._trailRenderKey = previousTrailKey;
-      syncZoneLabels(this);
-      return result;
-    };
-  }
-
-  const previousRenderHistory = proto._renderHistory;
-  if (typeof previousRenderHistory === "function") {
-    proto._renderHistory = function beta6RenderHistory(...args) {
-      const current = this?._mapPayload?.current_cycle_render;
-      const currentView = !this?._historySelectedSessionId
-        && (this?._historyDayOffset === null || this?._historyDayOffset === undefined)
-        && current?.scope === "current_cycle";
-      if (currentView && this?._historyEl && this?._layout) {
-        const path = String(current?.mowed_area?.path_d || "").trim();
-        const existing = this._historyEl.querySelector?.(
-          'g.nm-session-archive[data-session-id="current-cycle"] path.nm-session-area',
-        );
-        const structureKey = [
-          this._mapStaticSignature || "",
-          this?._config?.trail_color || "",
-          this?._config?.trail_opacity ?? "",
-          this?._layout?.scale ?? "",
-        ].join("|");
-        if (existing && this._nm037Beta6CycleStructureKey === structureKey && path) {
-          if (existing.getAttribute?.("d") !== path) existing.setAttribute?.("d", path);
-          const fill = String(this?._config?.trail_color || "#43a047");
-          if (existing.getAttribute?.("fill") !== fill) existing.setAttribute?.("fill", fill);
-          const group = existing.closest?.("g.nm-session-archive");
-          if (group) {
-            const opacity = Math.max(0, Math.min(1, Number(this?._config?.trail_opacity ?? 0.55))).toFixed(2);
-            if (group.getAttribute?.("opacity") !== opacity) group.setAttribute?.("opacity", opacity);
+    
+      const previousApplyStaticLayers = proto._applyStaticLayers;
+      if (typeof previousApplyStaticLayers === "function") {
+        proto._applyStaticLayers = function beta6ApplyStaticLayers(entry) {
+          const key = this._staticCacheKey?.() || "";
+          const mounted = Boolean(
+            this._baseEl?.childNodes?.length
+            || this._detailsEl?.childNodes?.length
+            || this._labelsEl?.childNodes?.length
+            || this._uiEl?.childNodes?.length
+          );
+          if (mounted && key && this._nm037Beta6StaticKey === key) {
+            syncZoneLabels(this);
+            return;
           }
-          this._historyRenderKey = `beta6-current-cycle|${cycleSignature(this._mapPayload)}|${structureKey}`;
-          return;
-        }
-        if (existing && !path) {
-          existing.closest?.("g.nm-session-archive")?.remove?.();
-          this._historyRenderKey = `beta6-current-cycle-empty|${structureKey}`;
-          return;
-        }
-        const result = previousRenderHistory.apply(this, args);
-        this._nm037Beta6CycleStructureKey = structureKey;
-        return result;
+          const result = previousApplyStaticLayers.call(this, entry);
+          this._nm037Beta6StaticKey = key;
+          syncZoneLabels(this);
+          return result;
+        };
       }
-      this._nm037Beta6CycleStructureKey = null;
-      return previousRenderHistory.apply(this, args);
-    };
+    
+      const previousApplyMapPayload = proto._applyMapPayload;
+      if (typeof previousApplyMapPayload === "function") {
+        proto._applyMapPayload = function beta6ApplyMapPayload(...args) {
+          const previousHistoryKey = this._historyRenderKey;
+          const previousTrailKey = this._trailRenderKey;
+          const beforeCycle = cycleSignature(this._mapPayload);
+          const beforeTrail = trailSignature(this);
+          const result = previousApplyMapPayload.apply(this, args);
+          const afterCycle = cycleSignature(this._mapPayload);
+          const afterTrail = trailSignature(this);
+          if (beforeCycle && beforeCycle === afterCycle) this._historyRenderKey = previousHistoryKey;
+          if (beforeTrail === afterTrail) this._trailRenderKey = previousTrailKey;
+          syncZoneLabels(this);
+          return result;
+        };
+      }
+    
+      const previousRenderHistory = proto._renderHistory;
+      if (typeof previousRenderHistory === "function") {
+        proto._renderHistory = function beta6RenderHistory(...args) {
+          const current = this?._mapPayload?.current_cycle_render;
+          const currentView = !this?._historySelectedSessionId
+            && (this?._historyDayOffset === null || this?._historyDayOffset === undefined)
+            && current?.scope === "current_cycle";
+          if (currentView && this?._historyEl && this?._layout) {
+            const path = String(current?.mowed_area?.path_d || "").trim();
+            const existing = this._historyEl.querySelector?.(
+              'g.nm-session-archive[data-session-id="current-cycle"] path.nm-session-area',
+            );
+            const structureKey = [
+              this._mapStaticSignature || "",
+              this?._config?.trail_color || "",
+              this?._config?.trail_opacity ?? "",
+              this?._layout?.scale ?? "",
+            ].join("|");
+            if (existing && this._nm037Beta6CycleStructureKey === structureKey && path) {
+              if (existing.getAttribute?.("d") !== path) existing.setAttribute?.("d", path);
+              const fill = String(this?._config?.trail_color || "#43a047");
+              if (existing.getAttribute?.("fill") !== fill) existing.setAttribute?.("fill", fill);
+              const group = existing.closest?.("g.nm-session-archive");
+              if (group) {
+                const opacity = Math.max(0, Math.min(1, Number(this?._config?.trail_opacity ?? 0.55))).toFixed(2);
+                if (group.getAttribute?.("opacity") !== opacity) group.setAttribute?.("opacity", opacity);
+              }
+              this._historyRenderKey = `beta6-current-cycle|${cycleSignature(this._mapPayload)}|${structureKey}`;
+              return;
+            }
+            if (existing && !path) {
+              existing.closest?.("g.nm-session-archive")?.remove?.();
+              this._historyRenderKey = `beta6-current-cycle-empty|${structureKey}`;
+              return;
+            }
+            const result = previousRenderHistory.apply(this, args);
+            this._nm037Beta6CycleStructureKey = structureKey;
+            return result;
+          }
+          this._nm037Beta6CycleStructureKey = null;
+          return previousRenderHistory.apply(this, args);
+        };
+      }
+    
+      const previousRenderTrail = proto._renderTrail;
+      if (typeof previousRenderTrail === "function") {
+        proto._renderTrail = function beta6RenderTrail(...args) {
+          if (
+            this?._historySelectedSessionId
+            || (this?._historyDayOffset !== null && this?._historyDayOffset !== undefined)
+            || !this?._trailEl
+            || !this?._layout
+          ) {
+            return previousRenderTrail.apply(this, args);
+          }
+          const segments = this._activeTrailSegments?.() || [];
+          const lines = Array.from(this._trailEl.querySelectorAll?.("polyline.nm-session-path") || []);
+          if (segments.length && lines.length === segments.length) {
+            const width = typeof trailWidth034 === "function" ? trailWidth034(this) : 8;
+            const rawSessions = Array.isArray(this?._mapPayload?.sessions) ? this._mapPayload.sessions : [];
+            const activeSession = [...rawSessions].reverse().find(
+              (session) => Boolean(session?.active || (session?.ended_at === null && session?.started_at)),
+            );
+            const sessionId = activeSession?.id ?? activeSession?.session_id ?? this._trailSession ?? 0;
+            segments.forEach((segment, index) => {
+              const line = lines[index];
+              const points = this._pointString(segment);
+              if (line.getAttribute?.("points") !== points) line.setAttribute?.("points", points);
+              const color = String(this?._config?.trail_color || "#43a047");
+              if (line.getAttribute?.("stroke") !== color) line.setAttribute?.("stroke", color);
+              const widthText = Number(width).toFixed(1);
+              if (line.getAttribute?.("stroke-width") !== widthText) line.setAttribute?.("stroke-width", widthText);
+              line.setAttribute?.("data-session-id", String(sessionId));
+              line.setAttribute?.("data-trail-source", "mqtt-tail");
+            });
+            this._trailRenderKey = `beta6-live|${trailSignature(this)}|${this?._config?.trail_color || ""}|${width}`;
+            return;
+          }
+          return previousRenderTrail.apply(this, args);
+        };
+      }
   }
 
-  const previousRenderTrail = proto._renderTrail;
-  if (typeof previousRenderTrail === "function") {
-    proto._renderTrail = function beta6RenderTrail(...args) {
-      if (
-        this?._historySelectedSessionId
-        || (this?._historyDayOffset !== null && this?._historyDayOffset !== undefined)
-        || !this?._trailEl
-        || !this?._layout
-      ) {
-        return previousRenderTrail.apply(this, args);
-      }
-      const segments = this._activeTrailSegments?.() || [];
-      const lines = Array.from(this._trailEl.querySelectorAll?.("polyline.nm-session-path") || []);
-      if (segments.length && lines.length === segments.length) {
-        const width = typeof trailWidth034 === "function" ? trailWidth034(this) : 8;
-        const rawSessions = Array.isArray(this?._mapPayload?.sessions) ? this._mapPayload.sessions : [];
-        const activeSession = [...rawSessions].reverse().find(
-          (session) => Boolean(session?.active || (session?.ended_at === null && session?.started_at)),
-        );
-        const sessionId = activeSession?.id ?? activeSession?.session_id ?? this._trailSession ?? 0;
-        segments.forEach((segment, index) => {
-          const line = lines[index];
-          const points = this._pointString(segment);
-          if (line.getAttribute?.("points") !== points) line.setAttribute?.("points", points);
-          const color = String(this?._config?.trail_color || "#43a047");
-          if (line.getAttribute?.("stroke") !== color) line.setAttribute?.("stroke", color);
-          const widthText = Number(width).toFixed(1);
-          if (line.getAttribute?.("stroke-width") !== widthText) line.setAttribute?.("stroke-width", widthText);
-          line.setAttribute?.("data-session-id", String(sessionId));
-          line.setAttribute?.("data-trail-source", "mqtt-tail");
-        });
-        this._trailRenderKey = `beta6-live|${trailSignature(this)}|${this?._config?.trail_color || ""}|${width}`;
-        return;
-      }
-      return previousRenderTrail.apply(this, args);
-    };
-  }
-
-})();
 
 // 0.3.7-beta7: accept deferred vendor renders by stable cycle identity.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const RETRY_MS = 10_000;
-
-  const baseMapPath = (card) => {
-    const raw = card?._v030BaseApiPath || card?._apiPath?.();
-    return String(raw || "").split(/[?#]/, 1)[0];
-  };
-
-  const cyclePath = (card) => {
-    const base = baseMapPath(card);
-    return base ? base + "?current_cycle_only=1" : null;
-  };
-
-  const vendorRevision = (payload) => {
-    const debug = payload?.vendor_trail_debug;
-    const direct = Number(debug?.revision);
-    if (Number.isFinite(direct)) return String(direct);
-    const first = String(debug?.current_cycle_key ?? "").split(":", 1)[0];
-    return /^\d+$/.test(first) ? first : "";
-  };
-
-  const stableCycleInfo = (payload) => {
-    const debug = payload?.vendor_trail_debug;
-    const cycleIds = debug?.cycle_ids;
-    const owned = Array.isArray(debug?.owned_zone_ids) ? debug.owned_zone_ids : [];
-    if (!cycleIds || typeof cycleIds !== "object" || !owned.length) return null;
-
-    const pairs = [];
-    for (const rawId of owned) {
-      const zoneId = Number(rawId);
-      if (!Number.isFinite(zoneId)) continue;
-      const cycleId = cycleIds[String(zoneId)] ?? cycleIds[zoneId];
-      if (cycleId === null || cycleId === undefined || cycleId === "") return null;
-      pairs.push([String(zoneId), String(cycleId)]);
-    }
-    if (!pairs.length) return null;
-    pairs.sort((left, right) => Number(left[0]) - Number(right[0]) || left[1].localeCompare(right[1]));
-    return {
-      signature: JSON.stringify(pairs),
-      cycles: new Map(pairs),
-      sourceKey: debug?.current_cycle_key ?? null,
-      vendorRevision: vendorRevision(payload),
-    };
-  };
-
-  const renderMatchesStableCycle = (render, payload) => {
-    if (render?.scope !== "current_cycle") return false;
-    const info = stableCycleInfo(payload);
-    if (!info) return false;
-    const rows = Array.isArray(render?.zones) ? render.zones : [];
-    let matched = 0;
-    for (const row of rows) {
-      const zoneId = Number(row?.zone_id);
-      const cycleId = row?.cycle_id;
-      if (!Number.isFinite(zoneId) || cycleId === null || cycleId === undefined || cycleId === "") continue;
-      const expected = info.cycles.get(String(zoneId));
-      if (!expected || expected !== String(cycleId)) return false;
-      matched += 1;
-    }
-    return matched > 0;
-  };
-
-  const scheduleIdle = (callback) => {
-    if (typeof globalThis.requestIdleCallback === "function") {
-      return globalThis.requestIdleCallback(callback, { timeout: 800 });
-    }
-    return globalThis.setTimeout(callback, 0);
-  };
-
-  const clearWrongCycleRender = (card) => {
-    if (!card?._mapPayload?.current_cycle_render) return;
-    const next = { ...card._mapPayload };
-    delete next.current_cycle_render;
-    card._mapPayload = next;
-    card._retainedCycleSourceKey = null;
-    card._historyRenderKey = null;
-    card._trailRenderKey = null;
-    card._nm037Beta6CycleStructureKey = null;
-    card._nm037Beta7AcceptedCycleSignature = null;
-    card._nm037Beta7AcceptedVendorRevision = null;
-    card._nm037Beta7RenderCycleSignature = null;
-    if (card._historyEl) card._historyEl.innerHTML = "";
-    card._queueRender?.({ history: true, trail: true, sessions: true });
-  };
-
-  const queueStableCycle = (card) => {
-    if (card._zoneArtifactsHandled?.()) return;
-    if (!card?._hass?.callApi) return;
-    const info = stableCycleInfo(card?._mapPayload);
-    if (!info) return; // Older integrations keep the beta16 strict compatibility path.
-
-    const render = card?._mapPayload?.current_cycle_render;
-    const renderMatches = renderMatchesStableCycle(render, card._mapPayload);
-    if (
-      renderMatches
-      && card._nm037Beta7AcceptedCycleSignature === info.signature
-      && card._nm037Beta7AcceptedVendorRevision === info.vendorRevision
-    ) return;
-
-    const path = cyclePath(card);
-    if (!path) return;
-    const now = Date.now();
-    if (card._nm037Beta7RetryAt && now < card._nm037Beta7RetryAt) return;
-    if (card._nm037Beta7Loading) {
-      card._nm037Beta7Pending = true;
-      return;
-    }
-
-    const generation = Number(card._beta16CycleGeneration || 0);
-    const requestCycleSignature = info.signature;
-    const requestVendorRevision = info.vendorRevision;
-    const requestSequence = Number(card._nm037Beta7RequestSequence || 0) + 1;
-    card._nm037Beta7RequestSequence = requestSequence;
-    const requestKey = [path, generation, requestCycleSignature, requestVendorRevision, requestSequence].join("|");
-    card._nm037Beta7Loading = requestKey;
-    card._nm037Beta7Pending = false;
-
-    scheduleIdle(async () => {
-      try {
-        const payload = await card._hass.callApi(
-          "GET",
-          String(path).replace(/^\/api\//, "").replace(/^\/+/, ""),
-        );
-        if (
-          Number(card._beta16CycleGeneration || 0) !== generation
-          || cyclePath(card) !== path
-        ) return;
-
-        if (card._zoneArtifactsHandled?.()) return;
-        const currentInfo = stableCycleInfo(card?._mapPayload);
-        if (!currentInfo || currentInfo.signature !== requestCycleSignature) return;
-        const nextRender = payload?.current_cycle_render;
-        if (!renderMatchesStableCycle(nextRender, card._mapPayload)) return;
-        if (requestSequence < Number(card._nm037Beta7AcceptedRequestSequence || 0)) return;
-
-        card._mapPayload = { ...card._mapPayload, current_cycle_render: nextRender };
-        card._retainedCycleSourceKey = card?._mapPayload?.vendor_trail_debug?.current_cycle_key ?? null;
-        card._nm037Beta7AcceptedRequestSequence = requestSequence;
-        card._nm037Beta7AcceptedCycleSignature = currentInfo.signature;
-        card._nm037Beta7AcceptedVendorRevision = requestVendorRevision;
-        card._nm037Beta7RenderCycleSignature = currentInfo.signature;
+  nmRuntimePatch32: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const RETRY_MS = 10_000;
+    
+      const baseMapPath = (card) => {
+        const raw = card?._v030BaseApiPath || card?._apiPath?.();
+        return String(raw || "").split(/[?#]/, 1)[0];
+      };
+    
+      const cyclePath = (card) => {
+        const base = baseMapPath(card);
+        return base ? base + "?current_cycle_only=1" : null;
+      };
+    
+      const vendorRevision = (payload) => {
+        const debug = payload?.vendor_trail_debug;
+        const direct = Number(debug?.revision);
+        if (Number.isFinite(direct)) return String(direct);
+        const first = String(debug?.current_cycle_key ?? "").split(":", 1)[0];
+        return /^\d+$/.test(first) ? first : "";
+      };
+    
+      const stableCycleInfo = (payload) => {
+        const debug = payload?.vendor_trail_debug;
+        const cycleIds = debug?.cycle_ids;
+        const owned = Array.isArray(debug?.owned_zone_ids) ? debug.owned_zone_ids : [];
+        if (!cycleIds || typeof cycleIds !== "object" || !owned.length) return null;
+    
+        const pairs = [];
+        for (const rawId of owned) {
+          const zoneId = Number(rawId);
+          if (!Number.isFinite(zoneId)) continue;
+          const cycleId = cycleIds[String(zoneId)] ?? cycleIds[zoneId];
+          if (cycleId === null || cycleId === undefined || cycleId === "") return null;
+          pairs.push([String(zoneId), String(cycleId)]);
+        }
+        if (!pairs.length) return null;
+        pairs.sort((left, right) => Number(left[0]) - Number(right[0]) || left[1].localeCompare(right[1]));
+        return {
+          signature: JSON.stringify(pairs),
+          cycles: new Map(pairs),
+          sourceKey: debug?.current_cycle_key ?? null,
+          vendorRevision: vendorRevision(payload),
+        };
+      };
+    
+      const renderMatchesStableCycle = (render, payload) => {
+        if (render?.scope !== "current_cycle") return false;
+        const info = stableCycleInfo(payload);
+        if (!info) return false;
+        const rows = Array.isArray(render?.zones) ? render.zones : [];
+        let matched = 0;
+        for (const row of rows) {
+          const zoneId = Number(row?.zone_id);
+          const cycleId = row?.cycle_id;
+          if (!Number.isFinite(zoneId) || cycleId === null || cycleId === undefined || cycleId === "") continue;
+          const expected = info.cycles.get(String(zoneId));
+          if (!expected || expected !== String(cycleId)) return false;
+          matched += 1;
+        }
+        return matched > 0;
+      };
+    
+      const scheduleIdle = (callback) => {
+        if (typeof globalThis.requestIdleCallback === "function") {
+          return globalThis.requestIdleCallback(callback, { timeout: 800 });
+        }
+        return globalThis.setTimeout(callback, 0);
+      };
+    
+      const clearWrongCycleRender = (card) => {
+        if (!card?._mapPayload?.current_cycle_render) return;
+        const next = { ...card._mapPayload };
+        delete next.current_cycle_render;
+        card._mapPayload = next;
+        card._retainedCycleSourceKey = null;
         card._historyRenderKey = null;
         card._trailRenderKey = null;
+        card._nm037Beta6CycleStructureKey = null;
+        card._nm037Beta7AcceptedCycleSignature = null;
+        card._nm037Beta7AcceptedVendorRevision = null;
+        card._nm037Beta7RenderCycleSignature = null;
+        if (card._historyEl) card._historyEl.innerHTML = "";
         card._queueRender?.({ history: true, trail: true, sessions: true });
-        card._nm037Beta7RetryAt = 0;
-      } catch (error) {
-        if (Number(card._beta16CycleGeneration || 0) === generation) {
-          card._nm037Beta7RetryAt = Date.now() + RETRY_MS;
-          console.debug("[Navimower Map Card] Stable-cycle current-cycle request unavailable", error);
+      };
+    
+      const queueStableCycle = (card) => {
+        if (card._zoneArtifactsHandled?.()) return;
+        if (!card?._hass?.callApi) return;
+        const info = stableCycleInfo(card?._mapPayload);
+        if (!info) return; // Older integrations keep the beta16 strict compatibility path.
+    
+        const render = card?._mapPayload?.current_cycle_render;
+        const renderMatches = renderMatchesStableCycle(render, card._mapPayload);
+        if (
+          renderMatches
+          && card._nm037Beta7AcceptedCycleSignature === info.signature
+          && card._nm037Beta7AcceptedVendorRevision === info.vendorRevision
+        ) return;
+    
+        const path = cyclePath(card);
+        if (!path) return;
+        const now = Date.now();
+        if (card._nm037Beta7RetryAt && now < card._nm037Beta7RetryAt) return;
+        if (card._nm037Beta7Loading) {
+          card._nm037Beta7Pending = true;
+          return;
         }
-      } finally {
-        if (card._nm037Beta7Loading === requestKey) card._nm037Beta7Loading = null;
-        const pending = Boolean(card._nm037Beta7Pending);
+    
+        const generation = Number(card._beta16CycleGeneration || 0);
+        const requestCycleSignature = info.signature;
+        const requestVendorRevision = info.vendorRevision;
+        const requestSequence = Number(card._nm037Beta7RequestSequence || 0) + 1;
+        card._nm037Beta7RequestSequence = requestSequence;
+        const requestKey = [path, generation, requestCycleSignature, requestVendorRevision, requestSequence].join("|");
+        card._nm037Beta7Loading = requestKey;
         card._nm037Beta7Pending = false;
-        if (Number(card._beta16CycleGeneration || 0) === generation) {
-          const latest = stableCycleInfo(card?._mapPayload);
-          const needsCatchup = latest && (
-            latest.signature !== card._nm037Beta7AcceptedCycleSignature
-            || latest.vendorRevision !== card._nm037Beta7AcceptedVendorRevision
-            || !renderMatchesStableCycle(card?._mapPayload?.current_cycle_render, card._mapPayload)
-          );
-          if (pending || needsCatchup) queueStableCycle(card);
-        }
+    
+        scheduleIdle(async () => {
+          try {
+            const payload = await card._hass.callApi(
+              "GET",
+              String(path).replace(/^\/api\//, "").replace(/^\/+/, ""),
+            );
+            if (
+              Number(card._beta16CycleGeneration || 0) !== generation
+              || cyclePath(card) !== path
+            ) return;
+    
+            if (card._zoneArtifactsHandled?.()) return;
+            const currentInfo = stableCycleInfo(card?._mapPayload);
+            if (!currentInfo || currentInfo.signature !== requestCycleSignature) return;
+            const nextRender = payload?.current_cycle_render;
+            if (!renderMatchesStableCycle(nextRender, card._mapPayload)) return;
+            if (requestSequence < Number(card._nm037Beta7AcceptedRequestSequence || 0)) return;
+    
+            card._mapPayload = { ...card._mapPayload, current_cycle_render: nextRender };
+            card._retainedCycleSourceKey = card?._mapPayload?.vendor_trail_debug?.current_cycle_key ?? null;
+            card._nm037Beta7AcceptedRequestSequence = requestSequence;
+            card._nm037Beta7AcceptedCycleSignature = currentInfo.signature;
+            card._nm037Beta7AcceptedVendorRevision = requestVendorRevision;
+            card._nm037Beta7RenderCycleSignature = currentInfo.signature;
+            card._historyRenderKey = null;
+            card._trailRenderKey = null;
+            card._queueRender?.({ history: true, trail: true, sessions: true });
+            card._nm037Beta7RetryAt = 0;
+          } catch (error) {
+            if (Number(card._beta16CycleGeneration || 0) === generation) {
+              card._nm037Beta7RetryAt = Date.now() + RETRY_MS;
+              console.debug("[Navimower Map Card] Stable-cycle current-cycle request unavailable", error);
+            }
+          } finally {
+            if (card._nm037Beta7Loading === requestKey) card._nm037Beta7Loading = null;
+            const pending = Boolean(card._nm037Beta7Pending);
+            card._nm037Beta7Pending = false;
+            if (Number(card._beta16CycleGeneration || 0) === generation) {
+              const latest = stableCycleInfo(card?._mapPayload);
+              const needsCatchup = latest && (
+                latest.signature !== card._nm037Beta7AcceptedCycleSignature
+                || latest.vendorRevision !== card._nm037Beta7AcceptedVendorRevision
+                || !renderMatchesStableCycle(card?._mapPayload?.current_cycle_render, card._mapPayload)
+              );
+              if (pending || needsCatchup) queueStableCycle(card);
+            }
+          }
+        });
+      };
+    
+      const previousApplyMapPayload = proto._applyMapPayload;
+      if (typeof previousApplyMapPayload === "function") {
+        proto._applyMapPayload = function beta7ApplyMapPayload(...args) {
+          const incoming = args[0];
+          const incomingInfo = stableCycleInfo(incoming);
+          const retained = this?._mapPayload?.current_cycle_render;
+    
+          // Suppress beta16's geometry-revision-sensitive deferred request when the
+          // already mounted render is still valid for the incoming stable cycles.
+          // beta7 performs the freshness request independently below.
+          if (incomingInfo && retained && renderMatchesStableCycle(retained, incoming)) {
+            const sourceKey = incoming?.vendor_trail_debug?.current_cycle_key;
+            if (sourceKey !== null && sourceKey !== undefined) this._retainedCycleSourceKey = sourceKey;
+          }
+    
+          const result = previousApplyMapPayload.apply(this, args);
+          if (this._zoneArtifactsHandled?.()) return result;
+          const currentInfo = stableCycleInfo(this?._mapPayload);
+          const currentRender = this?._mapPayload?.current_cycle_render;
+          if (currentInfo && currentRender) {
+            if (!renderMatchesStableCycle(currentRender, this._mapPayload)) {
+              clearWrongCycleRender(this);
+            } else {
+              this._nm037Beta7RenderCycleSignature = currentInfo.signature;
+            }
+          }
+          queueStableCycle(this);
+          return result;
+        };
       }
-    });
-  };
-
-  const previousApplyMapPayload = proto._applyMapPayload;
-  if (typeof previousApplyMapPayload === "function") {
-    proto._applyMapPayload = function beta7ApplyMapPayload(...args) {
-      const incoming = args[0];
-      const incomingInfo = stableCycleInfo(incoming);
-      const retained = this?._mapPayload?.current_cycle_render;
-
-      // Suppress beta16's geometry-revision-sensitive deferred request when the
-      // already mounted render is still valid for the incoming stable cycles.
-      // beta7 performs the freshness request independently below.
-      if (incomingInfo && retained && renderMatchesStableCycle(retained, incoming)) {
-        const sourceKey = incoming?.vendor_trail_debug?.current_cycle_key;
-        if (sourceKey !== null && sourceKey !== undefined) this._retainedCycleSourceKey = sourceKey;
+    
+      const previousSetConfig = proto.setConfig;
+      if (typeof previousSetConfig === "function") {
+        proto.setConfig = function beta7SetConfig(config) {
+          const previous = this?._config?.entity || this?._config?.mower_entity || null;
+          const result = previousSetConfig.call(this, config);
+          const current = this?._config?.entity || this?._config?.mower_entity || null;
+          if (previous !== current) {
+            this._nm037Beta7Loading = null;
+            this._nm037Beta7Pending = false;
+            this._nm037Beta7RetryAt = 0;
+            this._nm037Beta7AcceptedRequestSequence = 0;
+            this._nm037Beta7AcceptedCycleSignature = null;
+            this._nm037Beta7AcceptedVendorRevision = null;
+            this._nm037Beta7RenderCycleSignature = null;
+          }
+          queueStableCycle(this);
+          return result;
+        };
       }
-
-      const result = previousApplyMapPayload.apply(this, args);
-      if (this._zoneArtifactsHandled?.()) return result;
-      const currentInfo = stableCycleInfo(this?._mapPayload);
-      const currentRender = this?._mapPayload?.current_cycle_render;
-      if (currentInfo && currentRender) {
-        if (!renderMatchesStableCycle(currentRender, this._mapPayload)) {
-          clearWrongCycleRender(this);
-        } else {
-          this._nm037Beta7RenderCycleSignature = currentInfo.signature;
-        }
-      }
-      queueStableCycle(this);
-      return result;
-    };
-  }
-
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta7SetConfig(config) {
-      const previous = this?._config?.entity || this?._config?.mower_entity || null;
-      const result = previousSetConfig.call(this, config);
-      const current = this?._config?.entity || this?._config?.mower_entity || null;
-      if (previous !== current) {
+    
+      const previousDisconnected = proto.disconnectedCallback;
+      proto.disconnectedCallback = function beta7Disconnected(...args) {
         this._nm037Beta7Loading = null;
         this._nm037Beta7Pending = false;
         this._nm037Beta7RetryAt = 0;
-        this._nm037Beta7AcceptedRequestSequence = 0;
-        this._nm037Beta7AcceptedCycleSignature = null;
-        this._nm037Beta7AcceptedVendorRevision = null;
-        this._nm037Beta7RenderCycleSignature = null;
-      }
-      queueStableCycle(this);
-      return result;
-    };
+        return previousDisconnected?.apply(this, args);
+      };
+    
+      proto._beta7CurrentCycleContract = () => ({
+        stableCycleIdentity: true,
+        geometryRevisionIsFreshnessOnly: true,
+        sameCyclePrefixAccepted: true,
+        crossCycleRejected: true,
+        oneDeferredRequestAtATime: true,
+      });
   }
 
-  const previousDisconnected = proto.disconnectedCallback;
-  proto.disconnectedCallback = function beta7Disconnected(...args) {
-    this._nm037Beta7Loading = null;
-    this._nm037Beta7Pending = false;
-    this._nm037Beta7RetryAt = 0;
-    return previousDisconnected?.apply(this, args);
-  };
-
-  proto._beta7CurrentCycleContract = () => ({
-    stableCycleIdentity: true,
-    geometryRevisionIsFreshnessOnly: true,
-    sameCyclePrefixAccepted: true,
-    crossCycleRejected: true,
-    oneDeferredRequestAtATime: true,
-  });
-
-})();
 
 // 0.3.7-beta8: shared, cycle-safe per-zone prepared SVG resources.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || __navimowerRuntimeAlreadyApplied) return;
-  const proto = Card.prototype;
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  const buckets = new WeakMap();
-  let maskSequence = 0;
-  const plainId = (id) => /^[1-9][0-9]{0,9}$/.test(String(id));
-  const basePath = (entry) => "/api/navimower/map/" + encodeURIComponent(entry);
-  const currentView = (card) => !card._historySelectedSessionId && !card._multi036SelectedSessionKey
-    && (card._historyDayOffset === null || card._historyDayOffset === undefined);
-  const authKey = (hass) => hass?.connection || hass?.auth || hass;
-  const cycles = (payload) => payload?.vendor_trail_debug?.cycle_ids || {};
-  const freshness = (payload) => String(payload?.vendor_trail_debug?.current_cycle_key ?? payload?.vendor_trail_revision ?? "");
-  const descriptor = (payload, entry) => {
-    const url = payload?.map_artifacts?.manifest_url;
-    if (payload?.map_artifacts?.schema_version !== 1 || typeof url !== "string") return null;
-    const match = url.match(/^\/api\/navimower\/map\/([^/?#]+)\?artifacts_only=1$/);
-    if (!match) return null;
-    let id;
-    try { id = decodeURIComponent(match[1]); } catch (_error) { return null; }
-    if (!id || (entry && String(entry) !== id) || basePath(id) + "?artifacts_only=1" !== url) return null;
-    return { entry: id, url };
-  };
-  const supported = (card, payload, entry) => descriptor(payload, entry)
-    && (typeof card?._hass?.fetchWithAuth === "function" || typeof card?._hass?.callApiRaw === "function")
-    && typeof globalThis.Image === "function" && typeof URL.createObjectURL === "function";
-
-  async function raw(hass, path, signal) {
-    const response = typeof hass.fetchWithAuth === "function"
-      ? await hass.fetchWithAuth(path, { signal })
-      : await hass.callApiRaw("GET", path.replace(/^\/api\//, ""), undefined, undefined, signal);
-    if (!response?.ok) {
-      const error = new Error("Map artifact HTTP " + (response?.status || "unavailable"));
-      error.status = response?.status;
-      throw error;
-    }
-    return response;
-  }
-  async function timedRequest(hass, path, read, controller = new AbortController()) {
-    const timer = setTimeout(() => controller.abort(), 30_000);
-    try { return await read(await raw(hass, path, controller.signal)); }
-    finally { clearTimeout(timer); }
-  }
-  function bucketFor(hass) {
-    const key = authKey(hass);
-    if (!buckets.has(key)) buckets.set(key, { images: new Map(), manifests: new Map(), active: 0, queue: [] });
-    return buckets.get(key);
-  }
-  function limited(bucket, work) {
-    return new Promise((resolve, reject) => {
-      bucket.queue.push({ work, resolve, reject });
-      const drain = () => {
-        while (bucket.active < 2 && bucket.queue.length) {
-          const item = bucket.queue.shift();
-          bucket.active += 1;
-          Promise.resolve().then(item.work).then(item.resolve, item.reject).finally(() => { bucket.active -= 1; drain(); });
-        }
+  nmRuntimePatch33: {
+    const Card = __navimowerRuntimeCard;
+    const proto = Card.prototype;
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const buckets = new WeakMap();
+      let maskSequence = 0;
+      const plainId = (id) => /^[1-9][0-9]{0,9}$/.test(String(id));
+      const basePath = (entry) => "/api/navimower/map/" + encodeURIComponent(entry);
+      const currentView = (card) => !card._historySelectedSessionId && !card._multi036SelectedSessionKey
+        && (card._historyDayOffset === null || card._historyDayOffset === undefined);
+      const authKey = (hass) => hass?.connection || hass?.auth || hass;
+      const cycles = (payload) => payload?.vendor_trail_debug?.cycle_ids || {};
+      const freshness = (payload) => String(payload?.vendor_trail_debug?.current_cycle_key ?? payload?.vendor_trail_revision ?? "");
+      const descriptor = (payload, entry) => {
+        const url = payload?.map_artifacts?.manifest_url;
+        if (payload?.map_artifacts?.schema_version !== 1 || typeof url !== "string") return null;
+        const match = url.match(/^\/api\/navimower\/map\/([^/?#]+)\?artifacts_only=1$/);
+        if (!match) return null;
+        let id;
+        try { id = decodeURIComponent(match[1]); } catch (_error) { return null; }
+        if (!id || (entry && String(entry) !== id) || basePath(id) + "?artifacts_only=1" !== url) return null;
+        return { entry: id, url };
       };
-      drain();
-    });
-  }
-  function getManifest(hass, bucket, entry) {
-    if (bucket.manifests.has(entry)) return bucket.manifests.get(entry);
-    const promise = timedRequest(hass, basePath(entry) + "?artifacts_only=1", (response) => response.json());
-    bucket.manifests.set(entry, promise);
-    promise.finally(() => { if (bucket.manifests.get(entry) === promise) bucket.manifests.delete(entry); }).catch(() => {});
-    return promise;
-  }
-  function acquireImage(hass, bucket, entry, zone, artifact) {
-    const key = entry + ":" + zone + ":" + artifact.resource_id;
-    let item = bucket.images.get(key);
-    if (!item) {
-      item = { key, refs: 0, url: null, controller: new AbortController(), artifact };
-      bucket.images.set(key, item);
-      item.promise = limited(bucket, async () => {
-        if (!item.refs) throw new Error("Released artifact request");
-        const blob = await timedRequest(hass, artifact.url, async (response) => {
-          const type = response.headers?.get?.("Content-Type") || "";
-          if (!type.toLowerCase().startsWith("image/svg+xml")) throw new Error("Unexpected artifact format");
-          const body = await response.blob();
-          if (body.size > 16 * 1024 * 1024) throw new Error("Artifact exceeds image budget");
-          return body;
-        }, item.controller);
-        if (!item.refs) throw new Error("Released artifact response");
-        const url = URL.createObjectURL(blob);
-        try {
-          const image = new Image();
-          let timer;
-          const ready = typeof image.decode === "function"
-            ? (image.src = url, image.decode())
-            : new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = url; });
-          try {
-            await Promise.race([ready, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Artifact decode timeout")), 30_000); })]);
-          } finally { clearTimeout(timer); }
-          if (!item.refs) throw new Error("Released artifact decode");
-          item.url = url;
-          return item;
-        } catch (error) { URL.revokeObjectURL(url); throw error; }
-      });
-      item.promise.catch(() => {});
-    }
-    item.refs += 1;
-    let released = false;
-    return { item, release() {
-      if (released) return;
-      released = true;
-      item.refs -= 1;
-      if (!item.refs) {
-        if (bucket.images.get(key) === item) bucket.images.delete(key);
-        item.controller.abort();
-        if (item.url) URL.revokeObjectURL(item.url);
+      const supported = (card, payload, entry) => descriptor(payload, entry)
+        && (typeof card?._hass?.fetchWithAuth === "function" || typeof card?._hass?.callApiRaw === "function")
+        && typeof globalThis.Image === "function" && typeof URL.createObjectURL === "function";
+    
+      async function raw(hass, path, signal) {
+        const response = typeof hass.fetchWithAuth === "function"
+          ? await hass.fetchWithAuth(path, { signal })
+          : await hass.callApiRaw("GET", path.replace(/^\/api\//, ""), undefined, undefined, signal);
+        if (!response?.ok) {
+          const error = new Error("Map artifact HTTP " + (response?.status || "unavailable"));
+          error.status = response?.status;
+          throw error;
+        }
+        return response;
       }
-    } };
-  }
-  function validateManifest(value, entry, payload) {
-    if (value?.schema_version !== 1 || value.scope !== "current_cycle_artifacts"
-        || value.entry_id !== entry || value.coordinate_space !== "map_xy_m"
-        || !Array.isArray(value.zones) || !Array.isArray(value.fallback_zone_ids)) throw new Error("Invalid artifact manifest");
-    const known = cycles(payload);
-    const seen = new Set();
-    for (const row of value.zones) {
-      const id = String(row?.zone_id);
-      if (!plainId(id) || seen.has(id) || !row.cycle_id || known[id] !== row.cycle_id) throw new Error("Artifact cycle mismatch");
-      seen.add(id);
-      const a = row.artifact;
-      if (a == null) continue;
-      if (a.format !== "svg" || a.usage !== "alpha_mask" || a.coordinate_space !== "map_xy_m"
-          || !/^[a-f0-9]{64}$/.test(a.resource_id) || !Array.isArray(a.bounds) || a.bounds.length !== 4
-          || !a.bounds.every((v) => typeof v === "number" && Number.isFinite(v))
-          || a.bounds[2] <= a.bounds[0] || a.bounds[3] <= a.bounds[1]
-          || a.url !== basePath(entry) + "?zone_artifact=" + id + "&artifact_id=" + a.resource_id) throw new Error("Invalid zone artifact");
-    }
-    const mapped = (payload?.map?.zones || []).map((row) => String(row.id));
-    const fallbacks = new Set(value.fallback_zone_ids.map(String));
-    if (mapped.some((id) => !seen.has(id) && !fallbacks.has(id))) throw new Error("Incomplete artifact manifest");
-    return value;
-  }
-  function dropRow(row) {
-    row.pending?.release(); row.loaded?.release();
-    for (const node of row.nodes?.values?.() || []) node.remove();
-    row.nodes?.clear?.();
-  }
-  function set(node, key, value) { const text = String(value); if (node.getAttribute(key) !== text) node.setAttribute(key, text); }
-  function svg(tag, attributes = {}) {
-    const node = document.createElementNS(SVG_NS, tag);
-    for (const [key, value] of Object.entries(attributes)) set(node, key, value);
-    return node;
-  }
-
-  class Client {
-    constructor(card, entry) {
-      this.card = card; this.entry = entry; this.bucket = bucketFor(card._hass);
-      this.auth = authKey(card._hass); this.rows = new Map(); this.mode = "legacy";
-      this.closed = false; this.epoch = 0; this.metrics = { manifests: 0, downloads: 0, swaps: 0, errors: 0 };
-    }
-    update(payload) {
-      this.payload = payload;
-      const known = cycles(payload);
-      for (const [id, row] of this.rows) {
-        if (known[id] !== row.cycle) { dropRow(row); this.rows.delete(id); this.epoch += 1; }
+      async function timedRequest(hass, path, read, controller = new AbortController()) {
+        const timer = setTimeout(() => controller.abort(), 30_000);
+        try { return await read(await raw(hass, path, controller.signal)); }
+        finally { clearTimeout(timer); }
       }
-      const ids = (payload?.map?.zones || []).map((row) => String(row.id));
-      const owned = new Set((payload?.vendor_trail_debug?.owned_zone_ids || []).map(String));
-      const mode = ids.length && ids.every((id) => owned.has(id) && known[id]) ? "resources" : "legacy";
-      if (this.mode !== mode) { this.mode = mode; this.accepted = null; this.changed(true); }
-      if (mode === "resources" && this.accepted !== freshness(payload)) void this.refresh();
-      return mode === "resources";
-    }
-    changed(structure = false) {
-      if (this.closed) return;
-      this.card._queueRender?.({ history: true });
-      if (structure && !this.card._nmBeta8StructureQueued) {
-        this.card._nmBeta8StructureQueued = true;
-        queueMicrotask(() => {
-          this.card._nmBeta8StructureQueued = false;
-          if (this.closed) return;
-          this.card._multi036MapRenderKey = null;
-          this.card._beta8RefreshMultiRender?.();
+      function bucketFor(hass) {
+        const key = authKey(hass);
+        if (!buckets.has(key)) buckets.set(key, { images: new Map(), manifests: new Map(), active: 0, queue: [] });
+        return buckets.get(key);
+      }
+      function limited(bucket, work) {
+        return new Promise((resolve, reject) => {
+          bucket.queue.push({ work, resolve, reject });
+          const drain = () => {
+            while (bucket.active < 2 && bucket.queue.length) {
+              const item = bucket.queue.shift();
+              bucket.active += 1;
+              Promise.resolve().then(item.work).then(item.resolve, item.reject).finally(() => { bucket.active -= 1; drain(); });
+            }
+          };
+          drain();
         });
       }
-      this.card._drawZoneArtifactMembers?.();
-    }
-    later(ms) {
-      if (this.closed || this.timer) return;
-      this.timer = setTimeout(() => { this.timer = null; void this.refresh(); }, ms);
-    }
-    async refresh() {
-      if (this.closed || this.loading || this.mode !== "resources") return;
-      if (Date.now() < (this.retryAt || 0)) { this.later(this.retryAt - Date.now()); return; }
-      this.loading = true;
-      const epoch = this.epoch, wanted = freshness(this.payload);
-      let again = false;
-      try {
-        const manifest = await getManifest(this.card._hass, this.bucket, this.entry);
-        if (this.closed || this.auth !== authKey(this.card._hass)) return;
-        if (epoch !== this.epoch) { again = true; return; }
-        validateManifest(manifest, this.entry, this.payload);
-        this.metrics.manifests += 1;
-        // The legacy composite is the lossless compatibility path for a mower
-        // with any MQTT/History fallback zones. Never layer it over zone masks.
-        if (manifest.fallback_zone_ids.length) throw new Error("Awaiting matching base-map ownership");
-        const present = new Set(manifest.zones.map((row) => String(row.zone_id)));
-        for (const [id, row] of this.rows) if (!present.has(id)) { dropRow(row); this.rows.delete(id); }
-        for (const desc of manifest.zones) {
-          const id = String(desc.zone_id);
-          let row = this.rows.get(id);
-          if (row && row.cycle !== desc.cycle_id) { dropRow(row); this.rows.delete(id); row = null; }
-          if (!row) { row = { id, cycle: desc.cycle_id, nodes: new Map() }; this.rows.set(id, row); }
-          row.target = desc.artifact;
-          if (!desc.artifact) { dropRow(row); row.pending = null; row.loaded = null; }
-          else this.load(row);
-        }
-        this.accepted = wanted; this.retryAt = 0;
-        again = manifest.building || manifest.zones.some((row) => row.pending) || wanted !== freshness(this.payload);
-        this.changed();
-      } catch (_error) {
-        if (!this.closed) { this.metrics.errors += 1; this.retryAt = Date.now() + 10_000; again = true; }
-      } finally {
-        this.loading = false;
-        if (again && !this.closed) this.later(this.retryAt ? 10_000 : 2_000);
+      function getManifest(hass, bucket, entry) {
+        if (bucket.manifests.has(entry)) return bucket.manifests.get(entry);
+        const promise = timedRequest(hass, basePath(entry) + "?artifacts_only=1", (response) => response.json());
+        bucket.manifests.set(entry, promise);
+        promise.finally(() => { if (bucket.manifests.get(entry) === promise) bucket.manifests.delete(entry); }).catch(() => {});
+        return promise;
       }
-    }
-    load(row) {
-      if (this.closed || row.pending || !row.target || row.target.resource_id === row.loaded?.item.artifact.resource_id) return;
-      const handle = acquireImage(this.card._hass, this.bucket, this.entry, row.id, row.target);
-      row.pending = handle; this.metrics.downloads += 1;
-      handle.item.promise.then(() => {
-        if (this.closed || this.rows.get(row.id) !== row || row.pending !== handle
-            || cycles(this.payload)[row.id] !== row.cycle || this.auth !== authKey(this.card._hass)) { handle.release(); return; }
-        const previous = row.loaded;
-        row.loaded = handle; row.pending = null;
-        // Update all mounted uses BEFORE releasing the old blob URL.
-        this.changed(); this.card._renderHistory?.();
-        previous?.release(); this.metrics.swaps += 1;
-        this.load(row); // A newer same-cycle resource may have arrived in flight.
-      }).catch((error) => {
-        handle.release();
-        if (this.closed || this.rows.get(row.id) !== row || row.pending !== handle) return;
-        row.pending = null; this.metrics.errors += 1;
-        this.accepted = null;
-        if (error?.status === 410) { row.target = null; this.later(2_000); }
-        else { this.retryAt = Date.now() + 10_000; this.later(10_000); }
-      });
-    }
-    draw(host, transform) {
-      if (!host) return;
-      host.style.display = this.mode === "resources" && currentView(this.card) ? "" : "none";
-      if (transform) set(host, "transform", transform);
-      for (const row of this.rows.values()) {
-        const item = row.loaded?.item;
-        if (!item?.url) continue;
-        for (const [parent, node] of row.nodes) if (!parent.isConnected || node.parentNode !== parent) row.nodes.delete(parent);
-        let node = row.nodes.get(host);
-        if (!node || node.parentNode !== host) {
-          // Single and Multi have distinct nodes but share one decoded resource.
-          const existing = Array.from(host.children || []).find((n) => n.getAttribute("data-zone-id") === row.id);
-          node = existing || svg("g", { "data-zone-id": row.id });
-          row.nodes.set(host, node);
-          if (!existing) {
-            const maskId = "nm-zone-mask-" + (++maskSequence);
-            const mask = svg("mask", { id: maskId, maskUnits: "userSpaceOnUse", maskContentUnits: "userSpaceOnUse", "mask-type": "alpha", style: "mask-type:alpha" });
-            mask.appendChild(svg("image", { preserveAspectRatio: "none" }));
-            const defs = svg("defs"); defs.appendChild(mask); node.appendChild(defs);
-            node.appendChild(svg("rect", { mask: "url(#" + maskId + ")" })); host.appendChild(node);
+      function acquireImage(hass, bucket, entry, zone, artifact) {
+        const key = entry + ":" + zone + ":" + artifact.resource_id;
+        let item = bucket.images.get(key);
+        if (!item) {
+          item = { key, refs: 0, url: null, controller: new AbortController(), artifact };
+          bucket.images.set(key, item);
+          item.promise = limited(bucket, async () => {
+            if (!item.refs) throw new Error("Released artifact request");
+            const blob = await timedRequest(hass, artifact.url, async (response) => {
+              const type = response.headers?.get?.("Content-Type") || "";
+              if (!type.toLowerCase().startsWith("image/svg+xml")) throw new Error("Unexpected artifact format");
+              const body = await response.blob();
+              if (body.size > 16 * 1024 * 1024) throw new Error("Artifact exceeds image budget");
+              return body;
+            }, item.controller);
+            if (!item.refs) throw new Error("Released artifact response");
+            const url = URL.createObjectURL(blob);
+            try {
+              const image = new Image();
+              let timer;
+              const ready = typeof image.decode === "function"
+                ? (image.src = url, image.decode())
+                : new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = url; });
+              try {
+                await Promise.race([ready, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Artifact decode timeout")), 30_000); })]);
+              } finally { clearTimeout(timer); }
+              if (!item.refs) throw new Error("Released artifact decode");
+              item.url = url;
+              return item;
+            } catch (error) { URL.revokeObjectURL(url); throw error; }
+          });
+          item.promise.catch(() => {});
+        }
+        item.refs += 1;
+        let released = false;
+        return { item, release() {
+          if (released) return;
+          released = true;
+          item.refs -= 1;
+          if (!item.refs) {
+            if (bucket.images.get(key) === item) bucket.images.delete(key);
+            item.controller.abort();
+            if (item.url) URL.revokeObjectURL(item.url);
+          }
+        } };
+      }
+      function validateManifest(value, entry, payload) {
+        if (value?.schema_version !== 1 || value.scope !== "current_cycle_artifacts"
+            || value.entry_id !== entry || value.coordinate_space !== "map_xy_m"
+            || !Array.isArray(value.zones) || !Array.isArray(value.fallback_zone_ids)) throw new Error("Invalid artifact manifest");
+        const known = cycles(payload);
+        const seen = new Set();
+        for (const row of value.zones) {
+          const id = String(row?.zone_id);
+          if (!plainId(id) || seen.has(id) || !row.cycle_id || known[id] !== row.cycle_id) throw new Error("Artifact cycle mismatch");
+          seen.add(id);
+          const a = row.artifact;
+          if (a == null) continue;
+          if (a.format !== "svg" || a.usage !== "alpha_mask" || a.coordinate_space !== "map_xy_m"
+              || !/^[a-f0-9]{64}$/.test(a.resource_id) || !Array.isArray(a.bounds) || a.bounds.length !== 4
+              || !a.bounds.every((v) => typeof v === "number" && Number.isFinite(v))
+              || a.bounds[2] <= a.bounds[0] || a.bounds[3] <= a.bounds[1]
+              || a.url !== basePath(entry) + "?zone_artifact=" + id + "&artifact_id=" + a.resource_id) throw new Error("Invalid zone artifact");
+        }
+        const mapped = (payload?.map?.zones || []).map((row) => String(row.id));
+        const fallbacks = new Set(value.fallback_zone_ids.map(String));
+        if (mapped.some((id) => !seen.has(id) && !fallbacks.has(id))) throw new Error("Incomplete artifact manifest");
+        return value;
+      }
+      function dropRow(row) {
+        row.pending?.release(); row.loaded?.release();
+        for (const node of row.nodes?.values?.() || []) node.remove();
+        row.nodes?.clear?.();
+      }
+      function set(node, key, value) { const text = String(value); if (node.getAttribute(key) !== text) node.setAttribute(key, text); }
+      function svg(tag, attributes = {}) {
+        const node = document.createElementNS(SVG_NS, tag);
+        for (const [key, value] of Object.entries(attributes)) set(node, key, value);
+        return node;
+      }
+    
+      class Client {
+        constructor(card, entry) {
+          this.card = card; this.entry = entry; this.bucket = bucketFor(card._hass);
+          this.auth = authKey(card._hass); this.rows = new Map(); this.mode = "legacy";
+          this.closed = false; this.epoch = 0; this.metrics = { manifests: 0, downloads: 0, swaps: 0, errors: 0 };
+        }
+        update(payload) {
+          this.payload = payload;
+          const known = cycles(payload);
+          for (const [id, row] of this.rows) {
+            if (known[id] !== row.cycle) { dropRow(row); this.rows.delete(id); this.epoch += 1; }
+          }
+          const ids = (payload?.map?.zones || []).map((row) => String(row.id));
+          const owned = new Set((payload?.vendor_trail_debug?.owned_zone_ids || []).map(String));
+          const mode = ids.length && ids.every((id) => owned.has(id) && known[id]) ? "resources" : "legacy";
+          if (this.mode !== mode) { this.mode = mode; this.accepted = null; this.changed(true); }
+          if (mode === "resources" && this.accepted !== freshness(payload)) void this.refresh();
+          return mode === "resources";
+        }
+        changed(structure = false) {
+          if (this.closed) return;
+          this.card._queueRender?.({ history: true });
+          if (structure && !this.card._nmBeta8StructureQueued) {
+            this.card._nmBeta8StructureQueued = true;
+            queueMicrotask(() => {
+              this.card._nmBeta8StructureQueued = false;
+              if (this.closed) return;
+              this.card._multi036MapRenderKey = null;
+              this.card._beta8RefreshMultiRender?.();
+            });
+          }
+          this.card._drawZoneArtifactMembers?.();
+        }
+        later(ms) {
+          if (this.closed || this.timer) return;
+          this.timer = setTimeout(() => { this.timer = null; void this.refresh(); }, ms);
+        }
+        async refresh() {
+          if (this.closed || this.loading || this.mode !== "resources") return;
+          if (Date.now() < (this.retryAt || 0)) { this.later(this.retryAt - Date.now()); return; }
+          this.loading = true;
+          const epoch = this.epoch, wanted = freshness(this.payload);
+          let again = false;
+          try {
+            const manifest = await getManifest(this.card._hass, this.bucket, this.entry);
+            if (this.closed || this.auth !== authKey(this.card._hass)) return;
+            if (epoch !== this.epoch) { again = true; return; }
+            validateManifest(manifest, this.entry, this.payload);
+            this.metrics.manifests += 1;
+            // The legacy composite is the lossless compatibility path for a mower
+            // with any MQTT/History fallback zones. Never layer it over zone masks.
+            if (manifest.fallback_zone_ids.length) throw new Error("Awaiting matching base-map ownership");
+            const present = new Set(manifest.zones.map((row) => String(row.zone_id)));
+            for (const [id, row] of this.rows) if (!present.has(id)) { dropRow(row); this.rows.delete(id); }
+            for (const desc of manifest.zones) {
+              const id = String(desc.zone_id);
+              let row = this.rows.get(id);
+              if (row && row.cycle !== desc.cycle_id) { dropRow(row); this.rows.delete(id); row = null; }
+              if (!row) { row = { id, cycle: desc.cycle_id, nodes: new Map() }; this.rows.set(id, row); }
+              row.target = desc.artifact;
+              if (!desc.artifact) { dropRow(row); row.pending = null; row.loaded = null; }
+              else this.load(row);
+            }
+            this.accepted = wanted; this.retryAt = 0;
+            again = manifest.building || manifest.zones.some((row) => row.pending) || wanted !== freshness(this.payload);
+            this.changed();
+          } catch (_error) {
+            if (!this.closed) { this.metrics.errors += 1; this.retryAt = Date.now() + 10_000; again = true; }
+          } finally {
+            this.loading = false;
+            if (again && !this.closed) this.later(this.retryAt ? 10_000 : 2_000);
           }
         }
-        const mask = node.querySelector("mask"), image = node.querySelector("image"), rect = node.querySelector("rect");
-        const [x, y, x2, y2] = item.artifact.bounds;
-        for (const element of [mask, image, rect]) for (const [key, value] of Object.entries({ x, y, width: x2 - x, height: y2 - y })) set(element, key, value);
-        set(image, "href", item.url);
-        set(rect, "fill", this.card._config?.trail_color || "#43a047");
-        set(host, "opacity", Math.max(0, Math.min(1, Number(this.card._config?.trail_opacity ?? 0.55))));
-        set(node, "data-cycle-id", row.cycle); set(node, "data-resource-id", item.artifact.resource_id);
+        load(row) {
+          if (this.closed || row.pending || !row.target || row.target.resource_id === row.loaded?.item.artifact.resource_id) return;
+          const handle = acquireImage(this.card._hass, this.bucket, this.entry, row.id, row.target);
+          row.pending = handle; this.metrics.downloads += 1;
+          handle.item.promise.then(() => {
+            if (this.closed || this.rows.get(row.id) !== row || row.pending !== handle
+                || cycles(this.payload)[row.id] !== row.cycle || this.auth !== authKey(this.card._hass)) { handle.release(); return; }
+            const previous = row.loaded;
+            row.loaded = handle; row.pending = null;
+            // Update all mounted uses BEFORE releasing the old blob URL.
+            this.changed(); this.card._renderHistory?.();
+            previous?.release(); this.metrics.swaps += 1;
+            this.load(row); // A newer same-cycle resource may have arrived in flight.
+          }).catch((error) => {
+            handle.release();
+            if (this.closed || this.rows.get(row.id) !== row || row.pending !== handle) return;
+            row.pending = null; this.metrics.errors += 1;
+            this.accepted = null;
+            if (error?.status === 410) { row.target = null; this.later(2_000); }
+            else { this.retryAt = Date.now() + 10_000; this.later(10_000); }
+          });
+        }
+        draw(host, transform) {
+          if (!host) return;
+          host.style.display = this.mode === "resources" && currentView(this.card) ? "" : "none";
+          if (transform) set(host, "transform", transform);
+          for (const row of this.rows.values()) {
+            const item = row.loaded?.item;
+            if (!item?.url) continue;
+            for (const [parent, node] of row.nodes) if (!parent.isConnected || node.parentNode !== parent) row.nodes.delete(parent);
+            let node = row.nodes.get(host);
+            if (!node || node.parentNode !== host) {
+              // Single and Multi have distinct nodes but share one decoded resource.
+              const existing = Array.from(host.children || []).find((n) => n.getAttribute("data-zone-id") === row.id);
+              node = existing || svg("g", { "data-zone-id": row.id });
+              row.nodes.set(host, node);
+              if (!existing) {
+                const maskId = "nm-zone-mask-" + (++maskSequence);
+                const mask = svg("mask", { id: maskId, maskUnits: "userSpaceOnUse", maskContentUnits: "userSpaceOnUse", "mask-type": "alpha", style: "mask-type:alpha" });
+                mask.appendChild(svg("image", { preserveAspectRatio: "none" }));
+                const defs = svg("defs"); defs.appendChild(mask); node.appendChild(defs);
+                node.appendChild(svg("rect", { mask: "url(#" + maskId + ")" })); host.appendChild(node);
+              }
+            }
+            const mask = node.querySelector("mask"), image = node.querySelector("image"), rect = node.querySelector("rect");
+            const [x, y, x2, y2] = item.artifact.bounds;
+            for (const element of [mask, image, rect]) for (const [key, value] of Object.entries({ x, y, width: x2 - x, height: y2 - y })) set(element, key, value);
+            set(image, "href", item.url);
+            set(rect, "fill", this.card._config?.trail_color || "#43a047");
+            set(host, "opacity", Math.max(0, Math.min(1, Number(this.card._config?.trail_opacity ?? 0.55))));
+            set(node, "data-cycle-id", row.cycle); set(node, "data-resource-id", item.artifact.resource_id);
+          }
+          for (const node of Array.from(host.children || [])) {
+            const row = this.rows.get(node.getAttribute("data-zone-id"));
+            if (!row?.loaded || node.getAttribute("data-cycle-id") !== row.cycle) node.remove();
+          }
+        }
+        close() {
+          this.closed = true; clearTimeout(this.timer);
+          for (const row of this.rows.values()) dropRow(row);
+          this.rows.clear();
+        }
       }
-      for (const node of Array.from(host.children || [])) {
-        const row = this.rows.get(node.getAttribute("data-zone-id"));
-        if (!row?.loaded || node.getAttribute("data-cycle-id") !== row.cycle) node.remove();
+    
+      function clientFor(card, payload, entry) {
+        const info = supported(card, payload, entry) ? descriptor(payload, entry) : null;
+        if (!info || card._nmBeta8Disconnected) {
+          const id = String(entry || payload?.frontend?.entry_id || "");
+          const previous = card._nmBeta8Clients?.get?.(id);
+          if (previous) { previous.close(); card._nmBeta8Clients.delete(id); }
+          return null;
+        }
+        if (!(card._nmBeta8Clients instanceof Map)) card._nmBeta8Clients = new Map();
+        let client = card._nmBeta8Clients.get(info.entry);
+        if (client && client.auth !== authKey(card._hass)) { client.close(); card._nmBeta8Clients.delete(info.entry); client = null; }
+        if (!client) { client = new Client(card, info.entry); card._nmBeta8Clients.set(info.entry, client); }
+        client.update(payload);
+        return client;
       }
-    }
-    close() {
-      this.closed = true; clearTimeout(this.timer);
-      for (const row of this.rows.values()) dropRow(row);
-      this.rows.clear();
-    }
+      proto._zoneArtifactsHandled = function(payload = this._mapPayload, entry = null) {
+        return clientFor(this, payload, entry)?.mode === "resources";
+      };
+      proto._zoneArtifactsMode = function(entry) { return this._nmBeta8Clients?.get?.(String(entry))?.mode || "legacy"; };
+      proto._drawZoneArtifactMembers = function() {
+        const anchor = descriptor(this._mapPayload)?.entry;
+        const allowed = new Set([anchor]);
+        if (this._config?.multi_mower) for (const member of this._multi036Site?.members || []) allowed.add(String(member.entry_id));
+        for (const [entry, client] of this._nmBeta8Clients || []) {
+          if (!allowed.has(entry)) { client.close(); this._nmBeta8Clients.delete(entry); }
+        }
+        for (const host of this._multi036Layer?.querySelectorAll?.("[data-nm-artifacts-entry]") || []) {
+          this._nmBeta8Clients?.get?.(host.getAttribute("data-nm-artifacts-entry"))?.draw(host);
+        }
+      };
+      // Morph small Multi map markup in place, treating resource layers as opaque.
+      // This keeps mounted masks/images stable even when live-tail points change.
+      function morph(parent, desired) {
+        const next = Array.from(desired.childNodes || []);
+        for (let i = 0; i < next.length; i += 1) {
+          const fresh = next[i], old = parent.childNodes[i];
+          if (!old) { parent.appendChild(fresh); continue; }
+          if (old.nodeType !== fresh.nodeType || old.nodeName !== fresh.nodeName
+              || (old.nodeType === 1 && old.getAttribute("data-entry-id") !== fresh.getAttribute("data-entry-id"))) { parent.replaceChild(fresh, old); continue; }
+          if (old.nodeType !== 1) { if (old.textContent !== fresh.textContent) old.textContent = fresh.textContent; continue; }
+          if (fresh.hasAttribute("data-nm-artifacts-entry") && old.getAttribute("data-nm-artifacts-entry") === fresh.getAttribute("data-nm-artifacts-entry")) continue;
+          for (const attr of Array.from(old.attributes)) if (!fresh.hasAttribute(attr.name)) old.removeAttribute(attr.name);
+          for (const attr of Array.from(fresh.attributes)) set(old, attr.name, attr.value);
+          morph(old, fresh);
+        }
+        while (parent.childNodes.length > next.length) parent.lastChild.remove();
+      }
+      proto._applyZoneArtifactMultiMarkup = function(layer, markup) {
+        if (!this._nmBeta8Clients?.size || !document.createElementNS) { layer.innerHTML = markup; return; }
+        const holder = svg("g"); holder.innerHTML = markup; morph(layer, holder);
+        this._drawZoneArtifactMembers();
+      };
+      const previousHistory = proto._renderHistory;
+      proto._renderHistory = function(...args) {
+        const client = clientFor(this, this._mapPayload);
+        if (!client || client.mode !== "resources" || !currentView(this)) return previousHistory?.apply(this, args);
+        if (!this._historyEl || !this._layout) return;
+        let host = this._historyEl.querySelector?.(".nm-zone-artifacts");
+        if (!host) { this._historyEl.innerHTML = ""; host = svg("g", { class: "nm-zone-artifacts", "pointer-events": "none" }); this._historyEl.appendChild(host); }
+        const l = this._layout;
+        client.draw(host, `matrix(${l.scale} 0 0 ${-l.scale} ${l.sx(0)} ${l.sy(0)})`);
+      };
+      const previousApply = proto._applyMapPayload;
+      proto._applyMapPayload = function(...args) {
+        const result = previousApply?.apply(this, args);
+        clientFor(this, this._mapPayload);
+        this._drawZoneArtifactMembers();
+        return result;
+      };
+      const previousBar = proto._renderHistoryBar;
+      proto._renderHistoryBar = function(...args) {
+        const result = previousBar?.apply(this, args);
+        if (this._zoneArtifactsHandled()) for (const button of this._historyBarEl?.querySelectorAll?.('[data-history-offset="today"]') || []) button.textContent = "Current cycle";
+        return result;
+      };
+      function closeClients(card) { for (const client of card._nmBeta8Clients?.values?.() || []) client.close(); card._nmBeta8Clients?.clear?.(); }
+      const previousConfig = proto.setConfig;
+      proto.setConfig = function(config) {
+        if (this._config?.entity !== config?.entity || this._config?.mower_entity !== config?.mower_entity
+            || this._config?.multi_mower !== config?.multi_mower) closeClients(this);
+        return previousConfig?.call(this, config);
+      };
+      const previousDisconnected = proto.disconnectedCallback;
+      proto.disconnectedCallback = function(...args) { this._nmBeta8Disconnected = true; closeClients(this); return previousDisconnected?.apply(this, args); };
+      const previousConnected = proto.connectedCallback;
+      proto.connectedCallback = function(...args) { this._nmBeta8Disconnected = false; return previousConnected?.apply(this, args); };
+      proto._zoneArtifactDiagnostics = function() {
+        return Array.from(this._nmBeta8Clients?.values?.() || [], (client) => ({ entry_id: client.entry, mode: client.mode, ...client.metrics, ready_zones: [...client.rows.values()].filter((row) => row.loaded).length }));
+      };
   }
+}
 
-  function clientFor(card, payload, entry) {
-    const info = supported(card, payload, entry) ? descriptor(payload, entry) : null;
-    if (!info || card._nmBeta8Disconnected) {
-      const id = String(entry || payload?.frontend?.entry_id || "");
-      const previous = card._nmBeta8Clients?.get?.(id);
-      if (previous) { previous.close(); card._nmBeta8Clients.delete(id); }
-      return null;
-    }
-    if (!(card._nmBeta8Clients instanceof Map)) card._nmBeta8Clients = new Map();
-    let client = card._nmBeta8Clients.get(info.entry);
-    if (client && client.auth !== authKey(card._hass)) { client.close(); card._nmBeta8Clients.delete(info.entry); client = null; }
-    if (!client) { client = new Client(card, info.entry); card._nmBeta8Clients.set(info.entry, client); }
-    client.update(payload);
-    return client;
-  }
-  proto._zoneArtifactsHandled = function(payload = this._mapPayload, entry = null) {
-    return clientFor(this, payload, entry)?.mode === "resources";
-  };
-  proto._zoneArtifactsMode = function(entry) { return this._nmBeta8Clients?.get?.(String(entry))?.mode || "legacy"; };
-  proto._drawZoneArtifactMembers = function() {
-    const anchor = descriptor(this._mapPayload)?.entry;
-    const allowed = new Set([anchor]);
-    if (this._config?.multi_mower) for (const member of this._multi036Site?.members || []) allowed.add(String(member.entry_id));
-    for (const [entry, client] of this._nmBeta8Clients || []) {
-      if (!allowed.has(entry)) { client.close(); this._nmBeta8Clients.delete(entry); }
-    }
-    for (const host of this._multi036Layer?.querySelectorAll?.("[data-nm-artifacts-entry]") || []) {
-      this._nmBeta8Clients?.get?.(host.getAttribute("data-nm-artifacts-entry"))?.draw(host);
-    }
-  };
-  // Morph small Multi map markup in place, treating resource layers as opaque.
-  // This keeps mounted masks/images stable even when live-tail points change.
-  function morph(parent, desired) {
-    const next = Array.from(desired.childNodes || []);
-    for (let i = 0; i < next.length; i += 1) {
-      const fresh = next[i], old = parent.childNodes[i];
-      if (!old) { parent.appendChild(fresh); continue; }
-      if (old.nodeType !== fresh.nodeType || old.nodeName !== fresh.nodeName
-          || (old.nodeType === 1 && old.getAttribute("data-entry-id") !== fresh.getAttribute("data-entry-id"))) { parent.replaceChild(fresh, old); continue; }
-      if (old.nodeType !== 1) { if (old.textContent !== fresh.textContent) old.textContent = fresh.textContent; continue; }
-      if (fresh.hasAttribute("data-nm-artifacts-entry") && old.getAttribute("data-nm-artifacts-entry") === fresh.getAttribute("data-nm-artifacts-entry")) continue;
-      for (const attr of Array.from(old.attributes)) if (!fresh.hasAttribute(attr.name)) old.removeAttribute(attr.name);
-      for (const attr of Array.from(fresh.attributes)) set(old, attr.name, attr.value);
-      morph(old, fresh);
-    }
-    while (parent.childNodes.length > next.length) parent.lastChild.remove();
-  }
-  proto._applyZoneArtifactMultiMarkup = function(layer, markup) {
-    if (!this._nmBeta8Clients?.size || !document.createElementNS) { layer.innerHTML = markup; return; }
-    const holder = svg("g"); holder.innerHTML = markup; morph(layer, holder);
-    this._drawZoneArtifactMembers();
-  };
-  const previousHistory = proto._renderHistory;
-  proto._renderHistory = function(...args) {
-    const client = clientFor(this, this._mapPayload);
-    if (!client || client.mode !== "resources" || !currentView(this)) return previousHistory?.apply(this, args);
-    if (!this._historyEl || !this._layout) return;
-    let host = this._historyEl.querySelector?.(".nm-zone-artifacts");
-    if (!host) { this._historyEl.innerHTML = ""; host = svg("g", { class: "nm-zone-artifacts", "pointer-events": "none" }); this._historyEl.appendChild(host); }
-    const l = this._layout;
-    client.draw(host, `matrix(${l.scale} 0 0 ${-l.scale} ${l.sx(0)} ${l.sy(0)})`);
-  };
-  const previousApply = proto._applyMapPayload;
-  proto._applyMapPayload = function(...args) {
-    const result = previousApply?.apply(this, args);
-    clientFor(this, this._mapPayload);
-    this._drawZoneArtifactMembers();
-    return result;
-  };
-  const previousBar = proto._renderHistoryBar;
-  proto._renderHistoryBar = function(...args) {
-    const result = previousBar?.apply(this, args);
-    if (this._zoneArtifactsHandled()) for (const button of this._historyBarEl?.querySelectorAll?.('[data-history-offset="today"]') || []) button.textContent = "Current cycle";
-    return result;
-  };
-  function closeClients(card) { for (const client of card._nmBeta8Clients?.values?.() || []) client.close(); card._nmBeta8Clients?.clear?.(); }
-  const previousConfig = proto.setConfig;
-  proto.setConfig = function(config) {
-    if (this._config?.entity !== config?.entity || this._config?.mower_entity !== config?.mower_entity
-        || this._config?.multi_mower !== config?.multi_mower) closeClients(this);
-    return previousConfig?.call(this, config);
-  };
-  const previousDisconnected = proto.disconnectedCallback;
-  proto.disconnectedCallback = function(...args) { this._nmBeta8Disconnected = true; closeClients(this); return previousDisconnected?.apply(this, args); };
-  const previousConnected = proto.connectedCallback;
-  proto.connectedCallback = function(...args) { this._nmBeta8Disconnected = false; return previousConnected?.apply(this, args); };
-  proto._zoneArtifactDiagnostics = function() {
-    return Array.from(this._nmBeta8Clients?.values?.() || [], (client) => ({ entry_id: client.entry, mode: client.mode, ...client.metrics, ready_zones: [...client.rows.values()].filter((row) => row.loaded).length }));
-  };
-})();
 
 if (__navimowerRuntimeCard && !__navimowerRuntimeAlreadyApplied) {
   __navimowerRuntimeCard[__NAVIMOWER_RUNTIME_GUARD] = true;

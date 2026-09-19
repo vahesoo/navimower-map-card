@@ -15011,6 +15011,7 @@ const VISUAL_DEFAULTS = Object.freeze({
   const previousSetConfig = proto.setConfig;
   if (typeof previousSetConfig === "function") {
     proto.setConfig = function beta7SetConfig(config) {
+      this._closeArtifactClients?.(config);
       const previous = this?._config?.entity || this?._config?.mower_entity || null;
       const result = previousSetConfig.call(this, config);
       const current = this?._config?.entity || this?._config?.mower_entity || null;
@@ -15402,11 +15403,9 @@ const VISUAL_DEFAULTS = Object.freeze({
     this._drawZoneArtifactMembers();
   };
   function closeClients(card) { for (const client of card._nmBeta8Clients?.values?.() || []) client.close(); card._nmBeta8Clients?.clear?.(); }
-  const previousConfig = proto.setConfig;
-  proto.setConfig = function(config) {
+  proto._closeArtifactClients = function(config) {
     if (this._config?.entity !== config?.entity || this._config?.mower_entity !== config?.mower_entity
         || this._config?.multi_mower !== config?.multi_mower) closeClients(this);
-    return previousConfig?.call(this, config);
   };
   const previousDisconnected = proto.disconnectedCallback;
   proto.disconnectedCallback = function(...args) { this._nmBeta8Disconnected = true; closeClients(this); return previousDisconnected?.apply(this, args); };

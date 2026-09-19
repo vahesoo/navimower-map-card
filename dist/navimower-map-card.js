@@ -3662,33 +3662,6 @@ function patchCard() {
     button?.classList.add("nm-session-pulsing");
     this._pulseTimer = null;
   };
-  proto._renderHistoryBar = function patchedHistoryBar() {
-    if (!this._historyBarEl) return;
-    const selected = this._historyDayOffset;
-    const visible = this._historyMenuOpen || selected !== null;
-    const sessions = this._sessionRecords({ applyLimit: false });
-    const offsets = historyDayOffsets(sessions);
-    if (selected !== null && !offsets.includes(Number(selected))) offsets.push(Number(selected));
-    offsets.sort((a, b) => a - b);
-    const historyBarKey = `${visible}|${selected ?? "today"}|${offsets.join(",")}`;
-    if (historyBarKey === this._historyBarRenderKey) return;
-    this._historyBarRenderKey = historyBarKey;
-    this._historyBarEl.hidden = !visible;
-    if (this._historyButtonEl) {
-      this._historyButtonEl.classList.toggle("active", selected !== null || this._historyMenuOpen);
-      this._historyButtonEl.setAttribute("aria-pressed", visible ? "true" : "false");
-    }
-    if (!visible) {
-      this._historyBarEl.innerHTML = "";
-      return;
-    }
-    this._historyBarEl.innerHTML = offsets.map((offset) => {
-      const value = offset === 0 ? "today" : String(offset);
-      const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
-      const active = offset === 0 ? selected === null : Number(selected) === offset;
-      return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${value}">${escapeHtml2(label)}</button>`;
-    }).join("");
-  };
   proto._renderSessions = function patchedRenderSessions() {
     if (!this._sessionsEl || !this._config.show_session_legend) return;
     const sessions = this._sessionsForCurrentView();

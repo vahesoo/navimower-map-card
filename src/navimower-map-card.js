@@ -978,26 +978,21 @@ var NavimowerMapCard = class extends HTMLElement {
     if (!this._historyBarEl) return;
     const selected = this._historyDayOffset;
     const visible = this._historyMenuOpen || selected !== null;
-    const historyBarKey = `${visible}|${selected ?? "today"}`;
+    const count = historyDays032(this._config?.history_days);
+    const offsets = Array.from({ length: count }, (_item, index) => index);
+    const historyBarKey = [visible, selected ?? "today", count].join("|");
     if (historyBarKey === this._historyBarRenderKey) return;
     this._historyBarRenderKey = historyBarKey;
-    this._historyBarEl.hidden = !visible;
-    if (this._historyButtonEl) {
-      this._historyButtonEl.classList.toggle("active", selected !== null || this._historyMenuOpen);
-      this._historyButtonEl.setAttribute("aria-pressed", visible ? "true" : "false");
-    }
+    this._historyBarEl.style.display = visible ? "flex" : "none";
     if (!visible) {
       this._historyBarEl.innerHTML = "";
       return;
     }
-    const choices = [
-      { value: "today", label: "Today" },
-      { value: "1", label: this._historyDateLabel(1) },
-      { value: "2", label: this._historyDateLabel(2) }
-    ];
-    this._historyBarEl.innerHTML = choices.map((choice) => {
-      const active = choice.value === "today" ? selected === null : Number(choice.value) === selected;
-      return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${choice.value}">${escapeHtml(choice.label)}</button>`;
+    this._historyBarEl.innerHTML = offsets.map((offset) => {
+      const value = offset === 0 ? "today" : String(offset);
+      const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
+      const active = offset === 0 ? selected === null : Number(selected) === offset;
+      return "<button type=\"button\" class=\"nm-history-choice" + (active ? " active" : "") + "\" data-history-offset=\"" + value + "\">" + escapeHtml2(label) + "</button>";
     }).join("");
   }
   _historyDateLabel(offset) {
@@ -1640,18 +1635,8 @@ var NavimowerMapCard = class extends HTMLElement {
   }
   _sessionsForCurrentView() {
     const sessions = this._sessionRecords({ applyLimit: false });
-    const limit = Math.max(1, Number(this._config.session_count) || 6);
-    const dayOffset = this._historyDayOffset === null ? 0 : this._historyDayOffset;
-    const dayStart = /* @__PURE__ */ new Date();
-    dayStart.setHours(0, 0, 0, 0);
-    dayStart.setDate(dayStart.getDate() - dayOffset);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
-    return sessions.filter((session) => {
-      const start = dateValue(session.started_at);
-      const end = dateValue(session.ended_at) || (session.active ? /* @__PURE__ */ new Date() : start);
-      return start && end && start < dayEnd && end >= dayStart;
-    }).slice(-limit);
+    const offset = this._historyDayOffset === null ? 0 : Number(this._historyDayOffset) || 0;
+    return sessionsForHistoryDay032(sessions, offset);
   }
   _dailyTrailRecords() {
     const daily = this._mapPayload?.daily_trails;
@@ -5936,34 +5921,6 @@ node.splice(mowerIndex, 0, iconField);
     updateResumeButton(this);
     ensureMowerArtwork032(this);
     return result;
-  };
-
-  proto._sessionsForCurrentView = function beta032SessionsForCurrentView() {
-    const sessions = this._sessionRecords({ applyLimit: false });
-    const offset = this._historyDayOffset === null ? 0 : Number(this._historyDayOffset) || 0;
-    return sessionsForHistoryDay032(sessions, offset);
-  };
-
-  proto._renderHistoryBar = function beta032RenderHistoryBar() {
-    if (!this._historyBarEl) return;
-    const selected = this._historyDayOffset;
-    const visible = this._historyMenuOpen || selected !== null;
-    const count = historyDays032(this._config?.history_days);
-    const offsets = Array.from({ length: count }, (_item, index) => index);
-    const historyBarKey = [visible, selected ?? "today", count].join("|");
-    if (historyBarKey === this._historyBarRenderKey) return;
-    this._historyBarRenderKey = historyBarKey;
-    this._historyBarEl.style.display = visible ? "flex" : "none";
-    if (!visible) {
-      this._historyBarEl.innerHTML = "";
-      return;
-    }
-    this._historyBarEl.innerHTML = offsets.map((offset) => {
-      const value = offset === 0 ? "today" : String(offset);
-      const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
-      const active = offset === 0 ? selected === null : Number(selected) === offset;
-      return "<button type=\"button\" class=\"nm-history-choice" + (active ? " active" : "") + "\" data-history-offset=\"" + value + "\">" + escapeHtml2(label) + "</button>";
-    }).join("");
   };
 
   const originalRegistryResolve = proto._resolveEntitiesFromRegistry;

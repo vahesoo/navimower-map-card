@@ -15038,20 +15038,18 @@ const VISUAL_DEFAULTS = Object.freeze({
       const result = this._applyPayloadStableBeta6
         ? this._applyPayloadStableBeta6(previousApplyMapPayload, args)
         : previousApplyMapPayload.apply(this, args);
-      if (this._zoneArtifactsHandled?.()) {
-        this._syncZoneArtifactPayloadBeta8?.();
-        return result;
-      }
-      const currentInfo = stableCycleInfo(this?._mapPayload);
-      const currentRender = this?._mapPayload?.current_cycle_render;
-      if (currentInfo && currentRender) {
-        if (!renderMatchesStableCycle(currentRender, this._mapPayload)) {
-          clearWrongCycleRender(this);
-        } else {
-          this._nm037Beta7RenderCycleSignature = currentInfo.signature;
+      if (!this._zoneArtifactsHandled?.()) {
+        const currentInfo = stableCycleInfo(this?._mapPayload);
+        const currentRender = this?._mapPayload?.current_cycle_render;
+        if (currentInfo && currentRender) {
+          if (!renderMatchesStableCycle(currentRender, this._mapPayload)) {
+            clearWrongCycleRender(this);
+          } else {
+            this._nm037Beta7RenderCycleSignature = currentInfo.signature;
+          }
         }
+        queueStableCycle(this);
       }
-      queueStableCycle(this);
       this._syncZoneArtifactPayloadBeta8?.();
       return result;
     };

@@ -14739,22 +14739,23 @@ const VISUAL_DEFAULTS = Object.freeze({
     };
   }
 
-  const previousApplyMapPayload = proto._applyMapPayload;
-  if (typeof previousApplyMapPayload === "function") {
-    proto._applyMapPayload = function beta6ApplyMapPayload(...args) {
-      const previousHistoryKey = this._historyRenderKey;
-      const previousTrailKey = this._trailRenderKey;
-      const beforeCycle = cycleSignature(this._mapPayload);
-      const beforeTrail = trailSignature(this);
-      const result = previousApplyMapPayload.apply(this, args);
-      const afterCycle = cycleSignature(this._mapPayload);
-      const afterTrail = trailSignature(this);
-      if (beforeCycle && beforeCycle === afterCycle) this._historyRenderKey = previousHistoryKey;
-      if (beforeTrail === afterTrail) this._trailRenderKey = previousTrailKey;
-      syncZoneLabels(this);
-      return result;
+  proto._capturePayloadStabilityBeta6 = function capturePayloadStabilityBeta6() {
+    return {
+      previousHistoryKey: this._historyRenderKey,
+      previousTrailKey: this._trailRenderKey,
+      beforeCycle: cycleSignature(this._mapPayload),
+      beforeTrail: trailSignature(this),
     };
-  }
+  };
+
+  proto._finalizePayloadStabilityBeta6 = function finalizePayloadStabilityBeta6(snapshot) {
+    const state = snapshot || {};
+    const afterCycle = cycleSignature(this._mapPayload);
+    const afterTrail = trailSignature(this);
+    if (state.beforeCycle && state.beforeCycle === afterCycle) this._historyRenderKey = state.previousHistoryKey;
+    if (state.beforeTrail === afterTrail) this._trailRenderKey = state.previousTrailKey;
+    syncZoneLabels(this);
+  };
 
   const previousRenderHistory = proto._renderHistory;
   if (typeof previousRenderHistory === "function") {
@@ -15038,7 +15039,9 @@ const VISUAL_DEFAULTS = Object.freeze({
         if (sourceKey !== null && sourceKey !== undefined) this._retainedCycleSourceKey = sourceKey;
       }
 
+      const beta6State = this._capturePayloadStabilityBeta6?.();
       const result = previousApplyMapPayload.apply(this, args);
+      this._finalizePayloadStabilityBeta6?.(beta6State);
       if (this._zoneArtifactsHandled?.()) return result;
       const currentInfo = stableCycleInfo(this?._mapPayload);
       const currentRender = this?._mapPayload?.current_cycle_render;

@@ -8377,11 +8377,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     }
   };
 
-  proto._renderMower = function beta5RenderMower(...args) {
-    syncMowerArtworkModel(this);
-    return previousRenderMower?.apply(this, args);
-  };
-
   // Keep this helper testable without reopening the old browser registry scan.
   proto._syncMowerArtworkModel035 = function () {
     syncMowerArtworkModel(this);
@@ -9211,6 +9206,7 @@ const VISUAL_DEFAULTS = Object.freeze({
 
   const previousRenderMower = proto._renderMower;
   proto._renderMower = function beta11RenderMower(...args) {
+    this._syncMowerArtworkModel035?.();
     const result = previousRenderMower?.apply(this, args);
     syncMowerErrorPulse(this);
     return result;

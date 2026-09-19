@@ -8713,20 +8713,6 @@ if (globalThis.customElements) patchCustomAreas0342();
       : "";
   };
 
-  const previousRenderHistoryBar = proto._renderHistoryBar;
-  proto._renderHistoryBar = function backendCurrentCycleHistoryBar(...args) {
-    const result = previousRenderHistoryBar?.apply(this, args);
-    if (this._mapPayload?.current_cycle_render?.scope === "current_cycle") {
-      this._historyBarEl
-        ?.querySelectorAll?.('[data-history-offset="today"]')
-        ?.forEach?.((button) => {
-          button.textContent = "Current cycle";
-          button.title = "Current mowing cycle since the latest confirmed reset";
-        });
-    }
-    return result;
-  };
-
 })();
 
 
@@ -9040,7 +9026,10 @@ const VISUAL_DEFAULTS = Object.freeze({
       return;
     }
     const result = previousRenderHistoryBar?.apply(this, args);
-    if (this._mapPayload?.daily_trails?.scope === "current_cycle") {
+    if (
+      this._mapPayload?.current_cycle_render?.scope === "current_cycle"
+      || this._mapPayload?.daily_trails?.scope === "current_cycle"
+    ) {
       this._historyBarEl
         ?.querySelectorAll?.('[data-history-offset="today"]')
         ?.forEach?.((button) => {
@@ -9049,6 +9038,11 @@ const VISUAL_DEFAULTS = Object.freeze({
         });
     }
     syncHeaderVisibility(this);
+    if (this._zoneArtifactsHandled?.()) {
+      for (const button of this._historyBarEl?.querySelectorAll?.('[data-history-offset="today"]') || []) {
+        button.textContent = "Current cycle";
+      }
+    }
     return result;
   };
 
@@ -15470,12 +15464,6 @@ const VISUAL_DEFAULTS = Object.freeze({
     const result = previousApply?.apply(this, args);
     clientFor(this, this._mapPayload);
     this._drawZoneArtifactMembers();
-    return result;
-  };
-  const previousBar = proto._renderHistoryBar;
-  proto._renderHistoryBar = function(...args) {
-    const result = previousBar?.apply(this, args);
-    if (this._zoneArtifactsHandled()) for (const button of this._historyBarEl?.querySelectorAll?.('[data-history-offset="today"]') || []) button.textContent = "Current cycle";
     return result;
   };
   function closeClients(card) { for (const client of card._nmBeta8Clients?.values?.() || []) client.close(); card._nmBeta8Clients?.clear?.(); }

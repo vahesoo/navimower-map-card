@@ -14739,22 +14739,18 @@ const VISUAL_DEFAULTS = Object.freeze({
     };
   }
 
-  proto._capturePayloadStabilityBeta6 = function capturePayloadStabilityBeta6() {
-    return {
-      previousHistoryKey: this._historyRenderKey,
-      previousTrailKey: this._trailRenderKey,
-      beforeCycle: cycleSignature(this._mapPayload),
-      beforeTrail: trailSignature(this),
-    };
-  };
-
-  proto._finalizePayloadStabilityBeta6 = function finalizePayloadStabilityBeta6(snapshot) {
-    const state = snapshot || {};
+  proto._applyPayloadStableBeta6 = function applyPayloadStableBeta6(apply, args) {
+    const historyKey = this._historyRenderKey;
+    const trailKey = this._trailRenderKey;
+    const beforeCycle = cycleSignature(this._mapPayload);
+    const beforeTrail = trailSignature(this);
+    const result = apply.apply(this, args);
     const afterCycle = cycleSignature(this._mapPayload);
     const afterTrail = trailSignature(this);
-    if (state.beforeCycle && state.beforeCycle === afterCycle) this._historyRenderKey = state.previousHistoryKey;
-    if (state.beforeTrail === afterTrail) this._trailRenderKey = state.previousTrailKey;
+    if (beforeCycle && beforeCycle === afterCycle) this._historyRenderKey = historyKey;
+    if (beforeTrail === afterTrail) this._trailRenderKey = trailKey;
     syncZoneLabels(this);
+    return result;
   };
 
   const previousRenderHistory = proto._renderHistory;
@@ -15039,9 +15035,9 @@ const VISUAL_DEFAULTS = Object.freeze({
         if (sourceKey !== null && sourceKey !== undefined) this._retainedCycleSourceKey = sourceKey;
       }
 
-      const beta6State = this._capturePayloadStabilityBeta6?.();
-      const result = previousApplyMapPayload.apply(this, args);
-      this._finalizePayloadStabilityBeta6?.(beta6State);
+      const result = this._applyPayloadStableBeta6
+        ? this._applyPayloadStableBeta6(previousApplyMapPayload, args)
+        : previousApplyMapPayload.apply(this, args);
       if (this._zoneArtifactsHandled?.()) return result;
       const currentInfo = stableCycleInfo(this?._mapPayload);
       const currentRender = this?._mapPayload?.current_cycle_render;

@@ -8286,8 +8286,6 @@ if (globalThis.customElements) patchCustomAreas0342();
   if (!Card || Card.__navimower035Beta5MowerVisibility) return;
   Card.__navimower035Beta5MowerVisibility = true;
   const proto = Card.prototype;
-  const previousRenderMower = proto._renderMower;
-
   const mowerEntityState = (card) => {
     const entityId = card?._resolved?.mower_entity ||
       card?._resolved?.status_entity ||
@@ -13899,11 +13897,6 @@ const VISUAL_DEFAULTS = Object.freeze({
       return segments.filter((segment) => segment.length >= 2);
     };
   }
-
-  const clearBeta1DebugPresentation = (card) => {
-    card?.removeAttribute?.("data-nm-vendor-trail-debug");
-  };
-
 
   const apiPath = (path) => String(path || "")
     .replace(/^\/api\//, "")

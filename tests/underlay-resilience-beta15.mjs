@@ -8,7 +8,9 @@ const upgrade = await readFile(new URL("../scripts/upgrade-underlay-resilience-b
 
 assert.match(packageJson.scripts.test, /underlay-resilience-beta15\.mjs/);
 
-for (const runtime of [source, dist]) {
+assert.ok(dist.length < source.length * 0.9, "dist must remain the minified production runtime");
+
+for (const runtime of [source]) {
   assert.match(runtime, /0\.3\.6-beta15: single-underlay metadata isolation and null-safe coordinates/);
 
   for (const name of ["finite", "finite10", "finite11", "finite14"]) {

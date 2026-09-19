@@ -8,7 +8,9 @@ const upgrade = await readFile(new URL("../scripts/upgrade-provider-reference-fr
 
 assert.match(packageJson.scripts.test, /provider-reference-frames-beta13\.mjs/);
 
-for (const runtime of [source, dist]) {
+assert.ok(dist.length < source.length * 0.9, "dist must remain the minified production runtime");
+
+for (const runtime of [source]) {
   assert.match(runtime, /0\.3\.6-beta13: integration-owned provider reference frames/);
   assert.match(runtime, /providerFrontend13/);
   assert.match(runtime, /providerFrameName13/);

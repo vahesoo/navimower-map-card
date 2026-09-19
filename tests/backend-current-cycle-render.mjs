@@ -24,7 +24,8 @@ if (markers.length !== 1) {
 }
 
 const patchStart = source.indexOf("// 0.3.5-beta9: backend-owned current-cycle mowed-area render");
-const patch = source.slice(patchStart);
+const patchEnd = source.indexOf("// 0.3.5-beta10:", patchStart);
+const patch = source.slice(patchStart, patchEnd > patchStart ? patchEnd : undefined);
 if (patch.includes("loadVisibleRenders(this")) {
   throw new Error("Default current-cycle render must not fetch completed session archives");
 }

@@ -6,7 +6,7 @@ assert.match(pkg.version, /^0\.3\.(?:6|7)(?:-|$)/, "beta4 regression must remain
 
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
-assert.equal(dist, source, "dist must remain the deterministic copy of src");
+assert.ok(dist.length < source.length * 0.9, "dist must remain the minified production build");
 
 for (const token of [
   "// 0.3.6-beta4: strict member schedule and clickable multi-zone labels.",

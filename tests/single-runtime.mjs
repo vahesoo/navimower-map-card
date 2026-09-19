@@ -12,7 +12,8 @@ for (const root of ["src", "dist"]) {
 }
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const dist = readFileSync("dist/navimower-map-card.js", "utf8");
-assert.equal(dist, source, "dist must remain an exact build copy of src");
+assert.ok(dist.length < source.length * 0.9, "dist must remain a meaningfully smaller production build");
+assert.ok(dist.includes(pkg.version), "dist must contain the current runtime version");
 assert.ok(source.includes(`var NAVIMOWER_MAP_CARD_VERSION2 = "${pkg.version}";`), "runtime version must match package.json");
 assert.match(source, /0\.3\.4-beta5: scheduler overview and configurable settings dialog/);
 assert.match(source, /settings_entity_/);
@@ -29,12 +30,13 @@ assert.equal(hacs.filename, "navimower-map-card.js");
 const build = readFileSync("scripts/build.mjs", "utf8");
 assert.match(build, /sourceJs\.length\s*!==\s*1/);
 assert.match(build, /await\s+rm\(distDir/);
-assert.match(build, /await\s+copyFile\(source,\s*target\)/);
+assert.match(build, /esbuild@0\.25\.10/);
+assert.match(build, /--minify/);
 assert.doesNotMatch(build, /CHANGELOG|README|package\.json|beta\d/i, "build must not mutate metadata or depend on a beta number");
 const guard = readFileSync("scripts/check-runtime-layout.mjs", "utf8");
 assert.match(guard, /src must contain exactly one runtime JavaScript file/);
 assert.match(guard, /dist must contain exactly one runtime JavaScript file/);
-assert.match(guard, /byte|exact build copy/i);
+assert.match(guard, /smaller minified build/i);
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 assert.match(contributing, /exactly one runtime JavaScript file/i);
 assert.match(contributing, /Do \*\*not\*\* add files such as/);

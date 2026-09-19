@@ -15038,7 +15038,10 @@ const VISUAL_DEFAULTS = Object.freeze({
       const result = this._applyPayloadStableBeta6
         ? this._applyPayloadStableBeta6(previousApplyMapPayload, args)
         : previousApplyMapPayload.apply(this, args);
-      if (this._zoneArtifactsHandled?.()) return result;
+      if (this._zoneArtifactsHandled?.()) {
+        this._syncZoneArtifactPayloadBeta8?.();
+        return result;
+      }
       const currentInfo = stableCycleInfo(this?._mapPayload);
       const currentRender = this?._mapPayload?.current_cycle_render;
       if (currentInfo && currentRender) {
@@ -15049,6 +15052,7 @@ const VISUAL_DEFAULTS = Object.freeze({
         }
       }
       queueStableCycle(this);
+      this._syncZoneArtifactPayloadBeta8?.();
       return result;
     };
   }
@@ -15442,12 +15446,9 @@ const VISUAL_DEFAULTS = Object.freeze({
     const l = this._layout;
     client.draw(host, `matrix(${l.scale} 0 0 ${-l.scale} ${l.sx(0)} ${l.sy(0)})`);
   };
-  const previousApply = proto._applyMapPayload;
-  proto._applyMapPayload = function(...args) {
-    const result = previousApply?.apply(this, args);
+  proto._syncZoneArtifactPayloadBeta8 = function syncZoneArtifactPayloadBeta8() {
     clientFor(this, this._mapPayload);
     this._drawZoneArtifactMembers();
-    return result;
   };
   function closeClients(card) { for (const client of card._nmBeta8Clients?.values?.() || []) client.close(); card._nmBeta8Clients?.clear?.(); }
   const previousConfig = proto.setConfig;

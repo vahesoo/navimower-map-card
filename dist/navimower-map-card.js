@@ -3542,6 +3542,7 @@ function patchCard() {
     const force = this._v030IndexRevision !== revision;
     this._v030IndexRevision = revision;
     void loadSessionIndex(this, originalApiPath, force);
+    this._syncFrontendSchedulerPayloadBeta2?.();
     return result;
   };
   proto._sessionRecords = function patchedSessionRecords({ applyLimit = true } = {}) {
@@ -7350,23 +7351,18 @@ if (globalThis.customElements) patchCustomAreas0342();
     };
   }
 
-  const previousApplyMapPayload = proto._applyMapPayload;
-  if (typeof previousApplyMapPayload === "function") {
-    proto._applyMapPayload = function beta2ApplyMapPayload(...args) {
-      const result = previousApplyMapPayload.apply(this, args);
-      const applied = applyFrontendEntities(this);
-      const ids = schedulerIdsFromPayload(this);
-      if (ids) syncSchedulerCaches(this, ids);
-      if (applied && this._beta2RegistryTimer) {
-        clearTimeout(this._beta2RegistryTimer);
-        this._beta2RegistryTimer = null;
-        const resolve = this._beta2RegistryResolve;
-        this._beta2RegistryResolve = null;
-        resolve?.();
-      }
-      return result;
-    };
-  }
+  proto._syncFrontendSchedulerPayloadBeta2 = function syncFrontendSchedulerPayloadBeta2() {
+    const applied = applyFrontendEntities(this);
+    const ids = schedulerIdsFromPayload(this);
+    if (ids) syncSchedulerCaches(this, ids);
+    if (applied && this._beta2RegistryTimer) {
+      clearTimeout(this._beta2RegistryTimer);
+      this._beta2RegistryTimer = null;
+      const resolve = this._beta2RegistryResolve;
+      this._beta2RegistryResolve = null;
+      resolve?.();
+    }
+  };
 
   function snapshot(card) {
     const ids = card._beta2SchedulerIds || schedulerIdsFromPayload(card) || card._beta10SchedulerEntities || {};

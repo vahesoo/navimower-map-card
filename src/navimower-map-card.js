@@ -12912,14 +12912,9 @@ const VISUAL_DEFAULTS = Object.freeze({
     });
   };
 
-  const previousApply = proto._applyMapPayload;
-  if (typeof previousApply === "function") {
-    proto._applyMapPayload = function beta16ApplyMapPayload(...args) {
-      const result = previousApply.apply(this, args);
-      queueDeferredCycle(this);
-      return result;
-    };
-  }
+  proto._queueDeferredCycleBeta16 = function queueDeferredCycleBeta16() {
+    queueDeferredCycle(this);
+  };
 
   const previousSetConfig = proto.setConfig;
   if (typeof previousSetConfig === "function") {
@@ -14597,6 +14592,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     if (typeof previous !== "function") continue;
     proto[method] = function lidarTerrainRefresh(...args) {
       const result = previous.apply(this, args);
+      if (method === "_applyMapPayload") this._queueDeferredCycleBeta16?.();
       if (method === "_applyMapPayload" || method === "_ensureDom") {
         this?.removeAttribute?.("data-nm-vendor-trail-debug");
       }

@@ -13954,20 +13954,6 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
 
 
-  const previousRenderTrail = proto._renderTrail;
-  if (typeof previousRenderTrail === "function") {
-    proto._renderTrail = function stableTrailRender(...args) {
-      const result = previousRenderTrail.apply(this, args);
-      clearBeta1DebugPresentation(this);
-      const color = String(this?._config?.trail_color || "#43a047");
-      this._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
-        line.setAttribute("stroke", color);
-        line.setAttribute("data-trail-source", "mqtt-tail");
-      });
-      return result;
-    };
-  }
-
   const apiPath = (path) => String(path || "")
     .replace(/^\/api\//, "")
     .replace(/^\/+/, "");
@@ -14824,6 +14810,16 @@ const VISUAL_DEFAULTS = Object.freeze({
 
   const previousRenderTrail = proto._renderTrail;
   if (typeof previousRenderTrail === "function") {
+    const renderBaseTrail = (card, args) => {
+      const result = previousRenderTrail.apply(card, args);
+      card?.removeAttribute?.("data-nm-vendor-trail-debug");
+      const color = String(card?._config?.trail_color || "#43a047");
+      card?._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
+        line.setAttribute("stroke", color);
+        line.setAttribute("data-trail-source", "mqtt-tail");
+      });
+      return result;
+    };
     proto._renderTrail = function beta6RenderTrail(...args) {
       if (
         this?._historySelectedSessionId
@@ -14831,7 +14827,7 @@ const VISUAL_DEFAULTS = Object.freeze({
         || !this?._trailEl
         || !this?._layout
       ) {
-        return previousRenderTrail.apply(this, args);
+        return renderBaseTrail(this, args);
       }
       const segments = this._activeTrailSegments?.() || [];
       const lines = Array.from(this._trailEl.querySelectorAll?.("polyline.nm-session-path") || []);
@@ -14856,7 +14852,7 @@ const VISUAL_DEFAULTS = Object.freeze({
         this._trailRenderKey = `beta6-live|${trailSignature(this)}|${this?._config?.trail_color || ""}|${width}`;
         return;
       }
-      return previousRenderTrail.apply(this, args);
+      return renderBaseTrail(this, args);
     };
   }
 

@@ -3119,7 +3119,6 @@ var LATEST_LIGHTWEIGHT_MAP_CACHE = /* @__PURE__ */ new Map();
 var MAP_CACHE_LIMIT2 = 10;
 var MAP_CACHE_FRESH_MS2 = 45e3;
 var INDEX_CACHE_FRESH_MS = 3e4;
-var MAX_HISTORY_DAYS = 31;
 function finite(value, fallback = null) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -3397,18 +3396,6 @@ function loadVisibleRenders(card, sessions, originalApiPath) {
       void loadSessionRender(card, session, originalApiPath);
     }
   }
-}
-function historyDayOffsets(sessions) {
-  const today = localDayStart(0).getTime();
-  const offsets = /* @__PURE__ */ new Set([0]);
-  for (const session of sessions || []) {
-    const start = asDate(session?.started_at || session?.start || session?.start_time);
-    if (!start) continue;
-    start.setHours(0, 0, 0, 0);
-    const offset = Math.round((today - start.getTime()) / 864e5);
-    if (offset >= 0 && offset <= 366) offsets.add(offset);
-  }
-  return [...offsets].sort((a, b) => a - b).slice(0, MAX_HISTORY_DAYS);
 }
 function markStableSvgStrokes(card) {
   const details = card._detailsEl;

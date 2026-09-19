@@ -3249,16 +3249,6 @@ function localDayStart(offset = 0) {
   date.setDate(date.getDate() - Number(offset || 0));
   return date;
 }
-function sessionsForDay(sessions, dayOffset, limit = 6) {
-  const start = localDayStart(dayOffset);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return (Array.isArray(sessions) ? sessions : []).filter((session) => {
-    const sessionStart = asDate(session?.started_at || session?.start || session?.start_time);
-    const sessionEnd = asDate(session?.ended_at || session?.end || session?.end_time) || (isActiveSession(session) ? /* @__PURE__ */ new Date() : sessionStart);
-    return sessionStart && sessionEnd && sessionStart < end && sessionEnd >= start;
-  }).slice(-Math.max(1, Number(limit) || 6));
-}
 function normalizeIndexSessions(payload) {
   return (Array.isArray(payload?.sessions) ? payload.sessions : []).filter((session) => session && (session.id !== void 0 || session.session_id !== void 0)).map((session) => ({ ...session })).sort((left, right) => {
     const leftStamp = finite(left.started_at_ms, asDate(left.started_at)?.getTime() || 0);
@@ -3580,11 +3570,6 @@ function patchCard() {
       });
     }
     return applyLimit ? rows.slice(-Math.max(1, Number(this._config?.session_count) || 6)) : rows;
-  };
-  proto._sessionsForCurrentView = function patchedSessionsForCurrentView() {
-    const sessions = this._sessionRecords({ applyLimit: false });
-    const offset = this._historyDayOffset === null ? 0 : this._historyDayOffset;
-    return sessionsForDay(sessions, offset, this._config?.session_count);
   };
   proto._dailyTrailRecords = function noCompletedLineFallback() {
     return null;

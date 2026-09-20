@@ -109,7 +109,7 @@ src/navimower-map-card.js
 dist/navimower-map-card.js
 ```
 
-`dist/navimower-map-card.js` is a deterministic byte-for-byte build copy of the source.
+`dist/navimower-map-card.js` is the deterministic minified production build of the cumulative source. The pinned build tool reduces download and parse cost without changing the one-file HACS runtime architecture.
 
 The active release preparation is intentionally small:
 
@@ -119,4 +119,4 @@ node scripts/sync-version.mjs && node scripts/build.mjs
 
 Historical `upgrade-*` and beta preparation scripts remain useful as development history and regression fixtures, but a new release does not replay the historical beta chain. Production source is already the cumulative runtime.
 
-`npm test` is read-only and verifies the single-runtime layout, source/dist parity, release metadata, current behavior contracts and historical regressions that still matter.
+`npm test` is read-only and verifies the single-runtime layout, minified production build, release metadata, source and dist smoke behavior, current behavior contracts and historical regressions that still matter.

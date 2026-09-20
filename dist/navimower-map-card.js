@@ -1,5 +1,4 @@
 // src/navimower-map-card-core.js
-var NAVIMOWER_MAP_CARD_VERSION = "0.2.2";
 var VIEW_SIZE = 1e3;
 var MAP_CACHE_LIMIT = 10;
 var MAP_CACHE_FRESH_MS = 45e3;
@@ -979,26 +978,21 @@ var NavimowerMapCard = class extends HTMLElement {
     if (!this._historyBarEl) return;
     const selected = this._historyDayOffset;
     const visible = this._historyMenuOpen || selected !== null;
-    const historyBarKey = `${visible}|${selected ?? "today"}`;
+    const count = historyDays032(this._config?.history_days);
+    const offsets = Array.from({ length: count }, (_item, index) => index);
+    const historyBarKey = [visible, selected ?? "today", count].join("|");
     if (historyBarKey === this._historyBarRenderKey) return;
     this._historyBarRenderKey = historyBarKey;
-    this._historyBarEl.hidden = !visible;
-    if (this._historyButtonEl) {
-      this._historyButtonEl.classList.toggle("active", selected !== null || this._historyMenuOpen);
-      this._historyButtonEl.setAttribute("aria-pressed", visible ? "true" : "false");
-    }
+    this._historyBarEl.style.display = visible ? "flex" : "none";
     if (!visible) {
       this._historyBarEl.innerHTML = "";
       return;
     }
-    const choices = [
-      { value: "today", label: "Today" },
-      { value: "1", label: this._historyDateLabel(1) },
-      { value: "2", label: this._historyDateLabel(2) }
-    ];
-    this._historyBarEl.innerHTML = choices.map((choice) => {
-      const active = choice.value === "today" ? selected === null : Number(choice.value) === selected;
-      return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${choice.value}">${escapeHtml(choice.label)}</button>`;
+    this._historyBarEl.innerHTML = offsets.map((offset) => {
+      const value = offset === 0 ? "today" : String(offset);
+      const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
+      const active = offset === 0 ? selected === null : Number(selected) === offset;
+      return "<button type=\"button\" class=\"nm-history-choice" + (active ? " active" : "") + "\" data-history-offset=\"" + value + "\">" + escapeHtml2(label) + "</button>";
     }).join("");
   }
   _historyDateLabel(offset) {
@@ -1197,6 +1191,7 @@ var NavimowerMapCard = class extends HTMLElement {
     }
   }
   _applyMapPayload(sourcePayload, attrs, key) {
+    sourcePayload = this._mapPreV030?.(sourcePayload) || sourcePayload;
     const nextPayload = { ...sourcePayload || {} };
     const payloadSession = finiteNumber(nextPayload.trail_session, finiteNumber(attrs.trail_session, 0));
     const backendSegments = this._normalizeTrailSegments(nextPayload.trail_segments, []);
@@ -1245,6 +1240,7 @@ var NavimowerMapCard = class extends HTMLElement {
     this._sessionsRenderKey = null;
     this._initialViewApplied = false;
     this._applyInitialView(false);
+    this._mapPostV030?.(sourcePayload);
   }
   _normalizePoints(raw) {
     if (!Array.isArray(raw)) return [];
@@ -1641,18 +1637,8 @@ var NavimowerMapCard = class extends HTMLElement {
   }
   _sessionsForCurrentView() {
     const sessions = this._sessionRecords({ applyLimit: false });
-    const limit = Math.max(1, Number(this._config.session_count) || 6);
-    const dayOffset = this._historyDayOffset === null ? 0 : this._historyDayOffset;
-    const dayStart = /* @__PURE__ */ new Date();
-    dayStart.setHours(0, 0, 0, 0);
-    dayStart.setDate(dayStart.getDate() - dayOffset);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
-    return sessions.filter((session) => {
-      const start = dateValue(session.started_at);
-      const end = dateValue(session.ended_at) || (session.active ? /* @__PURE__ */ new Date() : start);
-      return start && end && start < dayEnd && end >= dayStart;
-    }).slice(-limit);
+    const offset = this._historyDayOffset === null ? 0 : Number(this._historyDayOffset) || 0;
+    return sessionsForHistoryDay032(sessions, offset);
   }
   _dailyTrailRecords() {
     const daily = this._mapPayload?.daily_trails;
@@ -3111,11 +3097,6 @@ if (!window.customCards.some((card) => card.type === "navimower-map-card")) {
     }
   });
 }
-console.info(
-  `%c NAVIMOWER-MAP-CARD %c v${NAVIMOWER_MAP_CARD_VERSION} `,
-  "color: white; background: #43a047; font-weight: 700; padding: 2px 6px; border-radius: 3px 0 0 3px;",
-  "color: #263238; background: #eceff1; font-weight: 700; padding: 2px 6px; border-radius: 0 3px 3px 0;"
-);
 
 // src/navimower-map-card-v030.js
 var SESSION_INDEX_CACHE = /* @__PURE__ */ new Map();
@@ -3125,7 +3106,6 @@ var LATEST_LIGHTWEIGHT_MAP_CACHE = /* @__PURE__ */ new Map();
 var MAP_CACHE_LIMIT2 = 10;
 var MAP_CACHE_FRESH_MS2 = 45e3;
 var INDEX_CACHE_FRESH_MS = 3e4;
-var MAX_HISTORY_DAYS = 31;
 function finite(value, fallback = null) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -3214,9 +3194,6 @@ function layoutMatrix(layout) {
   const d = y1 - f;
   return { a, d, e, f, value: `matrix(${a} 0 0 ${d} ${e} ${f})` };
 }
-function renderFingerprint(render) {
-  return String(render?.fingerprint || render?.session_fingerprint || "");
-}
 function renderSignature(session) {
   return [
     sessionId(session),
@@ -3255,16 +3232,6 @@ function localDayStart(offset = 0) {
   date.setHours(0, 0, 0, 0);
   date.setDate(date.getDate() - Number(offset || 0));
   return date;
-}
-function sessionsForDay(sessions, dayOffset, limit = 6) {
-  const start = localDayStart(dayOffset);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return (Array.isArray(sessions) ? sessions : []).filter((session) => {
-    const sessionStart = asDate(session?.started_at || session?.start || session?.start_time);
-    const sessionEnd = asDate(session?.ended_at || session?.end || session?.end_time) || (isActiveSession(session) ? /* @__PURE__ */ new Date() : sessionStart);
-    return sessionStart && sessionEnd && sessionStart < end && sessionEnd >= start;
-  }).slice(-Math.max(1, Number(limit) || 6));
 }
 function normalizeIndexSessions(payload) {
   return (Array.isArray(payload?.sessions) ? payload.sessions : []).filter((session) => session && (session.id !== void 0 || session.session_id !== void 0)).map((session) => ({ ...session })).sort((left, right) => {
@@ -3404,18 +3371,6 @@ function loadVisibleRenders(card, sessions, originalApiPath) {
     }
   }
 }
-function historyDayOffsets(sessions) {
-  const today = localDayStart(0).getTime();
-  const offsets = /* @__PURE__ */ new Set([0]);
-  for (const session of sessions || []) {
-    const start = asDate(session?.started_at || session?.start || session?.start_time);
-    if (!start) continue;
-    start.setHours(0, 0, 0, 0);
-    const offset = Math.round((today - start.getTime()) / 864e5);
-    if (offset >= 0 && offset <= 366) offsets.add(offset);
-  }
-  return [...offsets].sort((a, b) => a - b).slice(0, MAX_HISTORY_DAYS);
-}
 function markStableSvgStrokes(card) {
   const details = card._detailsEl;
   if (!details?.querySelectorAll) return;
@@ -3455,33 +3410,6 @@ function patchCard() {
     if (!raw) return raw;
     this._v030BaseApiPath = stripQuery(raw);
     return withLightweightMapQuery(raw);
-  };
-  const originalSetConfig = proto.setConfig;
-  proto.setConfig = function patchedSetConfig(config) {
-    const previous = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
-    const result = originalSetConfig.call(this, config);
-    const current = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
-    if (!this._v030Renders || previous && previous !== current) resetArchiveState(this);
-    return result;
-  };
-  const originalEnsureDom = proto._ensureDom;
-  proto._ensureDom = function patchedEnsureDom() {
-    const result = originalEnsureDom.call(this);
-    injectV030Styles(this);
-    markStableSvgStrokes(this);
-    return result;
-  };
-  const originalApplyStaticLayers = proto._applyStaticLayers;
-  proto._applyStaticLayers = function patchedApplyStaticLayers(entry) {
-    const result = originalApplyStaticLayers.call(this, entry);
-    markStableSvgStrokes(this);
-    return result;
-  };
-  const originalRenderStatic = proto._renderStatic;
-  proto._renderStatic = function patchedRenderStatic() {
-    const result = originalRenderStatic.call(this);
-    markStableSvgStrokes(this);
-    return result;
   };
   proto._maybeLoadMap = async function patchedMaybeLoadMap() {
     if (!this._config || !this._hass || this._loadingMap) return;
@@ -3566,16 +3494,16 @@ function patchCard() {
       });
     }
   };
-  const originalApplyMapPayload = proto._applyMapPayload;
-  proto._applyMapPayload = function patchedApplyMapPayload(payload, attrs, key) {
+  proto._mapPreV030 = function(payload) {
     ensureState(this);
-    const clean = sanitizeMapPayload(payload);
-    const result = originalApplyMapPayload.call(this, clean, attrs, key);
-    const revision = [clean?.trail_session, clean?.active_session_id, clean?.trail_active].join("|");
+    return sanitizeMapPayload(payload);
+  };
+  proto._mapPostV030 = function(payload) {
+    const revision = [payload?.trail_session, payload?.active_session_id, payload?.trail_active].join("|");
     const force = this._v030IndexRevision !== revision;
     this._v030IndexRevision = revision;
     void loadSessionIndex(this, originalApiPath, force);
-    return result;
+    this._syncFrontendSchedulerPayloadBeta2?.();
   };
   proto._sessionRecords = function patchedSessionRecords({ applyLimit = true } = {}) {
     ensureState(this);
@@ -3626,21 +3554,17 @@ function patchCard() {
     }
     return applyLimit ? rows.slice(-Math.max(1, Number(this._config?.session_count) || 6)) : rows;
   };
-  proto._sessionsForCurrentView = function patchedSessionsForCurrentView() {
-    const sessions = this._sessionRecords({ applyLimit: false });
-    const offset = this._historyDayOffset === null ? 0 : this._historyDayOffset;
-    return sessionsForDay(sessions, offset, this._config?.session_count);
-  };
   proto._dailyTrailRecords = function noCompletedLineFallback() {
     return null;
   };
-  proto._renderHistory = function patchedRenderHistory() {
+  proto._archive = function() {
     if (!this._historyEl || !this._layout) return;
     const sessions = this._sessionsForCurrentView().filter((session) => !session.active);
     loadVisibleRenders(this, sessions, originalApiPath);
     const sourceKey = sessions.map((session) => {
       const render = renderEntry(this, session);
-      return `${session.id}:${renderSignature(session)}:${renderFingerprint(render)}:${Boolean(render)}`;
+      const fingerprint = String(render?.fingerprint || render?.session_fingerprint || "");
+      return `${session.id}:${renderSignature(session)}:${fingerprint}:${Boolean(render)}`;
     }).join(";");
     const renderKey = [
       this._mapStaticSignature,
@@ -3693,33 +3617,6 @@ function patchCard() {
     const button = [...this._sessionsEl?.querySelectorAll(".nm-session[data-session-id]") || []].find((item) => String(item.dataset.sessionId) === String(requestedId));
     button?.classList.add("nm-session-pulsing");
     this._pulseTimer = null;
-  };
-  proto._renderHistoryBar = function patchedHistoryBar() {
-    if (!this._historyBarEl) return;
-    const selected = this._historyDayOffset;
-    const visible = this._historyMenuOpen || selected !== null;
-    const sessions = this._sessionRecords({ applyLimit: false });
-    const offsets = historyDayOffsets(sessions);
-    if (selected !== null && !offsets.includes(Number(selected))) offsets.push(Number(selected));
-    offsets.sort((a, b) => a - b);
-    const historyBarKey = `${visible}|${selected ?? "today"}|${offsets.join(",")}`;
-    if (historyBarKey === this._historyBarRenderKey) return;
-    this._historyBarRenderKey = historyBarKey;
-    this._historyBarEl.hidden = !visible;
-    if (this._historyButtonEl) {
-      this._historyButtonEl.classList.toggle("active", selected !== null || this._historyMenuOpen);
-      this._historyButtonEl.setAttribute("aria-pressed", visible ? "true" : "false");
-    }
-    if (!visible) {
-      this._historyBarEl.innerHTML = "";
-      return;
-    }
-    this._historyBarEl.innerHTML = offsets.map((offset) => {
-      const value = offset === 0 ? "today" : String(offset);
-      const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
-      const active = offset === 0 ? selected === null : Number(selected) === offset;
-      return `<button type="button" class="nm-history-choice${active ? " active" : ""}" data-history-offset="${value}">${escapeHtml2(label)}</button>`;
-    }).join("");
   };
   proto._renderSessions = function patchedRenderSessions() {
     if (!this._sessionsEl || !this._config.show_session_legend) return;
@@ -3890,6 +3787,8 @@ function wrapOutlineRefresh(proto, methodName) {
   if (typeof original !== "function") return;
   proto[methodName] = function outlinedRefresh(...args) {
     const result = original.apply(this, args);
+    if (methodName === "_ensureDom") injectV030Styles(this);
+    markStableSvgStrokes(this);
     applyOutlineSettings(this);
     return result;
   };
@@ -3907,12 +3806,6 @@ function patchCard2() {
     return extendConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalSetConfig = proto.setConfig;
-  if (typeof originalSetConfig === "function") {
-    proto.setConfig = function outlinedSetConfig(config) {
-      return originalSetConfig.call(this, normalizeOutlineConfig(config));
-    };
-  }
   wrapOutlineRefresh(proto, "_ensureDom");
   wrapOutlineRefresh(proto, "_renderStatic");
   wrapOutlineRefresh(proto, "_applyStaticLayers");
@@ -4058,12 +3951,6 @@ function patchCard3() {
     return extendZoneMarkerConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalSetConfig = proto.setConfig;
-  if (typeof originalSetConfig === "function") {
-    proto.setConfig = function zoneMarkerSetConfig(config) {
-      return originalSetConfig.call(this, normalizeZoneMarkerConfig(config));
-    };
-  }
   const originalStaticCacheKey = proto._staticCacheKey;
   if (typeof originalStaticCacheKey === "function") {
     proto._staticCacheKey = function zoneMarkerStaticCacheKey(...args) {
@@ -4497,15 +4384,6 @@ function patchCard6() {
   if (!Card || Card.__navimowerV035NPatched) return;
   Card.__navimowerV035NPatched = true;
   const proto = Card.prototype;
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function notificationEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      ensureNotificationDom(this);
-      renderNotificationBell(this);
-      return result;
-    };
-  }
   const originalResolveByName = proto._resolveEntitiesByName;
   if (typeof originalResolveByName === "function") {
     proto._resolveEntitiesByName = function notificationResolveByName(base) {
@@ -4920,20 +4798,6 @@ function patchCard7() {
     return extendNotificationConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalSetConfig = proto.setConfig;
-  if (typeof originalSetConfig === "function") {
-    proto.setConfig = function notificationActionSetConfig(config) {
-      return originalSetConfig.call(this, normalizeNotificationActionConfig(config));
-    };
-  }
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function notificationActionEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      ensureBeta2NotificationDom(this);
-      return result;
-    };
-  }
   const originalRenderShell = proto._renderShell;
   if (typeof originalRenderShell === "function") {
     proto._renderShell = function notificationActionRenderShell(...args) {
@@ -5331,21 +5195,6 @@ function patchCard8() {
     return extendCompactUiConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalSetConfig = proto.setConfig;
-  if (typeof originalSetConfig === "function") {
-    proto.setConfig = function compactUiSetConfig(config) {
-      return originalSetConfig.call(this, normalizeCompactUiConfig(config));
-    };
-  }
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function compactUiEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      ensureHeaderLayout(this);
-      ensureCompactNotificationStyles(this);
-      return result;
-    };
-  }
   const originalRenderShell = proto._renderShell;
   if (typeof originalRenderShell === "function") {
     proto._renderShell = function compactUiRenderShell(...args) {
@@ -5712,28 +5561,6 @@ function patchCard9() {
     return extendBeta4ConfigForm(originalConfigForm?.() || { schema: [] });
   };
   const proto = Card.prototype;
-  const originalSetConfig = proto.setConfig;
-  if (typeof originalSetConfig === "function") {
-    proto.setConfig = function beta4SetConfig(config) {
-      const normalized = normalizeBeta4Config(config);
-      const result = originalSetConfig.call(this, normalized);
-      if (this._config) {
-        this._config.notification_count = normalized.notification_count;
-        delete this._config.notification_page_size;
-      }
-      enforceTwoRowHeader(this);
-      return result;
-    };
-  }
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function beta4EnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      enforceTwoRowHeader(this);
-      ensureBeta4Styles(this);
-      return result;
-    };
-  }
   const originalRenderShell = proto._renderShell;
   if (typeof originalRenderShell === "function") {
     proto._renderShell = function beta4RenderShell(...args) {
@@ -5917,15 +5744,6 @@ function patchCard10() {
   if (!Card || Card.__navimowerV039RPatched) return;
   Card.__navimowerV039RPatched = true;
   const proto = Card.prototype;
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function beta5ResumeEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      ensureStyles(this);
-      updateResumeButton(this);
-      return result;
-    };
-  }
   const originalRenderControls = proto._renderControls;
   if (typeof originalRenderControls === "function") {
     proto._renderControls = function beta5ResumeRenderControls(...args) {
@@ -6088,56 +5906,20 @@ node.splice(mowerIndex, 0, iconField);
     return form;
   };
 
-  const originalSetConfig = proto.setConfig;
-  proto.setConfig = function beta032SetConfig(config) {
-    const incoming = {
-      ...(config || {}),
-      history_days: historyDays032(config?.history_days),
-      mower_icon: mowerIconConfig032(config?.mower_icon)
-    };
-    const result = originalSetConfig.call(this, incoming);
-    if (this._historyDayOffset !== null && Number(this._historyDayOffset) >= this._config.history_days) {
-      this._historyDayOffset = null;
-      this._historyBarRenderKey = null;
-    }
-    this._mowerArtworkKey032 = null;
-    ensureMowerArtwork032(this);
-    return result;
-  };
-
   const originalEnsureDom = proto._ensureDom;
   proto._ensureDom = function beta032EnsureDom(...args) {
     const result = originalEnsureDom.apply(this, args);
+    ensureNotificationDom(this);
+    renderNotificationBell(this);
+    ensureBeta2NotificationDom(this);
+    ensureHeaderLayout(this);
+    ensureCompactNotificationStyles(this);
+    enforceTwoRowHeader(this);
+    ensureBeta4Styles(this);
+    ensureStyles(this);
+    updateResumeButton(this);
     ensureMowerArtwork032(this);
     return result;
-  };
-
-  proto._sessionsForCurrentView = function beta032SessionsForCurrentView() {
-    const sessions = this._sessionRecords({ applyLimit: false });
-    const offset = this._historyDayOffset === null ? 0 : Number(this._historyDayOffset) || 0;
-    return sessionsForHistoryDay032(sessions, offset);
-  };
-
-  proto._renderHistoryBar = function beta032RenderHistoryBar() {
-    if (!this._historyBarEl) return;
-    const selected = this._historyDayOffset;
-    const visible = this._historyMenuOpen || selected !== null;
-    const count = historyDays032(this._config?.history_days);
-    const offsets = Array.from({ length: count }, (_item, index) => index);
-    const historyBarKey = [visible, selected ?? "today", count].join("|");
-    if (historyBarKey === this._historyBarRenderKey) return;
-    this._historyBarRenderKey = historyBarKey;
-    this._historyBarEl.style.display = visible ? "flex" : "none";
-    if (!visible) {
-      this._historyBarEl.innerHTML = "";
-      return;
-    }
-    this._historyBarEl.innerHTML = offsets.map((offset) => {
-      const value = offset === 0 ? "today" : String(offset);
-      const label = offset === 0 ? "Today" : this._historyDateLabel(offset);
-      const active = offset === 0 ? selected === null : Number(selected) === offset;
-      return "<button type=\"button\" class=\"nm-history-choice" + (active ? " active" : "") + "\" data-history-offset=\"" + value + "\">" + escapeHtml2(label) + "</button>";
-    }).join("");
   };
 
   const originalRegistryResolve = proto._resolveEntitiesFromRegistry;
@@ -6167,28 +5949,33 @@ this._mowerModel032 = this._mowerModel032 || "";
   }
 
   proto._renderMower = function beta032RenderMower() {
-    if (!this._mowerGroup || !this._layout) return;
-    const x = this._number(this._resolved.x_entity);
-    const y = this._number(this._resolved.y_entity);
-    const heading = this._number(this._resolved.heading_entity);
-    const iconKey = mowerIconKey032(this);
-    const renderKey = [x, y, heading, iconKey, this._config.mower_scale, this._layout.scale, this._view.scale].join("|");
-    if (renderKey === this._mowerRenderKey) return;
-    this._mowerRenderKey = renderKey;
-    if (x === null || y === null) {
-      this._mowerGroup.style.display = "none";
-      return;
+    this._syncMowerArtworkModel035?.();
+    try {
+      if (!this._mowerGroup || !this._layout) return;
+      const x = this._number(this._resolved.x_entity);
+      const y = this._number(this._resolved.y_entity);
+      const heading = this._number(this._resolved.heading_entity);
+      const iconKey = mowerIconKey032(this);
+      const renderKey = [x, y, heading, iconKey, this._config.mower_scale, this._layout.scale, this._view.scale].join("|");
+      if (renderKey === this._mowerRenderKey) return;
+      this._mowerRenderKey = renderKey;
+      if (x === null || y === null) {
+        this._mowerGroup.style.display = "none";
+        return;
+      }
+      const artwork = ensureMowerArtwork032(this);
+      if (!artwork) {
+        this._mowerGroup.style.display = "none";
+        return;
+      }
+      const cx = this._layout.sx(x);
+      const cy = this._layout.sy(y);
+      this._mowerGroup.setAttribute("transform", mowerTransform032(this, cx, cy, heading));
+      this._mowerGroup.style.display = "";
+      if (typeof applyZoneMarkerScale === "function") applyZoneMarkerScale(this);
+    } finally {
+      this._syncMowerErrorPulse035?.();
     }
-    const artwork = ensureMowerArtwork032(this);
-    if (!artwork) {
-      this._mowerGroup.style.display = "none";
-      return;
-    }
-    const cx = this._layout.sx(x);
-    const cy = this._layout.sy(y);
-    this._mowerGroup.setAttribute("transform", mowerTransform032(this, cx, cy, heading));
-    this._mowerGroup.style.display = "";
-    if (typeof applyZoneMarkerScale === "function") applyZoneMarkerScale(this);
   };
 
   proto._mower = function beta032MowerMarkup(cx, cy, headingDegrees) {
@@ -6209,11 +5996,6 @@ var registration = globalThis.window?.customCards?.find?.(
 if (registration) {
   registration.description = "Navimower map with completed mowed areas, conditional retained-task Resume, compact scrollable account-scoped notifications, schedule editing, controls, and zoom.";
 }
-console.info(
-  `%c NAVIMOWER-MAP-CARD %c v${NAVIMOWER_MAP_CARD_VERSION2} `,
-  "color: white; background: #43a047; font-weight: 700; padding: 2px 6px; border-radius: 3px 0 0 3px;",
-  "color: #263238; background: #eceff1; font-weight: 700; padding: 2px 6px; border-radius: 0 3px 3px 0;"
-);
 export {
   NAVIMOWER_MAP_CARD_VERSION2 as NAVIMOWER_MAP_CARD_VERSION
 };
@@ -6290,16 +6072,6 @@ function patchCustomAreas0342() {
     };
     form.computeLabel = (schema) => labels[schema?.name] || baseCompute?.(schema) || schema?.name || "";
     return form;
-  };
-
-  const originalSetConfig = proto.setConfig;
-  proto.setConfig = function customAreaSetConfig0342(config) {
-    const next = { ...config };
-    if (next.show_custom_areas === undefined) next.show_custom_areas = true;
-    if (next.custom_area_color === undefined) next.custom_area_color = next.gate_area_color || "#8e24aa";
-    if (next.custom_area_fill_opacity === undefined) next.custom_area_fill_opacity = 0.14;
-    if (next.custom_area_stroke_width === undefined) next.custom_area_stroke_width = 3;
-    return originalSetConfig.call(this, next);
   };
 
   function customAreas(card) {
@@ -6532,11 +6304,10 @@ if (globalThis.customElements) patchCustomAreas0342();
   function queueFrom(c,attrs){const q=Array.isArray(attrs.custom_queue)?attrs.custom_queue:[];if(q.length)return q.map(Number);return (attrs.queue||[]).filter(z=>z.status!=='completed').map(z=>Number(z.id)).filter(Number.isFinite);}
   async function saveQueue(c,queue){const id=c._mowerDeviceId?.();const data={zones:queue};if(id)data.device_id=id;await call(c,'navimower','set_schedule_queue',data);}
   function renderManaged(c){const h=c._modalHostEl;if(!h)return;const ids=c._beta6SchedulerEntities||{};const st=state(c,ids.status),a=st?.attributes||{};let queue=queueFrom(c,a);const names=new Map((a.queue||[]).map(z=>[Number(z.id),z.name||`Zone ${z.id}`]));const order=a.order_mode||'automatic';const editable=order==='custom';const rows=queue.map((id,i)=>`<div class="nm-managed-zone"><span class="nm-queue-index">${i+1}</span><span class="nm-queue-name">${esc(names.get(id)||`Zone ${id}`)}</span>${editable?`<button data-queue-up="${i}" title="Move up">↑</button><button data-queue-down="${i}" title="Move down">↓</button><button data-queue-add="${i}" title="Repeat zone">＋</button><button data-queue-remove="${i}" title="Remove">×</button>`:''}</div>`).join('');h.innerHTML=`<div class="nm-backdrop nm-managed-backdrop"><div class="nm-dialog nm-schedule-dialog"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Navimower schedule</div><button class="nm-schedule-close" data-managed-close><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-managed-summary"><span>${esc(a.start||'—')}–${esc(a.end||'—')}</span><span>${esc(order==='custom'?'Custom order':'Automatic order')}</span><span>${esc(st?.state||'Unavailable')}</span></div><div class="nm-managed-queue">${rows||'<div class="nm-managed-empty">No queue available.</div>'}</div>${editable?'<div class="nm-dialog-hint">Use arrows to reorder, + to repeat a zone, and × to remove it. Saving the queue does not enable or start the scheduler.</div>':''}</div></div>`;h.querySelector('[data-managed-close]')?.addEventListener('click',()=>{c._beta6ManagedOpen=false;c._renderDialog();});const change=async(type,i)=>{if(type==='up'&&i>0)[queue[i-1],queue[i]]=[queue[i],queue[i-1]];if(type==='down'&&i<queue.length-1)[queue[i+1],queue[i]]=[queue[i],queue[i+1]];if(type==='add')queue.splice(i+1,0,queue[i]);if(type==='remove'&&queue.length>1)queue.splice(i,1);await saveQueue(c,queue);renderManaged(c);};for(const t of ['up','down','add','remove'])h.querySelectorAll(`[data-queue-${t}]`).forEach(b=>b.addEventListener('click',()=>change(t,Number(b.dataset[`queue${t[0].toUpperCase()+t.slice(1)}`]))));}
-  const oldEnsure=proto._ensureDom;proto._ensureDom=function(...a){const r=oldEnsure?.apply(this,a);void discover(this);return r;};
   const oldDialog=proto._renderDialog;proto._renderDialog=function(...a){if(this._beta6SettingsOpen){renderSettings(this);return;}if(this._beta6ManagedOpen){renderManaged(this);return;}return oldDialog?.apply(this,a);};
   const oldOpen=proto._openScheduleDialog;proto._openScheduleDialog=async function(...a){const ids=await discover(this);const mode=this._config?.schedule_view_mode||'auto';const managedOn=state(this,ids.managedSwitch)?.state==='on';this._beta6SettingsOpen=false;if(mode==='navimower'||(mode==='auto'&&managedOn&&ids.status)){this._beta5ManagedScheduleOpen=false;this._scheduleDialogOpen=false;this._mowDialogOpen=false;this._beta6ManagedOpen=true;this._renderDialog();return;}this._beta6ManagedOpen=false;return oldOpen?.apply(this,a);};
   const oldHass=Object.getOwnPropertyDescriptor(proto,'hass');if(oldHass?.set)Object.defineProperty(proto,'hass',{configurable:true,get:oldHass.get,set(v){oldHass.set.call(this,v);if(this._beta6SettingsOpen)renderSettings(this);if(this._beta6ManagedOpen)renderManaged(this);}});
-  const oldEnsure2=proto._ensureDom;proto._ensureDom=function(...a){const r=oldEnsure2?.apply(this,a);const gear=this.querySelector?.('.nm-settings-button');if(gear&&!gear.__beta6){gear.__beta6=true;gear.addEventListener('click',()=>{this._beta5SettingsOpen=false;this._beta6ManagedOpen=false;this._beta6SettingsOpen=true;this._renderDialog();},{capture:true});}return r;};
+  const oldEnsure2=proto._ensureDom;proto._ensureDom=function(...a){const r=oldEnsure2?.apply(this,a);void discover(this);const gear=this.querySelector?.('.nm-settings-button');if(gear&&!gear.__beta6){gear.__beta6=true;gear.addEventListener('click',()=>{this._beta5SettingsOpen=false;this._beta6ManagedOpen=false;this._beta6SettingsOpen=true;this._renderDialog();},{capture:true});}return r;};
 })();
 
 
@@ -6701,29 +6472,6 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 })();
 
-
-// 0.3.4-beta9: current-cycle live history label.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || Card.__navimower034Beta9Patched) return;
-  Card.__navimower034Beta9Patched = true;
-
-  const proto = Card.prototype;
-  const previousRenderHistoryBar = proto._renderHistoryBar;
-  proto._renderHistoryBar = function (...args) {
-    const result = previousRenderHistoryBar?.apply(this, args);
-    if (this._mapPayload?.daily_trails?.scope === "current_cycle") {
-      this._historyBarEl
-        ?.querySelectorAll?.('[data-history-offset="today"]')
-        ?.forEach?.((button) => {
-          button.textContent = "Current cycle";
-          button.title = "Current mowing cycle since the latest confirmed reset";
-        });
-    }
-    return result;
-  };
-
-})();
 
 
 // 0.3.4-beta10: resilient Navimower scheduler discovery.
@@ -6930,14 +6678,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     return discover(this, options);
   };
 
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function schedulerDiscoverySetConfig(config) {
-      const result = previousSetConfig.call(this, config);
-      clearDiscovery(this);
-      return result;
-    };
-  }
 
   const previousMowerDeviceId = proto._mowerDeviceId;
   if (typeof previousMowerDeviceId === "function") {
@@ -7486,15 +7226,8 @@ if (globalThis.customElements) patchCustomAreas0342();
     return {};
   }
 
-  // Stop the beta5/beta6 eager entity-registry scans. Their discover functions
-  // short-circuit on a truthy cache. The new runtime resolves scheduler metadata
-  // from the Map API and falls back to registry discovery only on Schedule click.
-  const previousSetConfig = proto.setConfig;
-  proto.setConfig = function beta2SetConfig(config) {
-    if (!this._beta5SchedulerEntities) this._beta5SchedulerEntities = {};
-    if (!this._beta6SchedulerEntities) this._beta6SchedulerEntities = {};
-    return previousSetConfig.call(this, config);
-  };
+  // The later beta10 setConfig path primes beta5/beta6 caches before older
+  // compatibility layers run, suppressing eager entity-registry scans.
 
   // Core entity registry discovery remains a compatibility fallback for renamed
   // installations, but defer it briefly. Normal Navimower cards load the map via
@@ -7524,23 +7257,18 @@ if (globalThis.customElements) patchCustomAreas0342();
     };
   }
 
-  const previousApplyMapPayload = proto._applyMapPayload;
-  if (typeof previousApplyMapPayload === "function") {
-    proto._applyMapPayload = function beta2ApplyMapPayload(...args) {
-      const result = previousApplyMapPayload.apply(this, args);
-      const applied = applyFrontendEntities(this);
-      const ids = schedulerIdsFromPayload(this);
-      if (ids) syncSchedulerCaches(this, ids);
-      if (applied && this._beta2RegistryTimer) {
-        clearTimeout(this._beta2RegistryTimer);
-        this._beta2RegistryTimer = null;
-        const resolve = this._beta2RegistryResolve;
-        this._beta2RegistryResolve = null;
-        resolve?.();
-      }
-      return result;
-    };
-  }
+  proto._syncFrontendSchedulerPayloadBeta2 = function syncFrontendSchedulerPayloadBeta2() {
+    const applied = applyFrontendEntities(this);
+    const ids = schedulerIdsFromPayload(this);
+    if (ids) syncSchedulerCaches(this, ids);
+    if (applied && this._beta2RegistryTimer) {
+      clearTimeout(this._beta2RegistryTimer);
+      this._beta2RegistryTimer = null;
+      const resolve = this._beta2RegistryResolve;
+      this._beta2RegistryResolve = null;
+      resolve?.();
+    }
+  };
 
   function snapshot(card) {
     const ids = card._beta2SchedulerIds || schedulerIdsFromPayload(card) || card._beta10SchedulerEntities || {};
@@ -8504,8 +8232,6 @@ if (globalThis.customElements) patchCustomAreas0342();
   if (!Card || Card.__navimower035Beta5MowerVisibility) return;
   Card.__navimower035Beta5MowerVisibility = true;
   const proto = Card.prototype;
-  const previousRenderMower = proto._renderMower;
-
   const mowerEntityState = (card) => {
     const entityId = card?._resolved?.mower_entity ||
       card?._resolved?.status_entity ||
@@ -8549,11 +8275,6 @@ if (globalThis.customElements) patchCustomAreas0342();
       card._mowerArtworkKey032 = null;
       card._mowerRenderKey = null;
     }
-  };
-
-  proto._renderMower = function beta5RenderMower(...args) {
-    syncMowerArtworkModel(this);
-    return previousRenderMower?.apply(this, args);
   };
 
   // Keep this helper testable without reopening the old browser registry scan.
@@ -8835,73 +8556,34 @@ if (globalThis.customElements) patchCustomAreas0342();
 })();
 
 
-// 0.3.5-beta9: backend-owned current-cycle mowed-area render.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || Card.__navimower035Beta9CurrentCycleRender) return;
-  Card.__navimower035Beta9CurrentCycleRender = true;
-  const proto = Card.prototype;
-
-  const previousRenderHistory = proto._renderHistory;
-  proto._renderHistory = function backendCurrentCycleHistory() {
-    const current = this._mapPayload?.current_cycle_render;
-    if (this._historySelectedSessionId) {
-      if (this._historyEl) this._historyEl.innerHTML = "";
-      this._renderSelectedSessionArchive?.();
-      return;
-    }
-    if (this._historyDayOffset !== null || current?.scope !== "current_cycle") {
-      return previousRenderHistory?.call(this);
-    }
-    if (!this._historyEl || !this._layout) return;
-
-    const area = current?.mowed_area;
-    const render = area && typeof area === "object" ? {
-      version: current.render_schema_version,
-      coordinate_space: current.coordinate_space || "map_xy_m",
-      mowed_area: area,
-      travel: { path_d: "", stroke_width_m: 0 },
-      route: { path_d: "", stroke_width_m: 0 },
-    } : null;
-    const revision = String(current?.revision ?? "");
-    const renderKey = [
-      "backend-current-cycle",
-      this._mapStaticSignature,
-      revision,
-      this._config?.trail_color,
-      this._config?.trail_opacity,
-      this._layout?.scale,
-      String(area?.path_d || "").length,
-    ].join("|");
-    if (renderKey === this._historyRenderKey) return;
-    this._historyRenderKey = renderKey;
-
-    this._historyEl.innerHTML = render && String(area?.path_d || "").trim()
-      ? archiveSvg(
-          render,
-          this._layout,
-          this._config.trail_color,
-          this._config.trail_opacity,
-          "current-cycle"
-        )
-      : "";
-  };
-
-  const previousRenderHistoryBar = proto._renderHistoryBar;
-  proto._renderHistoryBar = function backendCurrentCycleHistoryBar(...args) {
-    const result = previousRenderHistoryBar?.apply(this, args);
-    if (this._mapPayload?.current_cycle_render?.scope === "current_cycle") {
-      this._historyBarEl
-        ?.querySelectorAll?.('[data-history-offset="today"]')
-        ?.forEach?.((button) => {
-          button.textContent = "Current cycle";
-          button.title = "Current mowing cycle since the latest confirmed reset";
-        });
-    }
-    return result;
-  };
-
-})();
+const VISUAL_DEFAULTS = Object.freeze({
+  map_background_color: "#ffffff",
+  map_legend_opacity: 0.10,
+  zone_label_font_size: 20,
+  zone_label_opacity: 0.75,
+  zone_fill_color: "#81c784",
+  zone_fill_opacity: 0.20,
+  zone_stroke_color: "#43a047",
+  trail_color: "#43a047",
+  trail_opacity: 0.50,
+  off_limit_color: "#FF5A00",
+  vf_off_color: "#2F80ED",
+  channel_color: "#808080",
+  gate_area_color: "#8e24aa",
+  dock_color: "#37474f",
+  custom_area_color: "#8e24aa",
+  custom_area_fill_opacity: 0.10,
+  mower_scale: 1.2,
+  dock_scale: 1.1,
+  zone_marker_scale: 1.1,
+  zone_stroke_width: 1.5,
+  off_limit_stroke_width: 1.5,
+  vf_off_stroke_width: 1.5,
+  channel_stroke_width: 1.5,
+  gate_area_stroke_width: 1.5,
+  dock_stroke_width: 1.5,
+  custom_area_stroke_width: 1.5,
+});
 
 
 // 0.3.5-beta10: organized editor groups and configurable header buttons.
@@ -8956,11 +8638,48 @@ if (globalThis.customElements) patchCustomAreas0342();
   const previousSetConfig = proto.setConfig;
   if (typeof previousSetConfig === "function") {
     proto.setConfig = function beta10SetConfig(config) {
-      const next = { ...config };
+      const next = { ...(config || {}) };
+      for (const [key, value] of Object.entries(VISUAL_DEFAULTS)) {
+        if (next[key] === undefined || next[key] === null || next[key] === "") next[key] = value;
+      }
       for (const key of BUTTON_FIELDS) {
         if (next[key] === undefined) next[key] = true;
       }
-      const result = previousSetConfig.call(this, next);
+      if (!this._beta5SchedulerEntities) this._beta5SchedulerEntities = {};
+      if (!this._beta6SchedulerEntities) this._beta6SchedulerEntities = {};
+      if (next.show_custom_areas === undefined) next.show_custom_areas = true;
+      if (next.custom_area_color === undefined) next.custom_area_color = next.gate_area_color || "#8e24aa";
+      if (next.custom_area_fill_opacity === undefined) next.custom_area_fill_opacity = 0.14;
+      if (next.custom_area_stroke_width === undefined) next.custom_area_stroke_width = 3;
+      next.history_days = historyDays032(next.history_days);
+      next.mower_icon = mowerIconConfig032(next.mower_icon);
+      const normalized = normalizeBeta4Config(next);
+      const prepared = normalizeOutlineConfig(
+        normalizeZoneMarkerConfig(
+          normalizeNotificationActionConfig(
+            normalizeCompactUiConfig(normalized)
+          )
+        )
+      );
+      const previousIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
+      const result = previousSetConfig.call(this, prepared);
+      const currentIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
+      if (!this._v030Renders || previousIdentity && previousIdentity !== currentIdentity) resetArchiveState(this);
+      if (this._config) {
+        this._config.notification_count = normalized.notification_count;
+        delete this._config.notification_page_size;
+      }
+      enforceTwoRowHeader(this);
+      if (this._historyDayOffset !== null && Number(this._historyDayOffset) >= this._config.history_days) {
+        this._historyDayOffset = null;
+        this._historyBarRenderKey = null;
+      }
+      this._mowerArtworkKey032 = null;
+      ensureMowerArtwork032(this);
+      this._beta10SchedulerEntities = null;
+      this._beta10ScheduleDeviceId = null;
+      this._beta6SchedulerEntities = null;
+      this._beta5SchedulerEntities = null;
       if (next.show_history_button === false && this._historyDayOffset !== null) {
         this._historyDayOffset = null;
         this._historyMenuOpen = false;
@@ -9120,12 +8839,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     if (settings) settings.style.display = showSettings ? "" : "none";
   }
 
-  const previousEnsure = proto._ensureDom;
-  proto._ensureDom = function beta10EnsureDom(...args) {
-    const result = previousEnsure?.apply(this, args);
-    syncHeaderVisibility(this);
-    return result;
-  };
+  proto._syncHeaderVisibility035 = function() { syncHeaderVisibility(this); };
 
   const previousRenderShell = proto._renderShell;
   proto._renderShell = function beta10RenderShell(...args) {
@@ -9147,7 +8861,23 @@ if (globalThis.customElements) patchCustomAreas0342();
       return;
     }
     const result = previousRenderHistoryBar?.apply(this, args);
+    if (
+      this._mapPayload?.current_cycle_render?.scope === "current_cycle"
+      || this._mapPayload?.daily_trails?.scope === "current_cycle"
+    ) {
+      this._historyBarEl
+        ?.querySelectorAll?.('[data-history-offset="today"]')
+        ?.forEach?.((button) => {
+          button.textContent = "Current cycle";
+          button.title = "Current mowing cycle since the latest confirmed reset";
+        });
+    }
     syncHeaderVisibility(this);
+    if (this._zoneArtifactsHandled?.()) {
+      for (const button of this._historyBarEl?.querySelectorAll?.('[data-history-offset="today"]') || []) {
+        button.textContent = "Current cycle";
+      }
+    }
     return result;
   };
 
@@ -9314,16 +9044,12 @@ if (globalThis.customElements) patchCustomAreas0342();
     card?._mowerGroup?.classList?.toggle("nm-mower-error-pulse", mowerError(card));
   }
 
-  const previousRenderMower = proto._renderMower;
-  proto._renderMower = function beta11RenderMower(...args) {
-    const result = previousRenderMower?.apply(this, args);
-    syncMowerErrorPulse(this);
-    return result;
-  };
+  proto._syncMowerErrorPulse035 = function() { syncMowerErrorPulse(this); };
 
   const previousEnsure = proto._ensureDom;
   proto._ensureDom = function beta11EnsureDom(...args) {
     const result = previousEnsure?.apply(this, args);
+    this._syncHeaderVisibility035?.();
     ensureErrorPulseStyle(this);
     syncCombinedScheduleButton(this);
     syncMowerErrorPulse(this);
@@ -9338,35 +9064,6 @@ if (globalThis.customElements) patchCustomAreas0342();
   const Card = globalThis.customElements?.get?.("navimower-map-card");
   if (!Card || Card.__navimower035Beta12VisualDefaults) return;
   Card.__navimower035Beta12VisualDefaults = true;
-
-  const VISUAL_DEFAULTS = Object.freeze({
-    map_background_color: "#ffffff",
-    map_legend_opacity: 0.10,
-    zone_label_font_size: 20,
-    zone_label_opacity: 0.75,
-    zone_fill_color: "#81c784",
-    zone_fill_opacity: 0.20,
-    zone_stroke_color: "#43a047",
-    trail_color: "#43a047",
-    trail_opacity: 0.50,
-    off_limit_color: "#FF5A00",
-    vf_off_color: "#2F80ED",
-    channel_color: "#808080",
-    gate_area_color: "#8e24aa",
-    dock_color: "#37474f",
-    custom_area_color: "#8e24aa",
-    custom_area_fill_opacity: 0.10,
-    mower_scale: 1.2,
-    dock_scale: 1.1,
-    zone_marker_scale: 1.1,
-    zone_stroke_width: 1.5,
-    off_limit_stroke_width: 1.5,
-    vf_off_stroke_width: 1.5,
-    channel_stroke_width: 1.5,
-    gate_area_stroke_width: 1.5,
-    dock_stroke_width: 1.5,
-    custom_area_stroke_width: 1.5,
-  });
 
   const COLOR_FIELDS = new Set([
     "map_background_color",
@@ -9466,16 +9163,6 @@ if (globalThis.customElements) patchCustomAreas0342();
   }
 
   const proto = Card.prototype;
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta12SetConfig(config) {
-      const next = { ...(config || {}) };
-      for (const [key, value] of Object.entries(VISUAL_DEFAULTS)) {
-        if (next[key] === undefined || next[key] === null || next[key] === "") next[key] = value;
-      }
-      return previousSetConfig.call(this, next);
-    };
-  }
 
   function finiteWidth(value, fallback = 1.5) {
     const parsed = Number(value);
@@ -11286,17 +10973,12 @@ if (globalThis.customElements) patchCustomAreas0342();
     };
   }
 
-  const originalRenderHistory036 = proto._renderHistory;
-  if (typeof originalRenderHistory036 === "function") {
-    proto._renderHistory = function multi036RenderHistory(...args) {
-      if (multiActive036(this)) {
-        void ensureHistoryRenders036(this);
-        renderMultiMap036(this, true);
-        return;
-      }
-      return originalRenderHistory036.apply(this, args);
-    };
-  }
+  proto._renderMultiHistory036 = function() {
+    if (!multiActive036(this)) return false;
+    void ensureHistoryRenders036(this);
+    renderMultiMap036(this, true);
+    return true;
+  };
 
   const originalApplyView036 = proto._applyViewBox;
   if (typeof originalApplyView036 === "function") {
@@ -11955,6 +11637,7 @@ if (globalThis.customElements) patchCustomAreas0342();
       if (next.osm_underlay_opacity === undefined) next.osm_underlay_opacity = DEFAULT_OPACITY;
       const result = previousSetConfig.call(this, next);
       queueMicrotask(() => syncCard(this));
+      queueMicrotask(() => this._syncOsmUnderlay036?.());
       return result;
     };
   }
@@ -12051,24 +11734,6 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 })();
 
-
-// 0.3.6-beta7: OSM Multi visibility and ready-state sync.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || Card.__navimower036Beta7Osm) return;
-  Card.__navimower036Beta7Osm = true;
-
-  const proto = Card.prototype;
-  const previousSetConfig = proto.setConfig;
-  if (typeof previousSetConfig === "function") {
-    proto.setConfig = function beta7OsmSetConfig(config) {
-      const result = previousSetConfig.call(this, config);
-      queueMicrotask(() => this._syncOsmUnderlay036?.());
-      return result;
-    };
-  }
-
-})();
 
 
 // 0.3.6-beta8: Estonia orthophoto underlay.
@@ -12394,14 +12059,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     }, Math.max(0, delay));
   };
 
-  const previousSetConfig10 = proto.setConfig;
-  if (typeof previousSetConfig10 === "function") {
-    proto.setConfig = function beta10EstoniaDetailSetConfig(config) {
-      const result = previousSetConfig10.call(this, config);
-      scheduleDetail10(this, 0);
-      return result;
-    };
-  }
+  proto._scheduleDetail10 = function() { scheduleDetail10(this, 0); };
 
   for (const method of ["_renderStatic", "_applyStaticLayers", "_ensureDom", "_applyViewBox"]) {
     const previous = proto[method];
@@ -12658,6 +12316,7 @@ if (globalThis.customElements) patchCustomAreas0342();
       }
       if (next.underlay_opacity === undefined) next.underlay_opacity = DEFAULT_OPACITY11;
       const result = previousSetConfig.call(this, next);
+      this._scheduleDetail10?.();
       scheduleGoogle11(this, 0);
       return result;
     };
@@ -13081,14 +12740,9 @@ if (globalThis.customElements) patchCustomAreas0342();
     });
   };
 
-  const previousApply = proto._applyMapPayload;
-  if (typeof previousApply === "function") {
-    proto._applyMapPayload = function beta16ApplyMapPayload(...args) {
-      const result = previousApply.apply(this, args);
-      queueDeferredCycle(this);
-      return result;
-    };
-  }
+  proto._queueDeferredCycleBeta16 = function queueDeferredCycleBeta16() {
+    queueDeferredCycle(this);
+  };
 
   const previousSetConfig = proto.setConfig;
   if (typeof previousSetConfig === "function") {
@@ -13964,123 +13618,6 @@ if (globalThis.customElements) patchCustomAreas0342();
 
 // 0.3.6-beta21: unrestricted nearest-edge gate-area insertion.
 
-// 0.3.7-beta1: vendor retained trail / MQTT tail source debug.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || Card.__navimower037Beta1VendorTrailDebug) return;
-  Card.__navimower037Beta1VendorTrailDebug = true;
-
-  const proto = Card.prototype;
-  const MATCH_RADIUS_M = 0.5;
-
-  const originalActiveTrailSegments = proto._activeTrailSegments;
-  if (typeof originalActiveTrailSegments === "function") {
-    proto._activeTrailSegments = function vendorTrailDebugActiveSegments(...args) {
-      const debug = this?._mapPayload?.vendor_trail_debug;
-      if (!debug?.backend_tail_authoritative) {
-        return originalActiveTrailSegments.apply(this, args);
-      }
-
-      const backend = typeof this._normalizeTrailSegments === "function"
-        ? this._normalizeTrailSegments(this._mapPayload?.trail_segments, [])
-        : [];
-      if (!backend.length) return [];
-
-      const segments = backend.map((segment) => segment.map((point) => [...point]));
-      const anchor = segments.at(-1)?.at(-1) || debug?.anchor_xy || null;
-      const live = Array.isArray(this._trail) ? this._trail : [];
-      let anchorIndex = -1;
-      if (Array.isArray(anchor) && anchor.length >= 2) {
-        for (let index = live.length - 1; index >= 0; index -= 1) {
-          const point = live[index];
-          if (!Array.isArray(point) || point.length < 2) continue;
-          if (
-            Math.hypot(
-              Number(point[0]) - Number(anchor[0]),
-              Number(point[1]) - Number(anchor[1]),
-            ) <= MATCH_RADIUS_M
-          ) {
-            anchorIndex = index;
-            break;
-          }
-        }
-      }
-
-      if (anchorIndex >= 0) {
-        for (const point of live.slice(anchorIndex + 1)) {
-          let current = segments.at(-1);
-          if (!current) {
-            current = [];
-            segments.push(current);
-          }
-          const previous = current.at(-1);
-          if (
-            previous
-            && (point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2 > 25
-          ) {
-            current = [];
-            segments.push(current);
-          }
-          const last = current.at(-1);
-          if (!last || last[0] !== point[0] || last[1] !== point[1]) {
-            current.push([...point]);
-          }
-        }
-      }
-      return segments.filter((segment) => segment.length >= 2);
-    };
-  }
-
-  const syncDebugHost = (card) => {
-    const enabled = Boolean(card?._mapPayload?.vendor_trail_debug?.enabled);
-    card?.toggleAttribute?.("data-nm-vendor-trail-debug", enabled);
-    if (
-      !card?.shadowRoot
-      || card.shadowRoot.querySelector?.("style[data-nm-vendor-trail-debug-style]")
-    ) return;
-    const style = document.createElement("style");
-    style.dataset.nmVendorTrailDebugStyle = "1";
-    style.textContent = `
-      :host([data-nm-vendor-trail-debug]) .nm-multi-live-trail {
-        stroke: #ff0000 !important;
-      }
-    `;
-    card.shadowRoot.append(style);
-  };
-
-  const originalApplyMapPayload = proto._applyMapPayload;
-  if (typeof originalApplyMapPayload === "function") {
-    proto._applyMapPayload = function vendorTrailDebugApplyMapPayload(...args) {
-      const result = originalApplyMapPayload.apply(this, args);
-      syncDebugHost(this);
-      return result;
-    };
-  }
-
-  const originalEnsureDom = proto._ensureDom;
-  if (typeof originalEnsureDom === "function") {
-    proto._ensureDom = function vendorTrailDebugEnsureDom(...args) {
-      const result = originalEnsureDom.apply(this, args);
-      syncDebugHost(this);
-      return result;
-    };
-  }
-
-  const originalRenderTrail = proto._renderTrail;
-  if (typeof originalRenderTrail === "function") {
-    proto._renderTrail = function vendorTrailDebugRenderTrail(...args) {
-      const result = originalRenderTrail.apply(this, args);
-      if (this?._mapPayload?.vendor_trail_debug?.enabled) {
-        this._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
-          line.setAttribute("stroke", "#ff0000");
-          line.setAttribute("data-trail-source", "mqtt");
-        });
-      }
-      return result;
-    };
-  }
-})();
-
 // 0.3.7-beta2: stable vendor backbone / MQTT tail and authenticated OSM tiles.
 (() => {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
@@ -14228,42 +13765,6 @@ if (globalThis.customElements) patchCustomAreas0342();
       const anchor = segments.at(-1)?.at(-1) || debug?.anchor_xy || null;
       appendLiveAfterAnchor(segments, this._trail, anchor);
       return segments.filter((segment) => segment.length >= 2);
-    };
-  }
-
-  const clearBeta1DebugPresentation = (card) => {
-    card?.removeAttribute?.("data-nm-vendor-trail-debug");
-  };
-
-  const previousApplyMapPayload = proto._applyMapPayload;
-  if (typeof previousApplyMapPayload === "function") {
-    proto._applyMapPayload = function stableTrailApplyMapPayload(...args) {
-      const result = previousApplyMapPayload.apply(this, args);
-      clearBeta1DebugPresentation(this);
-      return result;
-    };
-  }
-
-  const previousEnsureDom = proto._ensureDom;
-  if (typeof previousEnsureDom === "function") {
-    proto._ensureDom = function stableTrailEnsureDom(...args) {
-      const result = previousEnsureDom.apply(this, args);
-      clearBeta1DebugPresentation(this);
-      return result;
-    };
-  }
-
-  const previousRenderTrail = proto._renderTrail;
-  if (typeof previousRenderTrail === "function") {
-    proto._renderTrail = function stableTrailRender(...args) {
-      const result = previousRenderTrail.apply(this, args);
-      clearBeta1DebugPresentation(this);
-      const color = String(this?._config?.trail_color || "#43a047");
-      this._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
-        line.setAttribute("stroke", color);
-        line.setAttribute("data-trail-source", "mqtt-tail");
-      });
-      return result;
     };
   }
 
@@ -14914,6 +14415,10 @@ if (globalThis.customElements) patchCustomAreas0342();
     if (typeof previous !== "function") continue;
     proto[method] = function lidarTerrainRefresh(...args) {
       const result = previous.apply(this, args);
+      if (method === "_applyMapPayload") this._queueDeferredCycleBeta16?.();
+      if (method === "_applyMapPayload" || method === "_ensureDom") {
+        this?.removeAttribute?.("data-nm-vendor-trail-debug");
+      }
       scheduleTerrain(this, method === "_applyViewBox" ? 60 : 0);
       return result;
     };
@@ -14984,6 +14489,40 @@ if (globalThis.customElements) patchCustomAreas0342();
     } catch (_error) {
       return "";
     }
+  };
+
+  const renderBackendCurrentCycle = (card) => {
+    const current = card?._mapPayload?.current_cycle_render;
+    if (card?._historySelectedSessionId) {
+      if (card._historyEl) card._historyEl.innerHTML = "";
+      card._renderSelectedSessionArchive?.();
+      return true;
+    }
+    if (card?._historyDayOffset !== null || current?.scope !== "current_cycle") return false;
+    if (!card?._historyEl || !card?._layout) return true;
+    const area = current?.mowed_area;
+    const render = area && typeof area === "object" ? {
+      version: current.render_schema_version,
+      coordinate_space: current.coordinate_space || "map_xy_m",
+      mowed_area: area,
+      travel: { path_d: "", stroke_width_m: 0 },
+      route: { path_d: "", stroke_width_m: 0 },
+    } : null;
+    const renderKey = [
+      "backend-current-cycle",
+      card._mapStaticSignature,
+      String(current?.revision ?? ""),
+      card._config?.trail_color,
+      card._config?.trail_opacity,
+      card._layout?.scale,
+      String(area?.path_d || "").length,
+    ].join("|");
+    if (renderKey === card._historyRenderKey) return true;
+    card._historyRenderKey = renderKey;
+    card._historyEl.innerHTML = render && String(area?.path_d || "").trim()
+      ? archiveSvg(render, card._layout, card._config.trail_color, card._config.trail_opacity, "current-cycle")
+      : "";
+    return true;
   };
 
   const zoneProgress = (card, zoneId) => {
@@ -15057,26 +14596,24 @@ if (globalThis.customElements) patchCustomAreas0342();
     };
   }
 
-  const previousApplyMapPayload = proto._applyMapPayload;
-  if (typeof previousApplyMapPayload === "function") {
-    proto._applyMapPayload = function beta6ApplyMapPayload(...args) {
-      const previousHistoryKey = this._historyRenderKey;
-      const previousTrailKey = this._trailRenderKey;
-      const beforeCycle = cycleSignature(this._mapPayload);
-      const beforeTrail = trailSignature(this);
-      const result = previousApplyMapPayload.apply(this, args);
-      const afterCycle = cycleSignature(this._mapPayload);
-      const afterTrail = trailSignature(this);
-      if (beforeCycle && beforeCycle === afterCycle) this._historyRenderKey = previousHistoryKey;
-      if (beforeTrail === afterTrail) this._trailRenderKey = previousTrailKey;
-      syncZoneLabels(this);
-      return result;
-    };
-  }
+  proto._applyPayloadStableBeta6 = function applyPayloadStableBeta6(apply, args) {
+    const historyKey = this._historyRenderKey;
+    const trailKey = this._trailRenderKey;
+    const beforeCycle = cycleSignature(this._mapPayload);
+    const beforeTrail = trailSignature(this);
+    const result = apply.apply(this, args);
+    const afterCycle = cycleSignature(this._mapPayload);
+    const afterTrail = trailSignature(this);
+    if (beforeCycle && beforeCycle === afterCycle) this._historyRenderKey = historyKey;
+    if (beforeTrail === afterTrail) this._trailRenderKey = trailKey;
+    syncZoneLabels(this);
+    return result;
+  };
 
   const previousRenderHistory = proto._renderHistory;
   if (typeof previousRenderHistory === "function") {
     proto._renderHistory = function beta6RenderHistory(...args) {
+      if (this._renderArtifactsBeta8?.()) return;
       const current = this?._mapPayload?.current_cycle_render;
       const currentView = !this?._historySelectedSessionId
         && (this?._historyDayOffset === null || this?._historyDayOffset === undefined)
@@ -15109,17 +14646,33 @@ if (globalThis.customElements) patchCustomAreas0342();
           this._historyRenderKey = `beta6-current-cycle-empty|${structureKey}`;
           return;
         }
-        const result = previousRenderHistory.apply(this, args);
+        let result;
+        if (!this._renderMultiHistory036?.() && !renderBackendCurrentCycle(this)) {
+          result = previousRenderHistory.apply(this, args);
+        }
         this._nm037Beta6CycleStructureKey = structureKey;
         return result;
       }
       this._nm037Beta6CycleStructureKey = null;
+      if (this._renderMultiHistory036?.()) return;
+      if (renderBackendCurrentCycle(this)) return;
+      if (this._archive) return this._archive();
       return previousRenderHistory.apply(this, args);
     };
   }
 
   const previousRenderTrail = proto._renderTrail;
   if (typeof previousRenderTrail === "function") {
+    const renderBaseTrail = (card, args) => {
+      const result = previousRenderTrail.apply(card, args);
+      card?.removeAttribute?.("data-nm-vendor-trail-debug");
+      const color = String(card?._config?.trail_color || "#43a047");
+      card?._trailEl?.querySelectorAll?.("polyline")?.forEach?.((line) => {
+        line.setAttribute("stroke", color);
+        line.setAttribute("data-trail-source", "mqtt-tail");
+      });
+      return result;
+    };
     proto._renderTrail = function beta6RenderTrail(...args) {
       if (
         this?._historySelectedSessionId
@@ -15127,7 +14680,7 @@ if (globalThis.customElements) patchCustomAreas0342();
         || !this?._trailEl
         || !this?._layout
       ) {
-        return previousRenderTrail.apply(this, args);
+        return renderBaseTrail(this, args);
       }
       const segments = this._activeTrailSegments?.() || [];
       const lines = Array.from(this._trailEl.querySelectorAll?.("polyline.nm-session-path") || []);
@@ -15152,7 +14705,7 @@ if (globalThis.customElements) patchCustomAreas0342();
         this._trailRenderKey = `beta6-live|${trailSignature(this)}|${this?._config?.trail_color || ""}|${width}`;
         return;
       }
-      return previousRenderTrail.apply(this, args);
+      return renderBaseTrail(this, args);
     };
   }
 
@@ -15346,18 +14899,22 @@ if (globalThis.customElements) patchCustomAreas0342();
         if (sourceKey !== null && sourceKey !== undefined) this._retainedCycleSourceKey = sourceKey;
       }
 
-      const result = previousApplyMapPayload.apply(this, args);
-      if (this._zoneArtifactsHandled?.()) return result;
-      const currentInfo = stableCycleInfo(this?._mapPayload);
-      const currentRender = this?._mapPayload?.current_cycle_render;
-      if (currentInfo && currentRender) {
-        if (!renderMatchesStableCycle(currentRender, this._mapPayload)) {
-          clearWrongCycleRender(this);
-        } else {
-          this._nm037Beta7RenderCycleSignature = currentInfo.signature;
+      const result = this._applyPayloadStableBeta6
+        ? this._applyPayloadStableBeta6(previousApplyMapPayload, args)
+        : previousApplyMapPayload.apply(this, args);
+      if (!this._zoneArtifactsHandled?.()) {
+        const currentInfo = stableCycleInfo(this?._mapPayload);
+        const currentRender = this?._mapPayload?.current_cycle_render;
+        if (currentInfo && currentRender) {
+          if (!renderMatchesStableCycle(currentRender, this._mapPayload)) {
+            clearWrongCycleRender(this);
+          } else {
+            this._nm037Beta7RenderCycleSignature = currentInfo.signature;
+          }
         }
+        queueStableCycle(this);
       }
-      queueStableCycle(this);
+      this._syncZoneArtifactPayloadBeta8?.();
       return result;
     };
   }
@@ -15365,6 +14922,7 @@ if (globalThis.customElements) patchCustomAreas0342();
   const previousSetConfig = proto.setConfig;
   if (typeof previousSetConfig === "function") {
     proto.setConfig = function beta7SetConfig(config) {
+      this._closeArtifactClients?.(config);
       const previous = this?._config?.entity || this?._config?.mower_entity || null;
       const result = previousSetConfig.call(this, config);
       const current = this?._config?.entity || this?._config?.mower_entity || null;
@@ -15741,35 +15299,24 @@ if (globalThis.customElements) patchCustomAreas0342();
     const holder = svg("g"); holder.innerHTML = markup; morph(layer, holder);
     this._drawZoneArtifactMembers();
   };
-  const previousHistory = proto._renderHistory;
-  proto._renderHistory = function(...args) {
+  proto._renderArtifactsBeta8 = function() {
     const client = clientFor(this, this._mapPayload);
-    if (!client || client.mode !== "resources" || !currentView(this)) return previousHistory?.apply(this, args);
-    if (!this._historyEl || !this._layout) return;
+    if (!client || client.mode !== "resources" || !currentView(this)) return false;
+    if (!this._historyEl || !this._layout) return true;
     let host = this._historyEl.querySelector?.(".nm-zone-artifacts");
     if (!host) { this._historyEl.innerHTML = ""; host = svg("g", { class: "nm-zone-artifacts", "pointer-events": "none" }); this._historyEl.appendChild(host); }
     const l = this._layout;
     client.draw(host, `matrix(${l.scale} 0 0 ${-l.scale} ${l.sx(0)} ${l.sy(0)})`);
+    return true;
   };
-  const previousApply = proto._applyMapPayload;
-  proto._applyMapPayload = function(...args) {
-    const result = previousApply?.apply(this, args);
+  proto._syncZoneArtifactPayloadBeta8 = function syncZoneArtifactPayloadBeta8() {
     clientFor(this, this._mapPayload);
     this._drawZoneArtifactMembers();
-    return result;
-  };
-  const previousBar = proto._renderHistoryBar;
-  proto._renderHistoryBar = function(...args) {
-    const result = previousBar?.apply(this, args);
-    if (this._zoneArtifactsHandled()) for (const button of this._historyBarEl?.querySelectorAll?.('[data-history-offset="today"]') || []) button.textContent = "Current cycle";
-    return result;
   };
   function closeClients(card) { for (const client of card._nmBeta8Clients?.values?.() || []) client.close(); card._nmBeta8Clients?.clear?.(); }
-  const previousConfig = proto.setConfig;
-  proto.setConfig = function(config) {
+  proto._closeArtifactClients = function(config) {
     if (this._config?.entity !== config?.entity || this._config?.mower_entity !== config?.mower_entity
         || this._config?.multi_mower !== config?.multi_mower) closeClients(this);
-    return previousConfig?.call(this, config);
   };
   const previousDisconnected = proto.disconnectedCallback;
   proto.disconnectedCallback = function(...args) { this._nmBeta8Disconnected = true; closeClients(this); return previousDisconnected?.apply(this, args); };

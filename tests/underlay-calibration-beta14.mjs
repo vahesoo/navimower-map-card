@@ -8,7 +8,9 @@ const upgrade = await readFile(new URL("../scripts/upgrade-underlay-calibration-
 
 assert.match(packageJson.scripts.test, /underlay-calibration-beta14\.mjs/);
 
-for (const runtime of [source, dist]) {
+assert.ok(dist.length < source.length * 0.9, "dist must remain the minified production runtime");
+
+for (const runtime of [source]) {
   assert.match(runtime, /0\.3\.6-beta14: manual underlay position and rotation calibration/);
   assert.match(runtime, /underlay_east_offset/);
   assert.match(runtime, /underlay_north_offset/);

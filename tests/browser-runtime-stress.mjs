@@ -9,7 +9,7 @@ const chrome = process.env.CHROME_BIN || ["/usr/bin/chromium", "/usr/bin/google-
 assert.ok(chrome, "Chromium/Chrome is required for runtime stress checks");
 
 let runtime = readFileSync(`${runtimeRoot}/navimower-map-card.js`, "utf8");
-runtime = runtime.replace(/^export\s*\{[^}]*\};?/m, "");
+runtime = runtime.replace(/export\s*\{[^}]*\};?\s*$/, "");
 
 const checks = async () => {
   const sleepFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));

@@ -8552,61 +8552,6 @@ if (globalThis.customElements) patchCustomAreas0342();
 })();
 
 
-// 0.3.5-beta9: backend-owned current-cycle mowed-area render.
-(() => {
-  const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || Card.__navimower035Beta9CurrentCycleRender) return;
-  Card.__navimower035Beta9CurrentCycleRender = true;
-  const proto = Card.prototype;
-
-  const previousRenderHistory = proto._renderHistory;
-  proto._renderHistory = function backendCurrentCycleHistory() {
-    const current = this._mapPayload?.current_cycle_render;
-    if (this._historySelectedSessionId) {
-      if (this._historyEl) this._historyEl.innerHTML = "";
-      this._renderSelectedSessionArchive?.();
-      return;
-    }
-    if (this._historyDayOffset !== null || current?.scope !== "current_cycle") {
-      return previousRenderHistory?.call(this);
-    }
-    if (!this._historyEl || !this._layout) return;
-
-    const area = current?.mowed_area;
-    const render = area && typeof area === "object" ? {
-      version: current.render_schema_version,
-      coordinate_space: current.coordinate_space || "map_xy_m",
-      mowed_area: area,
-      travel: { path_d: "", stroke_width_m: 0 },
-      route: { path_d: "", stroke_width_m: 0 },
-    } : null;
-    const revision = String(current?.revision ?? "");
-    const renderKey = [
-      "backend-current-cycle",
-      this._mapStaticSignature,
-      revision,
-      this._config?.trail_color,
-      this._config?.trail_opacity,
-      this._layout?.scale,
-      String(area?.path_d || "").length,
-    ].join("|");
-    if (renderKey === this._historyRenderKey) return;
-    this._historyRenderKey = renderKey;
-
-    this._historyEl.innerHTML = render && String(area?.path_d || "").trim()
-      ? archiveSvg(
-          render,
-          this._layout,
-          this._config.trail_color,
-          this._config.trail_opacity,
-          "current-cycle"
-        )
-      : "";
-  };
-
-})();
-
-
 const VISUAL_DEFAULTS = Object.freeze({
   map_background_color: "#ffffff",
   map_legend_opacity: 0.10,
@@ -14558,6 +14503,40 @@ const VISUAL_DEFAULTS = Object.freeze({
     }
   };
 
+  const renderBackendCurrentCycle = (card) => {
+    const current = card?._mapPayload?.current_cycle_render;
+    if (card?._historySelectedSessionId) {
+      if (card._historyEl) card._historyEl.innerHTML = "";
+      card._renderSelectedSessionArchive?.();
+      return true;
+    }
+    if (card?._historyDayOffset !== null || current?.scope !== "current_cycle") return false;
+    if (!card?._historyEl || !card?._layout) return true;
+    const area = current?.mowed_area;
+    const render = area && typeof area === "object" ? {
+      version: current.render_schema_version,
+      coordinate_space: current.coordinate_space || "map_xy_m",
+      mowed_area: area,
+      travel: { path_d: "", stroke_width_m: 0 },
+      route: { path_d: "", stroke_width_m: 0 },
+    } : null;
+    const renderKey = [
+      "backend-current-cycle",
+      card._mapStaticSignature,
+      String(current?.revision ?? ""),
+      card._config?.trail_color,
+      card._config?.trail_opacity,
+      card._layout?.scale,
+      String(area?.path_d || "").length,
+    ].join("|");
+    if (renderKey === card._historyRenderKey) return true;
+    card._historyRenderKey = renderKey;
+    card._historyEl.innerHTML = render && String(area?.path_d || "").trim()
+      ? archiveSvg(render, card._layout, card._config.trail_color, card._config.trail_opacity, "current-cycle")
+      : "";
+    return true;
+  };
+
   const zoneProgress = (card, zoneId) => {
     const direct = card?._zoneDetails?.(zoneId)?.progress;
     if (direct !== null && direct !== undefined) return direct;
@@ -14679,14 +14658,16 @@ const VISUAL_DEFAULTS = Object.freeze({
           this._historyRenderKey = `beta6-current-cycle-empty|${structureKey}`;
           return;
         }
-        const result = this._renderMultiHistory036?.()
-          ? undefined
-          : previousRenderHistory.apply(this, args);
+        let result;
+        if (!this._renderMultiHistory036?.() && !renderBackendCurrentCycle(this)) {
+          result = previousRenderHistory.apply(this, args);
+        }
         this._nm037Beta6CycleStructureKey = structureKey;
         return result;
       }
       this._nm037Beta6CycleStructureKey = null;
       if (this._renderMultiHistory036?.()) return;
+      if (renderBackendCurrentCycle(this)) return;
       return previousRenderHistory.apply(this, args);
     };
   }

@@ -23,14 +23,14 @@ assert.match(source, /_v034sScheduleCloseTimer/, "schedule close timer cleanup m
 // Temporary upper bounds for the consolidation branch. Tighten these as patches
 // are folded into the canonical implementation. They prevent accidental growth
 // while preserving the beta9 behavior baseline during the refactor.
-assert.ok(source.length <= 818080, `runtime grew during consolidation: ${source.length} chars`);
+assert.ok(source.length <= 817702, `runtime grew during consolidation: ${source.length} chars`);
 assert.ok(sourceSections.length <= 12, `source section count grew: ${sourceSections.length}`);
-assert.ok(patchMarkers.size <= 44, `runtime patch marker count grew: ${patchMarkers.size}`);
-assert.ok(iifes.length <= 51, `runtime patch IIFE count grew: ${iifes.length}`);
+assert.ok(patchMarkers.size <= 43, `runtime patch marker count grew: ${patchMarkers.size}`);
+assert.ok(iifes.length <= 50, `runtime patch IIFE count grew: ${iifes.length}`);
 assert.ok(setConfigWrappers.length <= 9, `setConfig wrapper count grew: ${setConfigWrappers.length}`);
 assert.ok(ensureDomWrappers.length <= 8, `_ensureDom wrapper count grew: ${ensureDomWrappers.length}`);
 assert.ok(renderHistoryBarWrappers.length <= 1, `_renderHistoryBar wrapper count grew: ${renderHistoryBarWrappers.length}`);
-assert.ok(renderHistoryWrappers.length <= 3, `_renderHistory wrapper count grew: ${renderHistoryWrappers.length}`);
+assert.ok(renderHistoryWrappers.length <= 2, `_renderHistory wrapper count grew: ${renderHistoryWrappers.length}`);
 assert.ok(renderMowerWrappers.length <= 2, `_renderMower wrapper count grew: ${renderMowerWrappers.length}`);
 assert.ok(renderTrailWrappers.length <= 1, `_renderTrail wrapper count grew: ${renderTrailWrappers.length}`);
 assert.ok(applyMapPayloadWrappers.length <= 2, `_applyMapPayload wrapper count grew: ${applyMapPayloadWrappers.length}`);

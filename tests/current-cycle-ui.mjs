@@ -14,7 +14,8 @@ for (const needle of [
 }
 
 
-if (!source.includes("this._historyDayOffset === null ? this._dailyTrailRecords() : null")) {
+if (!source.includes('if (card?._historyDayOffset !== null || current?.scope !== "current_cycle") return false;')
+    || !source.includes("this._sessionsForCurrentView().filter((session) => !session.active)")) {
   throw new Error("Live current-cycle trail must stay separate from historical date views");
 }
 

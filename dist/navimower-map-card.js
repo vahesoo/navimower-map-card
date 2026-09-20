@@ -3192,9 +3192,6 @@ function layoutMatrix(layout) {
   const d = y1 - f;
   return { a, d, e, f, value: `matrix(${a} 0 0 ${d} ${e} ${f})` };
 }
-function renderFingerprint(render) {
-  return String(render?.fingerprint || render?.session_fingerprint || "");
-}
 function renderSignature(session) {
   return [
     sessionId(session),
@@ -3559,13 +3556,14 @@ function patchCard() {
   proto._dailyTrailRecords = function noCompletedLineFallback() {
     return null;
   };
-  proto._renderHistory = function patchedRenderHistory() {
+  proto._archive = function() {
     if (!this._historyEl || !this._layout) return;
     const sessions = this._sessionsForCurrentView().filter((session) => !session.active);
     loadVisibleRenders(this, sessions, originalApiPath);
     const sourceKey = sessions.map((session) => {
       const render = renderEntry(this, session);
-      return `${session.id}:${renderSignature(session)}:${renderFingerprint(render)}:${Boolean(render)}`;
+      const fingerprint = String(render?.fingerprint || render?.session_fingerprint || "");
+      return `${session.id}:${renderSignature(session)}:${fingerprint}:${Boolean(render)}`;
     }).join(";");
     const renderKey = [
       this._mapStaticSignature,
@@ -14668,6 +14666,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       this._nm037Beta6CycleStructureKey = null;
       if (this._renderMultiHistory036?.()) return;
       if (renderBackendCurrentCycle(this)) return;
+      if (this._archive) return this._archive();
       return previousRenderHistory.apply(this, args);
     };
   }

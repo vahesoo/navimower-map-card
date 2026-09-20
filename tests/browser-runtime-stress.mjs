@@ -8,8 +8,7 @@ const runtimeRoot = process.argv[2] === "dist" ? "dist" : "src";
 const chrome = process.env.CHROME_BIN || ["/usr/bin/chromium", "/usr/bin/google-chrome", "/opt/google/chrome/chrome"].find(existsSync);
 assert.ok(chrome, "Chromium/Chrome is required for runtime stress checks");
 
-let runtime = readFileSync(`${runtimeRoot}/navimower-map-card.js`, "utf8");
-runtime = runtime.replace(/export\s*\{[^}]*\};?\s*$/, "");
+const runtime = readFileSync(`${runtimeRoot}/navimower-map-card.js`, "utf8");
 
 const checks = async () => {
   const sleepFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
@@ -191,8 +190,8 @@ try {
   await command("Page.enable", {}, sessionId);
   const { frameTree } = await command("Page.getFrameTree", {}, sessionId);
   const html = '<!doctype html><html><head><meta charset="utf-8"></head><body>'
-    + '<script>' + runtime.replaceAll("</script", "<\\/script") + '</script>'
-    + '<script>(' + checks.toString() + ')().catch(error=>{document.body.dataset.testResult="failed";document.body.dataset.testError=error.stack;});</script>'
+    + '<script type="module">' + runtime.replaceAll("</script", "<\\/script")
+    + ';(' + checks.toString() + ')().catch(error=>{document.body.dataset.testResult="failed";document.body.dataset.testError=error.stack;});<\\/script>'
     + '</body></html>';
   await command("Page.setDocumentContent", { frameId: frameTree.frame.id, html }, sessionId);
 

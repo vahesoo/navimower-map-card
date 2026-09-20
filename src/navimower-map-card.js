@@ -5948,28 +5948,33 @@ this._mowerModel032 = this._mowerModel032 || "";
   }
 
   proto._renderMower = function beta032RenderMower() {
-    if (!this._mowerGroup || !this._layout) return;
-    const x = this._number(this._resolved.x_entity);
-    const y = this._number(this._resolved.y_entity);
-    const heading = this._number(this._resolved.heading_entity);
-    const iconKey = mowerIconKey032(this);
-    const renderKey = [x, y, heading, iconKey, this._config.mower_scale, this._layout.scale, this._view.scale].join("|");
-    if (renderKey === this._mowerRenderKey) return;
-    this._mowerRenderKey = renderKey;
-    if (x === null || y === null) {
-      this._mowerGroup.style.display = "none";
-      return;
+    this._syncMowerArtworkModel035?.();
+    try {
+      if (!this._mowerGroup || !this._layout) return;
+      const x = this._number(this._resolved.x_entity);
+      const y = this._number(this._resolved.y_entity);
+      const heading = this._number(this._resolved.heading_entity);
+      const iconKey = mowerIconKey032(this);
+      const renderKey = [x, y, heading, iconKey, this._config.mower_scale, this._layout.scale, this._view.scale].join("|");
+      if (renderKey === this._mowerRenderKey) return;
+      this._mowerRenderKey = renderKey;
+      if (x === null || y === null) {
+        this._mowerGroup.style.display = "none";
+        return;
+      }
+      const artwork = ensureMowerArtwork032(this);
+      if (!artwork) {
+        this._mowerGroup.style.display = "none";
+        return;
+      }
+      const cx = this._layout.sx(x);
+      const cy = this._layout.sy(y);
+      this._mowerGroup.setAttribute("transform", mowerTransform032(this, cx, cy, heading));
+      this._mowerGroup.style.display = "";
+      if (typeof applyZoneMarkerScale === "function") applyZoneMarkerScale(this);
+    } finally {
+      this._syncMowerErrorPulse035?.();
     }
-    const artwork = ensureMowerArtwork032(this);
-    if (!artwork) {
-      this._mowerGroup.style.display = "none";
-      return;
-    }
-    const cx = this._layout.sx(x);
-    const cy = this._layout.sy(y);
-    this._mowerGroup.setAttribute("transform", mowerTransform032(this, cx, cy, heading));
-    this._mowerGroup.style.display = "";
-    if (typeof applyZoneMarkerScale === "function") applyZoneMarkerScale(this);
   };
 
   proto._mower = function beta032MowerMarkup(cx, cy, headingDegrees) {
@@ -9043,13 +9048,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     card?._mowerGroup?.classList?.toggle("nm-mower-error-pulse", mowerError(card));
   }
 
-  const previousRenderMower = proto._renderMower;
-  proto._renderMower = function beta11RenderMower(...args) {
-    this._syncMowerArtworkModel035?.();
-    const result = previousRenderMower?.apply(this, args);
-    syncMowerErrorPulse(this);
-    return result;
-  };
+  proto._syncMowerErrorPulse035 = function() { syncMowerErrorPulse(this); };
 
   const previousEnsure = proto._ensureDom;
   proto._ensureDom = function beta11EnsureDom(...args) {

@@ -11034,17 +11034,12 @@ const VISUAL_DEFAULTS = Object.freeze({
     };
   }
 
-  const originalRenderHistory036 = proto._renderHistory;
-  if (typeof originalRenderHistory036 === "function") {
-    proto._renderHistory = function multi036RenderHistory(...args) {
-      if (multiActive036(this)) {
-        void ensureHistoryRenders036(this);
-        renderMultiMap036(this, true);
-        return;
-      }
-      return originalRenderHistory036.apply(this, args);
-    };
-  }
+  proto._renderMultiHistory036 = function() {
+    if (!multiActive036(this)) return false;
+    void ensureHistoryRenders036(this);
+    renderMultiMap036(this, true);
+    return true;
+  };
 
   const originalApplyView036 = proto._applyViewBox;
   if (typeof originalApplyView036 === "function") {
@@ -14684,11 +14679,14 @@ const VISUAL_DEFAULTS = Object.freeze({
           this._historyRenderKey = `beta6-current-cycle-empty|${structureKey}`;
           return;
         }
-        const result = previousRenderHistory.apply(this, args);
+        const result = this._renderMultiHistory036?.()
+          ? undefined
+          : previousRenderHistory.apply(this, args);
         this._nm037Beta6CycleStructureKey = structureKey;
         return result;
       }
       this._nm037Beta6CycleStructureKey = null;
+      if (this._renderMultiHistory036?.()) return;
       return previousRenderHistory.apply(this, args);
     };
   }

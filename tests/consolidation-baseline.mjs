@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync("src/navimower-map-card.js", "utf8");
+const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+const normalizedSource = source.replaceAll(pkg.version, "0.3.7-beta9");
 const infoLogs = source.match(/console\.info\(/g) || [];
 const sourceSections = source.match(/^\/\/ src\//gm) || [];
 const patchMarkers = new Set([...source.matchAll(/__navimower[0-9A-Za-z_]+/g)].map((match) => match[0]));
@@ -15,15 +17,17 @@ const renderTrailWrappers = source.match(/(?:proto|Card\.prototype)\._renderTrai
 const applyMapPayloadWrappers = source.match(/(?:proto|Card\.prototype)\._applyMapPayload\s*=\s*function/g) || [];
 
 assert.equal(infoLogs.length, 1, "production runtime must expose exactly one informational startup log");
-assert.match(source, /console\.info\("\[Navimower Map Card\] v0\.3\.7-beta9 loaded"\);/);
+assert.ok(
+  source.includes(`console.info("[Navimower Map Card] v${pkg.version} loaded");`),
+  "startup log must match the current package version",
+);
 assert.ok(!source.includes('NAVIMOWER_MAP_CARD_VERSION = "0.2.2"'), "legacy core version marker must stay removed");
 assert.match(source, /SCHEDULE_CLOSE_DELAY_MS = 2500/, "successful schedule save must retain the 2.5 s close delay");
 assert.match(source, /_v034sScheduleCloseTimer/, "schedule close timer cleanup must stay in the cumulative runtime");
 
-// Temporary upper bounds for the consolidation branch. Tighten these as patches
-// are folded into the canonical implementation. They prevent accidental growth
-// while preserving the beta9 behavior baseline during the refactor.
-assert.ok(source.length <= 817343, `runtime grew during consolidation: ${source.length} chars`);
+// Final upper bounds for the consolidated runtime. Normalize only the release
+// version text so beta number width cannot look like production code growth.
+assert.ok(normalizedSource.length <= 817343, `runtime grew after consolidation: ${normalizedSource.length} normalized chars`);
 assert.ok(sourceSections.length <= 12, `source section count grew: ${sourceSections.length}`);
 assert.ok(patchMarkers.size <= 43, `runtime patch marker count grew: ${patchMarkers.size}`);
 assert.ok(iifes.length <= 50, `runtime patch IIFE count grew: ${iifes.length}`);

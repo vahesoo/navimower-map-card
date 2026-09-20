@@ -14651,6 +14651,7 @@ const VISUAL_DEFAULTS = Object.freeze({
   const previousRenderHistory = proto._renderHistory;
   if (typeof previousRenderHistory === "function") {
     proto._renderHistory = function beta6RenderHistory(...args) {
+      if (this._renderArtifactsBeta8?.()) return;
       const current = this?._mapPayload?.current_cycle_render;
       const currentView = !this?._historySelectedSessionId
         && (this?._historyDayOffset === null || this?._historyDayOffset === undefined)
@@ -15330,15 +15331,15 @@ const VISUAL_DEFAULTS = Object.freeze({
     const holder = svg("g"); holder.innerHTML = markup; morph(layer, holder);
     this._drawZoneArtifactMembers();
   };
-  const previousHistory = proto._renderHistory;
-  proto._renderHistory = function(...args) {
+  proto._renderArtifactsBeta8 = function() {
     const client = clientFor(this, this._mapPayload);
-    if (!client || client.mode !== "resources" || !currentView(this)) return previousHistory?.apply(this, args);
-    if (!this._historyEl || !this._layout) return;
+    if (!client || client.mode !== "resources" || !currentView(this)) return false;
+    if (!this._historyEl || !this._layout) return true;
     let host = this._historyEl.querySelector?.(".nm-zone-artifacts");
     if (!host) { this._historyEl.innerHTML = ""; host = svg("g", { class: "nm-zone-artifacts", "pointer-events": "none" }); this._historyEl.appendChild(host); }
     const l = this._layout;
     client.draw(host, `matrix(${l.scale} 0 0 ${-l.scale} ${l.sx(0)} ${l.sy(0)})`);
+    return true;
   };
   proto._syncZoneArtifactPayloadBeta8 = function syncZoneArtifactPayloadBeta8() {
     clientFor(this, this._mapPayload);

@@ -8839,12 +8839,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     if (settings) settings.style.display = showSettings ? "" : "none";
   }
 
-  const previousEnsure = proto._ensureDom;
-  proto._ensureDom = function beta10EnsureDom(...args) {
-    const result = previousEnsure?.apply(this, args);
-    syncHeaderVisibility(this);
-    return result;
-  };
+  proto._syncHeaderVisibility035 = function() { syncHeaderVisibility(this); };
 
   const previousRenderShell = proto._renderShell;
   proto._renderShell = function beta10RenderShell(...args) {
@@ -9054,6 +9049,7 @@ const VISUAL_DEFAULTS = Object.freeze({
   const previousEnsure = proto._ensureDom;
   proto._ensureDom = function beta11EnsureDom(...args) {
     const result = previousEnsure?.apply(this, args);
+    this._syncHeaderVisibility035?.();
     ensureErrorPulseStyle(this);
     syncCombinedScheduleButton(this);
     syncMowerErrorPulse(this);

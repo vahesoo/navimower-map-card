@@ -1191,6 +1191,7 @@ var NavimowerMapCard = class extends HTMLElement {
     }
   }
   _applyMapPayload(sourcePayload, attrs, key) {
+    sourcePayload = this._mapPreV030?.(sourcePayload) || sourcePayload;
     const nextPayload = { ...sourcePayload || {} };
     const payloadSession = finiteNumber(nextPayload.trail_session, finiteNumber(attrs.trail_session, 0));
     const backendSegments = this._normalizeTrailSegments(nextPayload.trail_segments, []);
@@ -1239,6 +1240,7 @@ var NavimowerMapCard = class extends HTMLElement {
     this._sessionsRenderKey = null;
     this._initialViewApplied = false;
     this._applyInitialView(false);
+    this._mapPostV030?.(sourcePayload);
   }
   _normalizePoints(raw) {
     if (!Array.isArray(raw)) return [];
@@ -3492,17 +3494,16 @@ function patchCard() {
       });
     }
   };
-  const originalApplyMapPayload = proto._applyMapPayload;
-  proto._applyMapPayload = function patchedApplyMapPayload(payload, attrs, key) {
+  proto._mapPreV030 = function(payload) {
     ensureState(this);
-    const clean = sanitizeMapPayload(payload);
-    const result = originalApplyMapPayload.call(this, clean, attrs, key);
-    const revision = [clean?.trail_session, clean?.active_session_id, clean?.trail_active].join("|");
+    return sanitizeMapPayload(payload);
+  };
+  proto._mapPostV030 = function(payload) {
+    const revision = [payload?.trail_session, payload?.active_session_id, payload?.trail_active].join("|");
     const force = this._v030IndexRevision !== revision;
     this._v030IndexRevision = revision;
     void loadSessionIndex(this, originalApiPath, force);
     this._syncFrontendSchedulerPayloadBeta2?.();
-    return result;
   };
   proto._sessionRecords = function patchedSessionRecords({ applyLimit = true } = {}) {
     ensureState(this);

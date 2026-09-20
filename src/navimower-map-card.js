@@ -12063,14 +12063,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     }, Math.max(0, delay));
   };
 
-  const previousSetConfig10 = proto.setConfig;
-  if (typeof previousSetConfig10 === "function") {
-    proto.setConfig = function beta10EstoniaDetailSetConfig(config) {
-      const result = previousSetConfig10.call(this, config);
-      scheduleDetail10(this, 0);
-      return result;
-    };
-  }
+  proto._scheduleDetail10 = function() { scheduleDetail10(this, 0); };
 
   for (const method of ["_renderStatic", "_applyStaticLayers", "_ensureDom", "_applyViewBox"]) {
     const previous = proto[method];
@@ -12327,6 +12320,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       }
       if (next.underlay_opacity === undefined) next.underlay_opacity = DEFAULT_OPACITY11;
       const result = previousSetConfig.call(this, next);
+      this._scheduleDetail10?.();
       scheduleGoogle11(this, 0);
       return result;
     };

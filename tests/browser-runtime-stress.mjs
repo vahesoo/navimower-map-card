@@ -132,7 +132,7 @@ const checks = async () => {
   globalThis.queueMicrotask = nativeQueueMicrotask;
   document.body.dataset.testResult = "passed";
   document.body.dataset.testMetrics = JSON.stringify({
-    runtimeRoot: "${runtimeRoot}",
+    runtimeRoot: runtimeRoot,
     unrelated,
     relevant: { elapsedMs: relevantMs, queued },
   });
@@ -189,9 +189,12 @@ try {
   const { sessionId } = await command("Target.attachToTarget", { targetId, flatten: true });
   await command("Page.enable", {}, sessionId);
   const { frameTree } = await command("Page.getFrameTree", {}, sessionId);
+  const runtimeLiteral = JSON.stringify(runtime).replaceAll("</script", "<\\/script");
+  const checksLiteral = checks.toString();
   const html = '<!doctype html><html><head><meta charset="utf-8"></head><body>'
-    + '<script type="module">' + runtime.replaceAll("</script", "<\\/script")
-    + ';(' + checks.toString() + ')().catch(error=>{document.body.dataset.testResult="failed";document.body.dataset.testError=error.stack;});<\\/script>'
+    + '<script>const runtime=' + runtimeLiteral + ';'
+    + 'const url=URL.createObjectURL(new Blob([runtime],{type:"text/javascript"}));'
+    + 'import(url).then(()=>(' + checksLiteral + ')()).catch(error=>{document.body.dataset.testResult="failed";document.body.dataset.testError=error.stack;}).finally(()=>URL.revokeObjectURL(url));<\\/script>'
     + '</body></html>';
   await command("Page.setDocumentContent", { frameId: frameTree.frame.id, html }, sessionId);
 

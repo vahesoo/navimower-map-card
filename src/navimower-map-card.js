@@ -10003,14 +10003,38 @@ const VISUAL_DEFAULTS = Object.freeze({
     || payload?.frontend?.prepared_render_model_manifest_path
     || null;
 
+  const memberPreparedKey036 = (member, payload) => {
+    const manifestPath = memberPreparedManifestPath036(member, payload);
+    if (!manifestPath || !payload) return null;
+    const map = payload.map || {};
+    return [
+      manifestPath,
+      map.revision ?? payload.map_revision ?? "",
+      map.map_version ?? map.version ?? payload.map_version ?? "",
+      map.modified_count ?? payload.map_modified_count ?? "",
+      fastHash(JSON.stringify(payload?.gate_areas || [])),
+      fastHash(JSON.stringify(payload?.custom_areas || []))
+    ].join("|");
+  };
+
   const memberPreparedStatic036 = (card, member, payload = null) => {
     const state = memberState036(card, member?.entry_id);
+    const currentPayload = payload || state.map;
+    const expectedKey = memberPreparedKey036(member, currentPayload);
     const model = state?.preparedStaticModel;
     if (!model || model.scope !== "static_map_render_model" || Number(model.schema_version) !== 1) return null;
     if (model.geometry_summary?.parity_ok === false) return null;
-    const currentRevision = String((payload || state.map)?.map?.revision ?? "");
+    if (!expectedKey || state.preparedStaticLoadedKey !== expectedKey) return null;
+    const map = currentPayload?.map || {};
+    const currentRevision = String(map.revision ?? currentPayload?.map_revision ?? "");
     const preparedRevision = String(model.map_revision ?? "");
     if (currentRevision && preparedRevision && currentRevision !== preparedRevision) return null;
+    const currentVersion = String(map.map_version ?? map.version ?? currentPayload?.map_version ?? "");
+    const preparedVersion = String(model.map_version ?? "");
+    if (currentVersion && preparedVersion && currentVersion !== preparedVersion) return null;
+    const currentModified = String(map.modified_count ?? currentPayload?.map_modified_count ?? "");
+    const preparedModified = String(model.map_modified_count ?? "");
+    if (currentModified && preparedModified && currentModified !== preparedModified) return null;
     return model;
   };
 
@@ -10019,18 +10043,25 @@ const VISUAL_DEFAULTS = Object.freeze({
     const payload = state.map;
     const manifestPath = memberPreparedManifestPath036(member, payload);
     if (!payload || !manifestPath || !card?._hass?.callApi) return;
-    const key = [
-      manifestPath,
-      payload?.map?.revision ?? "",
-      fastHash(JSON.stringify(payload?.gate_areas || [])),
-      fastHash(JSON.stringify(payload?.custom_areas || []))
-    ].join("|");
+    const key = memberPreparedKey036(member, payload);
+    if (!key) return;
     if (state.preparedStaticLoadedKey === key && memberPreparedStatic036(card, member, payload)) return;
     if (state.preparedStaticLoadingKey === key) return;
     state.preparedStaticLoadingKey = key;
     try {
       const manifest = await callApi036(card, manifestPath);
       if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id) || state.map !== payload) return;
+      if (manifest?.building?.static) {
+        const retryPreparedMember = () => {
+          if (
+            generationMatches036(card, generation)
+            && memberById036(card, member.entry_id)
+            && state.map === payload
+          ) void refreshMemberPreparedStatic036(card, member, generation);
+        };
+        globalThis.setTimeout?.(retryPreparedMember, 1500);
+        return;
+      }
       const descriptor = manifest?.static;
       if (!descriptor?.resource_id || !descriptor?.url) return;
       const resourceId = String(descriptor.resource_id);
@@ -10041,9 +10072,16 @@ const VISUAL_DEFAULTS = Object.freeze({
         if (!model || model.scope !== "static_map_render_model" || Number(model.schema_version) !== 1 || model.geometry_summary?.parity_ok === false) return;
         cacheSet(PREPARED_STATIC_RESOURCE_CACHE, resourceId, model, PREPARED_STATIC_CACHE_LIMIT);
       }
-      const currentRevision = String(payload?.map?.revision ?? "");
+      const map = payload?.map || {};
+      const currentRevision = String(map.revision ?? payload?.map_revision ?? "");
       const preparedRevision = String(model?.map_revision ?? "");
       if (currentRevision && preparedRevision && currentRevision !== preparedRevision) return;
+      const currentVersion = String(map.map_version ?? map.version ?? payload?.map_version ?? "");
+      const preparedVersion = String(model?.map_version ?? "");
+      if (currentVersion && preparedVersion && currentVersion !== preparedVersion) return;
+      const currentModified = String(map.modified_count ?? payload?.map_modified_count ?? "");
+      const preparedModified = String(model?.map_modified_count ?? "");
+      if (currentModified && preparedModified && currentModified !== preparedModified) return;
       state.preparedStaticModel = model;
       state.preparedStaticResourceId = resourceId;
       state.preparedStaticLoadedKey = key;

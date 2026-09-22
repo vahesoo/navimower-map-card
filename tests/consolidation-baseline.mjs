@@ -27,9 +27,9 @@ assert.match(source, /_v034sScheduleCloseTimer/, "schedule close timer cleanup m
 
 // Upper bounds for the consolidated runtime. Normalize only the release
 // version text so beta number width cannot look like production code growth.
-// beta14 fixes the final runtime Map API override without adding another
-// wrapper/IIFE layer or expanding the beta13 feature budget.
-assert.ok(normalizedSource.length <= 864000, `runtime grew beyond beta14 feature budget: ${normalizedSource.length} normalized chars`);
+// beta15 adopts Prepared History manifest/resources in the existing v0.3 and
+// Multi runtimes without adding another wrapper/IIFE layer.
+assert.ok(normalizedSource.length <= 872000, `runtime grew beyond beta15 feature budget: ${normalizedSource.length} normalized chars`);
 assert.ok(sourceSections.length <= 12, `source section count grew: ${sourceSections.length}`);
 assert.ok(patchMarkers.size <= 43, `runtime patch marker count grew: ${patchMarkers.size}`);
 assert.ok(iifes.length <= 50, `runtime patch IIFE count grew: ${iifes.length}`);

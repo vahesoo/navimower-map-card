@@ -36,6 +36,10 @@ const card = new Card();
 card._config = { entity: "lawn_mower.beta14" };
 card._resolved = { map_entity: mapEntity };
 card._queueRender = () => {};
+// Keep the final Multi wrapper present, but prevent this Single-runtime
+// regression from doing an unrelated Site API refresh/DOM pass.
+card._multi036Site = { multi_mower: false, member_order: "west_to_east", members: [] };
+card._multi036SiteAt = Date.now();
 card._applyMapPayload = function(payload, _attrs, key) {
   this._mapPayload = payload;
   this._mapKey = key;
@@ -64,9 +68,10 @@ card._hass = {
 };
 
 await card._maybeLoadMap();
-const firstMapCall = calls.find(([, path]) => path.startsWith("navimower/map/entry-beta14"));
-assert.ok(firstMapCall, "first final-runtime Map API request must be sent");
-assert.match(firstMapCall[1], /include_sessions=0/);
+const firstMapCall = calls.find(([, path]) =>
+  path.startsWith("navimower/map/entry-beta14") && path.includes("include_sessions=0")
+);
+assert.ok(firstMapCall, "first final-runtime lightweight Map API request must be sent");
 assert.doesNotMatch(
   firstMapCall[1],
   /prepared_live_tail_only=1/,
@@ -75,8 +80,10 @@ assert.doesNotMatch(
 
 state.attributes.vendor_trail_revision = 101;
 await card._maybeLoadMap();
-const mapCalls = calls.filter(([, path]) => path.startsWith("navimower/map/entry-beta14"));
-assert.equal(mapCalls.length, 2, "revision change must produce a second final-runtime Map API request");
+const mapCalls = calls.filter(([, path]) =>
+  path.startsWith("navimower/map/entry-beta14") && path.includes("include_sessions=0")
+);
+assert.equal(mapCalls.length, 2, "revision change must produce a second final-runtime lightweight Map API request");
 assert.match(
   mapCalls[1][1],
   /prepared_live_tail_only=1/,

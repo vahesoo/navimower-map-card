@@ -3586,9 +3586,12 @@ if (!window.customCards.some((card) => card.type === "navimower-map-card")) {
 // src/navimower-map-card-v030.js
 var SESSION_INDEX_CACHE = /* @__PURE__ */ new Map();
 var SESSION_RENDER_CACHE = /* @__PURE__ */ new Map();
+var PREPARED_HISTORY_RESOURCE_CACHE = /* @__PURE__ */ new Map();
+var PREPARED_HISTORY_RESOURCE_LOADING = /* @__PURE__ */ new Map();
 var LIGHTWEIGHT_MAP_CACHE = /* @__PURE__ */ new Map();
 var LATEST_LIGHTWEIGHT_MAP_CACHE = /* @__PURE__ */ new Map();
 var MAP_CACHE_LIMIT2 = 10;
+var PREPARED_HISTORY_CACHE_LIMIT = 96;
 var MAP_CACHE_FRESH_MS2 = 45e3;
 var INDEX_CACHE_FRESH_MS = 3e4;
 function finite(value, fallback = null) {
@@ -3638,6 +3641,8 @@ function deriveSessionPaths(mapApiPath) {
       mapPath,
       lightweightMapPath: withLightweightMapQuery(mapPath),
       sessionsPath: null,
+      historyManifestPath: null,
+      historyResourceTemplate: null,
       renderTemplate: null
     };
   }
@@ -3646,6 +3651,8 @@ function deriveSessionPaths(mapApiPath) {
     mapPath,
     lightweightMapPath: withLightweightMapQuery(mapPath),
     sessionsPath: `${root}/sessions/${entryId}`,
+    historyManifestPath: `${root}/history-manifest/${entryId}`,
+    historyResourceTemplate: `${root}/history-resource/${entryId}/{resource_id}`,
     renderTemplate: `${root}/session-render/${entryId}/{session_id}`
   };
 }
@@ -3719,7 +3726,10 @@ function localDayStart(offset = 0) {
   return date;
 }
 function normalizeIndexSessions(payload) {
-  return (Array.isArray(payload?.sessions) ? payload.sessions : []).filter((session) => session && (session.id !== void 0 || session.session_id !== void 0)).map((session) => ({ ...session })).sort((left, right) => {
+  return (Array.isArray(payload?.sessions) ? payload.sessions : []).filter((session) => session && (session.id !== void 0 || session.session_id !== void 0)).map((session) => ({
+    ...session,
+    prepared_render: session?.render?.resource_id && session?.render?.url ? { ...session.render } : null
+  })).sort((left, right) => {
     const leftStamp = finite(left.started_at_ms, asDate(left.started_at)?.getTime() || 0);
     const rightStamp = finite(right.started_at_ms, asDate(right.started_at)?.getTime() || 0);
     return leftStamp - rightStamp;
@@ -3734,6 +3744,10 @@ function resetArchiveState(card) {
   card._v030BaseApiPath = null;
   card._v030SessionIndex = null;
   card._v030RenderTemplate = null;
+  card._v030HistoryManifestPath = null;
+  card._v030HistoryResourceTemplate = null;
+  card._v030PreparedHistory = false;
+  card._v030HistoryManifestRetry = null;
   card._v030IndexLoading = false;
   card._v030IndexRevision = null;
   card._v030Renders = /* @__PURE__ */ new Map();
@@ -3747,14 +3761,78 @@ function ensureState(card) {
   if (!(card._v030RenderUnavailable instanceof Map)) card._v030RenderUnavailable = /* @__PURE__ */ new Map();
   if (!Number.isFinite(card._v030Generation)) card._v030Generation = 0;
 }
+function preparedHistoryManifestPath(card, derived) {
+  const prepared = card?._mapPayload?.prepared_render_model;
+  const frontend = card?._mapPayload?.frontend || {};
+  if (prepared?.capabilities?.history_ready_manifest === true) {
+    return prepared?.history_manifest_url || frontend?.history_manifest_path || derived?.historyManifestPath || null;
+  }
+  return frontend?.history_manifest_path || null;
+}
+function applySessionIndex(card, payload, derived, sourcePath, prepared) {
+  const sessions = normalizeIndexSessions(payload);
+  const renderTemplate = payload?.legacy_session_render_url_template
+    || payload?.session_render_api_path_template
+    || derived.renderTemplate;
+  const resourceTemplate = payload?.resource_url_template
+    || card?._mapPayload?.prepared_render_model?.history_resource_url_template
+    || card?._mapPayload?.frontend?.history_resource_api_path_template
+    || derived.historyResourceTemplate;
+  card._v030SessionIndex = sessions;
+  card._v030RenderTemplate = renderTemplate;
+  card._v030HistoryManifestPath = prepared ? sourcePath : null;
+  card._v030HistoryResourceTemplate = resourceTemplate;
+  card._v030PreparedHistory = prepared;
+  SESSION_INDEX_CACHE.set(sourcePath, {
+    sessions: sessions.map((session) => ({ ...session, prepared_render: session.prepared_render ? { ...session.prepared_render } : null })),
+    renderTemplate,
+    resourceTemplate,
+    prepared,
+    cachedAt: Date.now()
+  });
+  card._historyBarRenderKey = null;
+  card._historyRenderKey = null;
+  card._sessionsRenderKey = null;
+  card._queueRender?.({ history: true, sessions: true, shell: true });
+}
+async function loadPreparedHistoryResource(card, descriptor, expectedSessionId = null) {
+  if (!descriptor?.resource_id || !descriptor?.url || !card?._hass?.callApi) return null;
+  const resourceId = String(descriptor.resource_id);
+  const cached = PREPARED_HISTORY_RESOURCE_CACHE.get(resourceId);
+  if (validArchive(cached)) return cached;
+  let pending = PREPARED_HISTORY_RESOURCE_LOADING.get(resourceId);
+  if (!pending) {
+    pending = (async () => {
+      const payload = await card._hass.callApi("GET", apiCallPath(descriptor.url));
+      if (!payload || payload.scope !== "prepared_history_render") throw new Error("Prepared History resource has an invalid scope");
+      if (expectedSessionId !== null && payload.session_id !== void 0 && String(payload.session_id) !== String(expectedSessionId)) {
+        throw new Error("Prepared History resource session mismatch");
+      }
+      const render = payload?.render || null;
+      if (!validArchive(render)) throw new Error("Prepared History resource is empty");
+      cacheSet2(PREPARED_HISTORY_RESOURCE_CACHE, resourceId, render, PREPARED_HISTORY_CACHE_LIMIT);
+      return render;
+    })().finally(function preparedHistoryFetchFinished() {
+      PREPARED_HISTORY_RESOURCE_LOADING.delete(resourceId);
+    });
+    PREPARED_HISTORY_RESOURCE_LOADING.set(resourceId, pending);
+  }
+  return await pending;
+}
 async function loadSessionIndex(card, originalApiPath, force = false) {
   ensureState(card);
   const derived = deriveSessionPaths(baseApiPath(card, originalApiPath));
   if (!derived.sessionsPath || !card._hass?.callApi || card._v030IndexLoading) return;
-  const cached = SESSION_INDEX_CACHE.get(derived.sessionsPath);
-  if (!force && cached && Date.now() - cached.cachedAt < INDEX_CACHE_FRESH_MS) {
-    card._v030SessionIndex = cached.sessions.map((session) => ({ ...session }));
+  const preparedPath = preparedHistoryManifestPath(card, derived);
+  const sourcePath = preparedPath || derived.sessionsPath;
+  const cached = SESSION_INDEX_CACHE.get(sourcePath);
+  const coldSharedCache = force && !Array.isArray(card._v030SessionIndex);
+  if ((!force || coldSharedCache) && cached && Date.now() - cached.cachedAt < INDEX_CACHE_FRESH_MS) {
+    card._v030SessionIndex = cached.sessions.map((session) => ({ ...session, prepared_render: session.prepared_render ? { ...session.prepared_render } : null }));
     card._v030RenderTemplate = cached.renderTemplate || derived.renderTemplate;
+    card._v030HistoryManifestPath = cached.prepared ? sourcePath : null;
+    card._v030HistoryResourceTemplate = cached.resourceTemplate || derived.historyResourceTemplate;
+    card._v030PreparedHistory = cached.prepared === true;
     card._historyBarRenderKey = null;
     card._historyRenderKey = null;
     card._sessionsRenderKey = null;
@@ -3764,21 +3842,32 @@ async function loadSessionIndex(card, originalApiPath, force = false) {
   const generation = card._v030Generation;
   card._v030IndexLoading = true;
   try {
-    const payload = await card._hass.callApi("GET", apiCallPath(derived.sessionsPath));
+    let payload = null;
+    let prepared = false;
+    let usedPath = sourcePath;
+    if (preparedPath) {
+      try {
+        payload = await card._hass.callApi("GET", apiCallPath(preparedPath));
+        prepared = payload?.scope === "prepared_history" && Number(payload?.schema_version) === 1;
+        if (!prepared) throw new Error("Prepared History manifest is incompatible");
+      } catch (preparedError) {
+        console.debug("[Navimower Map Card] Prepared History manifest unavailable; using legacy session index", preparedError);
+        usedPath = derived.sessionsPath;
+        payload = await card._hass.callApi("GET", apiCallPath(derived.sessionsPath));
+      }
+    } else {
+      payload = await card._hass.callApi("GET", apiCallPath(derived.sessionsPath));
+    }
     if (generation !== card._v030Generation) return;
-    const sessions = normalizeIndexSessions(payload);
-    const renderTemplate = payload?.session_render_api_path_template || derived.renderTemplate;
-    card._v030SessionIndex = sessions;
-    card._v030RenderTemplate = renderTemplate;
-    SESSION_INDEX_CACHE.set(derived.sessionsPath, {
-      sessions: sessions.map((session) => ({ ...session })),
-      renderTemplate,
-      cachedAt: Date.now()
-    });
-    card._historyBarRenderKey = null;
-    card._historyRenderKey = null;
-    card._sessionsRenderKey = null;
-    card._queueRender?.({ history: true, sessions: true, shell: true });
+    applySessionIndex(card, payload, derived, usedPath, prepared);
+    card._v030IndexError = null;
+    if (prepared && Number(payload?.pending_session_count || 0) > 0 && payload?.prewarm_complete !== true && !card._v030HistoryManifestRetry) {
+      function retryPreparedHistoryManifest() {
+        card._v030HistoryManifestRetry = null;
+        if (generation === card._v030Generation) void loadSessionIndex(card, originalApiPath, true);
+      }
+      card._v030HistoryManifestRetry = globalThis.setTimeout?.(retryPreparedHistoryManifest, 1500) || null;
+    }
   } catch (error) {
     if (generation === card._v030Generation) {
       card._v030IndexError = String(error?.message || error);
@@ -3824,11 +3913,22 @@ async function loadSessionRender(card, session, originalApiPath) {
   card._sessionsRenderKey = null;
   card._queueRender?.({ sessions: true });
   try {
-    const payload = await card._hass.callApi("GET", apiCallPath(endpoint));
+    let render = null;
+    const descriptor = session?.prepared_render?.resource_id && session?.prepared_render?.url ? session.prepared_render : null;
+    if (descriptor) {
+      try {
+        render = await loadPreparedHistoryResource(card, descriptor, id);
+      } catch (preparedError) {
+        console.debug(`[Navimower Map Card] Prepared History resource ${descriptor.resource_id} unavailable; using legacy render`, preparedError);
+      }
+    }
+    if (!render) {
+      const payload = await card._hass.callApi("GET", apiCallPath(endpoint));
+      render = payload?.render || payload;
+      if (!validArchive(render)) throw new Error("Session render is empty");
+      SESSION_RENDER_CACHE.set(cacheKey, render);
+    }
     if (generation !== card._v030Generation) return null;
-    const render = payload?.render || payload;
-    if (!validArchive(render)) throw new Error("Session render is empty");
-    SESSION_RENDER_CACHE.set(cacheKey, render);
     card._v030Renders.set(id, { signature, render });
     card._v030RenderUnavailable.delete(id);
     card._historyRenderKey = null;
@@ -4149,6 +4249,8 @@ function patchCard() {
   const originalDisconnected = proto.disconnectedCallback;
   proto.disconnectedCallback = function patchedDisconnectedCallback() {
     this._v030Generation = (this._v030Generation || 0) + 1;
+    if (this._v030HistoryManifestRetry) clearTimeout(this._v030HistoryManifestRetry);
+    this._v030HistoryManifestRetry = null;
     return originalDisconnected?.call(this);
   };
 }
@@ -10093,6 +10195,11 @@ const VISUAL_DEFAULTS = Object.freeze({
   const memberDevice036 = (member) => memberFrontend036(member)?.device_id || null;
   const memberMapPath036 = (member) => memberFrontend036(member)?.map_api_path || member?.map_api_path || null;
   const memberSessionsPath036 = (member) => memberFrontend036(member)?.sessions_api_path || null;
+  const memberHistoryManifestPath036 = (member, payload = null) =>
+    memberFrontend036(member)?.history_manifest_path
+    || payload?.prepared_render_model?.history_manifest_url
+    || payload?.frontend?.history_manifest_path
+    || null;
   const memberRenderTemplate036 = (member) => memberFrontend036(member)?.session_render_api_path_template || null;
 
   const memberById036 = (card, entryId) => (card?._multi036Site?.members || []).find((member) => String(member?.entry_id) === String(entryId)) || null;
@@ -10549,16 +10656,37 @@ const VISUAL_DEFAULTS = Object.freeze({
   async function refreshMemberSessions036(card, member, force, generation = currentGeneration036(card)) {
     const state = memberState036(card, member.entry_id);
     if (!force && state.sessionsAt && Date.now() - state.sessionsAt < SESSION_REFRESH_MS) return;
-    const path = memberSessionsPath036(member);
+    const legacyPath = memberSessionsPath036(member);
+    const preparedPath = memberHistoryManifestPath036(member, state.map);
+    const path = preparedPath || legacyPath;
     if (!path) return;
     try {
-      const payload = await callApi036(card, path);
+      let payload = null;
+      let prepared = false;
+      if (preparedPath) {
+        try {
+          payload = await callApi036(card, preparedPath);
+          prepared = payload?.scope === "prepared_history" && Number(payload?.schema_version) === 1;
+          if (!prepared) throw new Error("Prepared History manifest is incompatible");
+        } catch (preparedError) {
+          console.debug("[Navimower Map Card] Multi-mower Prepared History manifest unavailable; using legacy session index", member?.entry_id, preparedError);
+          if (!legacyPath) throw preparedError;
+          payload = await callApi036(card, legacyPath);
+        }
+      } else {
+        payload = await callApi036(card, legacyPath);
+      }
       if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return;
-      state.sessions = (Array.isArray(payload?.sessions) ? payload.sessions : [])
-        .filter((session) => session && sessionId036(session))
-        .map((session) => ({ ...session }))
-        .sort((left, right) => (date036(left.started_at ?? left.started_at_ms)?.getTime() || 0) - (date036(right.started_at ?? right.started_at_ms)?.getTime() || 0));
-      state.renderTemplate = payload?.session_render_api_path_template || memberRenderTemplate036(member);
+      state.sessions = normalizeIndexSessions(payload);
+      state.renderTemplate = payload?.legacy_session_render_url_template
+        || payload?.session_render_api_path_template
+        || memberRenderTemplate036(member);
+      state.preparedHistory = prepared;
+      state.historyManifestPath = prepared ? preparedPath : null;
+      state.historyResourceTemplate = payload?.resource_url_template
+        || memberFrontend036(member)?.history_resource_api_path_template
+        || state.map?.prepared_render_model?.history_resource_url_template
+        || null;
       state.sessionsAt = Date.now();
       state.sessionsError = null;
     } catch (error) {
@@ -10640,14 +10768,26 @@ const VISUAL_DEFAULTS = Object.freeze({
     if (failedAt && Date.now() - failedAt < MULTI_RENDER_RETRY_MS) return null;
     const generation = currentGeneration036(card);
     try {
-      const payload = await callApi036(card, sessionRenderEndpoint036(card, member, id));
+      let render = null;
+      const descriptor = session?.prepared_render?.resource_id && session?.prepared_render?.url ? session.prepared_render : null;
+      if (descriptor) {
+        try {
+          render = await loadPreparedHistoryResource(card, descriptor, id);
+        } catch (preparedError) {
+          console.debug("[Navimower Map Card] Multi-mower Prepared History resource unavailable; using legacy render", key, preparedError);
+        }
+      }
+      if (!render) {
+        const payload = await callApi036(card, sessionRenderEndpoint036(card, member, id));
+        render = payload?.render || payload;
+      }
       if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return null;
-      const render = payload?.render || payload;
-      if (render && (String(render?.mowed_area?.path_d || "").trim() || String(render?.travel?.path_d || "").trim())) {
+      if (validArchive(render)) {
         cacheMultiRender036(card, key, render);
         card._multi036RenderFailures.delete(key);
         return render;
       }
+      throw new Error("Completed session render is empty");
     } catch (error) {
       if (generationMatches036(card, generation)) {
         card._multi036RenderFailures.set(key, Date.now());

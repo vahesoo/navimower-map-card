@@ -46,8 +46,9 @@ The 0.3.6 line was developed together with the Navimower 0.4.4 line. Individual 
 | Visual Gate area Save/Delete | 0.4.4-beta34+ |
 | Prepared static/layout render model | 0.4.5-beta21+; beta23/beta24 recommended for stabilized static identity/checkpoint behavior |
 | Prepared live-route SVG model | 0.4.5-beta21+; beta25 recommended for 30 s backbone cadence and short-tail transport |
+| Prepared History manifest/resources | 0.4.5-beta26+; beta15 consumes retained completed-session resources |
 
-For the current prerelease pair, use Navimower 0.4.5-beta25 or newer. Older supported integrations remain usable through the card's legacy map/trail fallback, but they do not provide the beta13 short-tail-only transport.
+For the current prerelease pair, use Navimower 0.4.5-beta26 or newer. Older supported integrations remain usable through the card's legacy map/trail/History fallbacks, but they do not provide the beta15 Prepared History manifest/resources.
 
 ## Installation with HACS
 
@@ -318,7 +319,8 @@ The card deliberately keeps expensive work out of the browser where possible:
 
 - with Navimower 0.4.5-beta21+, static map geometry/layout can come from the integration's content-addressed Prepared Render Model and is fetched only when its resource identity changes;
 - beta12 consumes the content-addressed prepared live-route SVG model;
-- beta14 completes the beta13 short-tail transport by routing the final cumulative-runtime Map API request through the tail-only request helper; with Navimower 0.4.5-beta25+, normal map refreshes request the prepared SVG backbone plus the explicit short live tail instead of retransferring the full raw trail;
+- beta14 completes the short-tail transport; with Navimower 0.4.5-beta25+, normal map refreshes request the prepared SVG backbone plus the explicit short live tail instead of retransferring the full raw trail;
+- beta15 consumes Navimower 0.4.5-beta26+ ready-only Prepared History manifests and immutable content-addressed completed-session resources; Single and Multi mower views share the same browser resource cache;
 - the mower marker and newest trail points remain live from Home Assistant/MQTT between 30 s prepared-backbone publications;
 - older integrations keep the raw-geometry and raw-trail renderers as complete fallbacks;
 - current-cycle mowing area is prepared by Navimower and can be fetched independently of the base map;

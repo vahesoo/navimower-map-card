@@ -30,7 +30,7 @@ A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo
 
 - Home Assistant 2026.6 or newer
 - [`Navimower`](https://github.com/vahesoo/NaviMower) integration **0.4.3 or newer** for the 0.3.5-era Single mower feature set
-- **Navimower 0.4.4-beta36 or newer is recommended for the complete current 0.3.6 feature set**
+- **Navimower 0.4.5-beta24 or newer is recommended for the current 0.3.7 prerelease line and Prepared Render Model path**
 - HACS is recommended for installation and updates
 
 The 0.3.6 line was developed together with the Navimower 0.4.4 line. Individual additions have narrower backend boundaries:
@@ -44,8 +44,9 @@ The 0.3.6 line was developed together with the Navimower 0.4.4 line. Individual 
 | Phased base/current-cycle Map API | 0.4.4-beta28+; older supported responses still fall back to the combined payload |
 | Exact polygon Gate areas | 0.4.4-beta32+ |
 | Visual Gate area Save/Delete | 0.4.4-beta34+ |
+| Prepared static/layout render model | 0.4.5-beta21+; beta23/beta24 recommended for stabilized static identity/checkpoint behavior |
 
-For the current prerelease pair, use the latest Navimower 0.4.4 beta rather than deliberately mixing old backend betas with the latest card.
+For the current prerelease pair, use Navimower 0.4.5-beta24 or newer. Older supported integrations remain usable through the card's legacy map-render fallback, but they do not provide the beta11 prepared static/layout path.
 
 ## Installation with HACS
 
@@ -314,7 +315,8 @@ The editor groups related settings so the same type of setting stays in one plac
 
 The card deliberately keeps expensive work out of the browser where possible:
 
-- static map geometry is cached by map revision and visual configuration;
+- with Navimower 0.4.5-beta21+, static map geometry/layout can come from the integration's content-addressed Prepared Render Model and is fetched only when its resource identity changes;
+- older integrations keep the raw-geometry renderer as a complete fallback;
 - current-cycle mowing area is prepared by Navimower and can be fetched independently of the base map;
 - completed History sessions use backend-prepared SVG archives;
 - Multi mower requests are bounded and member maps are rendered incrementally;

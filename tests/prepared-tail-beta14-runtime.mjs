@@ -36,6 +36,13 @@ const card = new Card();
 card._config = { entity: "lawn_mower.beta14" };
 card._resolved = { map_entity: mapEntity };
 card._queueRender = () => {};
+card._multi036DialogMember = null;
+card._multi036ActionMember = null;
+// This regression targets the final outgoing request, not the older _apiPath
+// wrapper. Feed the cumulative runtime the exact lightweight path it normally
+// receives after v0.3 map phasing.
+card._apiPath = () =>
+  apiPath + "?include_sessions=0&include_daily_trails=0&include_current_cycle=0";
 // Keep the final Multi wrapper present, but prevent this Single-runtime
 // regression from doing an unrelated Site API refresh/DOM pass.
 card._multi036Site = { multi_mower: false, member_order: "west_to_east", members: [] };

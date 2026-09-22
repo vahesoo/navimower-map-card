@@ -27,9 +27,9 @@ assert.match(source, /_v034sScheduleCloseTimer/, "schedule close timer cleanup m
 
 // Upper bounds for the consolidated runtime. Normalize only the release
 // version text so beta number width cannot look like production code growth.
-// beta12 adds Prepared Render Model live-route adoption for Single + Multi mower
-// while preserving the consolidated runtime shape and legacy trail fallback.
-assert.ok(normalizedSource.length <= 856000, `runtime grew beyond beta12 feature budget: ${normalizedSource.length} normalized chars`);
+// beta13 adds the backend short-tail transport and 30 s prepared-live cadence
+// without adding another runtime wrapper/IIFE layer.
+assert.ok(normalizedSource.length <= 864000, `runtime grew beyond beta13 feature budget: ${normalizedSource.length} normalized chars`);
 assert.ok(sourceSections.length <= 12, `source section count grew: ${sourceSections.length}`);
 assert.ok(patchMarkers.size <= 43, `runtime patch marker count grew: ${patchMarkers.size}`);
 assert.ok(iifes.length <= 50, `runtime patch IIFE count grew: ${iifes.length}`);

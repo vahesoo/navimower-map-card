@@ -1375,6 +1375,9 @@ var NavimowerMapCard = class extends HTMLElement {
         cacheSet(PREPARED_STATIC_RESOURCE_CACHE, resourceId, model, PREPARED_STATIC_CACHE_LIMIT);
       }
 
+      const currentRevision = String(this._mapPayload?.map?.revision ?? "");
+      const preparedRevision = String(model?.map_revision ?? "");
+      if (currentRevision && preparedRevision && currentRevision !== preparedRevision) return;
       this._preparedStaticModel = model;
       this._preparedStaticResourceId = resourceId;
       this._preparedStaticDiscoveryLoadedKey = discoveryKey;

@@ -3955,7 +3955,8 @@ function patchCard() {
     this._loadError = null;
     this._queueRender?.({ message: true });
     try {
-      const payload = await this._hass.callApi("GET", apiCallPath(apiPath));
+      const requestPath = this._preparedLiveMapRequestPath?.(apiPath) || apiPath;
+      const payload = await this._hass.callApi("GET", apiCallPath(requestPath));
       const clean = sanitizeMapPayload(payload || {});
       const cachedAt = Date.now();
       cacheSet2(LIGHTWEIGHT_MAP_CACHE, key, { payload: clean, cachedAt });

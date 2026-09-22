@@ -3812,7 +3812,7 @@ async function loadPreparedHistoryResource(card, descriptor, expectedSessionId =
       if (!validArchive(render)) throw new Error("Prepared History resource is empty");
       cacheSet2(PREPARED_HISTORY_RESOURCE_CACHE, resourceId, render, PREPARED_HISTORY_CACHE_LIMIT);
       return render;
-    })().finally(() => {
+    })().finally(function preparedHistoryFetchFinished() {
       PREPARED_HISTORY_RESOURCE_LOADING.delete(resourceId);
     });
     PREPARED_HISTORY_RESOURCE_LOADING.set(resourceId, pending);
@@ -3861,10 +3861,11 @@ async function loadSessionIndex(card, originalApiPath, force = false) {
     applySessionIndex(card, payload, derived, usedPath, prepared);
     card._v030IndexError = null;
     if (prepared && Number(payload?.pending_session_count || 0) > 0 && payload?.prewarm_complete !== true && !card._v030HistoryManifestRetry) {
-      card._v030HistoryManifestRetry = globalThis.setTimeout?.(() => {
+      function retryPreparedHistoryManifest() {
         card._v030HistoryManifestRetry = null;
         if (generation === card._v030Generation) void loadSessionIndex(card, originalApiPath, true);
-      }, 1500) || null;
+      }
+      card._v030HistoryManifestRetry = globalThis.setTimeout?.(retryPreparedHistoryManifest, 1500) || null;
     }
   } catch (error) {
     if (generation === card._v030Generation) {

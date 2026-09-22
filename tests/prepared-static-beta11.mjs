@@ -205,6 +205,10 @@ const makeCard = () => {
   card._applyInitialView = () => {};
   card._mapPostV030 = () => {};
   card._apiPath = () => "/api/navimower/map/entry";
+  // Keep the beta11 regression scoped to static/layout adoption. Beta12 has
+  // its own prepared-live regression and intentionally adds another manifest
+  // reader during normal cumulative runtime operation.
+  card._maybeLoadPreparedLive = async () => {};
   return card;
 };
 

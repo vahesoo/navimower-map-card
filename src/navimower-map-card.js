@@ -3826,7 +3826,8 @@ async function loadSessionIndex(card, originalApiPath, force = false) {
   const preparedPath = preparedHistoryManifestPath(card, derived);
   const sourcePath = preparedPath || derived.sessionsPath;
   const cached = SESSION_INDEX_CACHE.get(sourcePath);
-  if (!force && cached && Date.now() - cached.cachedAt < INDEX_CACHE_FRESH_MS) {
+  const coldSharedCache = force && !Array.isArray(card._v030SessionIndex);
+  if ((!force || coldSharedCache) && cached && Date.now() - cached.cachedAt < INDEX_CACHE_FRESH_MS) {
     card._v030SessionIndex = cached.sessions.map((session) => ({ ...session, prepared_render: session.prepared_render ? { ...session.prepared_render } : null }));
     card._v030RenderTemplate = cached.renderTemplate || derived.renderTemplate;
     card._v030HistoryManifestPath = cached.prepared ? sourcePath : null;

@@ -10497,6 +10497,12 @@ const VISUAL_DEFAULTS = Object.freeze({
       state.map = card._mapPayload;
       state.mapAt = Date.now();
       state.error = null;
+      if (card._preparedLiveCompatible?.()) {
+        state.preparedLiveModel = card._preparedLiveModel;
+        state.preparedLiveResourceId = card._preparedLiveResourceId;
+        state.preparedLiveManifestAt = card._preparedLiveManifestAt || state.preparedLiveManifestAt;
+        state.preparedLiveManifestIntervalMs = card._preparedLiveManifestIntervalMs?.() || state.preparedLiveManifestIntervalMs;
+      }
       renderMultiMap036(card);
       void refreshMemberPreparedStatic036(card, member, generation);
       void refreshMemberPreparedLive036(card, member, generation);

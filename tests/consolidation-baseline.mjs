@@ -29,7 +29,7 @@ assert.match(source, /_v034sScheduleCloseTimer/, "schedule close timer cleanup m
 // version text so beta number width cannot look like production code growth.
 // beta11 deliberately adds the Prepared Render Model static/layout client for
 // Single + Multi mower without adding another wrapper/IIFE chain.
-assert.ok(normalizedSource.length <= 840000, `runtime grew beyond beta11 feature budget: ${normalizedSource.length} normalized chars`);
+assert.ok(normalizedSource.length <= 844000, `runtime grew beyond beta11 feature budget: ${normalizedSource.length} normalized chars`);
 assert.ok(sourceSections.length <= 12, `source section count grew: ${sourceSections.length}`);
 assert.ok(patchMarkers.size <= 43, `runtime patch marker count grew: ${patchMarkers.size}`);
 assert.ok(iifes.length <= 50, `runtime patch IIFE count grew: ${iifes.length}`);

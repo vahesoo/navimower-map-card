@@ -521,6 +521,12 @@ var NavimowerMapCard = class extends HTMLElement {
     if (previousEntity !== this._config.entity) {
       this._mapPayload = null;
       this._mapStaticSignature = null;
+      this._preparedStaticGeneration = Number(this._preparedStaticGeneration || 0) + 1;
+      this._preparedStaticModel = null;
+      this._preparedStaticResourceId = null;
+      this._preparedStaticAdoptedKey = null;
+      this._preparedStaticDiscoveryLoadedKey = null;
+      this._preparedStaticLoadingKey = null;
       this._activeSessionDrawable = false;
       this._trail = [];
       this._trailSession = null;
@@ -1132,19 +1138,31 @@ var NavimowerMapCard = class extends HTMLElement {
   _preparedStaticCompatible(model = this._preparedStaticModel) {
     if (!model || model.scope !== "static_map_render_model" || Number(model.schema_version) !== 1) return false;
     if (model.geometry_summary?.parity_ok === false) return false;
-    const currentRevision = String(this._mapPayload?.map?.revision ?? "");
+    const discoveryKey = this._preparedStaticDiscoveryKey?.();
+    if (this._preparedStaticAdoptedKey && discoveryKey && this._preparedStaticAdoptedKey !== discoveryKey) return false;
+    const map = this._mapPayload?.map || {};
+    const currentRevision = String(map.revision ?? this._mapPayload?.map_revision ?? "");
     const preparedRevision = String(model.map_revision ?? "");
-    return !currentRevision || !preparedRevision || currentRevision === preparedRevision;
+    if (currentRevision && preparedRevision && currentRevision !== preparedRevision) return false;
+    const currentVersion = String(map.map_version ?? map.version ?? this._mapPayload?.map_version ?? "");
+    const preparedVersion = String(model.map_version ?? "");
+    if (currentVersion && preparedVersion && currentVersion !== preparedVersion) return false;
+    const currentModified = String(map.modified_count ?? this._mapPayload?.map_modified_count ?? "");
+    const preparedModified = String(model.map_modified_count ?? "");
+    return !currentModified || !preparedModified || currentModified === preparedModified;
   }
   _preparedStaticDiscoveryKey() {
     const payload = this._mapPayload || {};
     const discovery = payload.prepared_render_model;
     const manifestUrl = discovery?.manifest_url || payload.frontend?.prepared_render_model_manifest_path || "";
     if (!manifestUrl || Number(discovery?.schema_version ?? 1) !== 1) return null;
-    const mapRevision = payload?.map?.revision ?? payload?.map_revision ?? "";
+    const map = payload.map || {};
+    const mapRevision = map.revision ?? payload.map_revision ?? "";
+    const mapVersion = map.map_version ?? map.version ?? payload.map_version ?? "";
+    const modifiedCount = map.modified_count ?? payload.map_modified_count ?? "";
     const gateFingerprint = fastHash(JSON.stringify(payload?.gate_areas || []));
     const customFingerprint = fastHash(JSON.stringify(payload?.custom_areas || []));
-    return [manifestUrl, mapRevision, gateFingerprint, customFingerprint].join("|");
+    return [manifestUrl, mapRevision, mapVersion, modifiedCount, gateFingerprint, customFingerprint].join("|");
   }
   _preparedStaticLayoutDescriptor() {
     if (!this._preparedStaticCompatible()) return null;
@@ -1355,16 +1373,19 @@ var NavimowerMapCard = class extends HTMLElement {
     try {
       const manifest = await this._hass.callApi("GET", this._preparedApiPath(manifestUrl));
       if (generation !== Number(this._preparedStaticGeneration || 0) || discoveryKey !== this._preparedStaticDiscoveryKey()) return;
-      const descriptor = manifest?.static;
-      if (!descriptor?.resource_id || !descriptor?.url) {
-        if (manifest?.building?.static) {
-          this._preparedStaticDiscoveryLoadedKey = null;
-          globalThis.setTimeout?.(() => {
-            if (generation === Number(this._preparedStaticGeneration || 0)) void this._maybeLoadPreparedStatic();
-          }, 1500);
-        }
+      if (manifest?.building?.static) {
+        this._preparedStaticDiscoveryLoadedKey = null;
+        const retryPreparedStatic = () => {
+          if (
+            generation === Number(this._preparedStaticGeneration || 0)
+            && discoveryKey === this._preparedStaticDiscoveryKey()
+          ) void this._maybeLoadPreparedStatic();
+        };
+        globalThis.setTimeout?.(retryPreparedStatic, 1500);
         return;
       }
+      const descriptor = manifest?.static;
+      if (!descriptor?.resource_id || !descriptor?.url) return;
 
       const resourceId = String(descriptor.resource_id);
       let model = PREPARED_STATIC_RESOURCE_CACHE.get(resourceId) || null;
@@ -1380,6 +1401,7 @@ var NavimowerMapCard = class extends HTMLElement {
       if (currentRevision && preparedRevision && currentRevision !== preparedRevision) return;
       this._preparedStaticModel = model;
       this._preparedStaticResourceId = resourceId;
+      this._preparedStaticAdoptedKey = discoveryKey;
       this._preparedStaticDiscoveryLoadedKey = discoveryKey;
       this._staticRenderKey = null;
       if (this._applyPreparedLayout()) {

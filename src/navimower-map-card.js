@@ -7,6 +7,9 @@ var LATEST_MAP_PAYLOAD_CACHE = /* @__PURE__ */ new Map();
 var STATIC_MAP_CACHE = /* @__PURE__ */ new Map();
 var PREPARED_STATIC_RESOURCE_CACHE = /* @__PURE__ */ new Map();
 var PREPARED_STATIC_CACHE_LIMIT = 12;
+var PREPARED_LIVE_RESOURCE_CACHE = /* @__PURE__ */ new Map();
+var PREPARED_LIVE_CACHE_LIMIT = 32;
+var PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS = 1800;
 var CARD_TEMPLATE = null;
 var MOWER_TEMPLATE = null;
 function cacheSet(cache, key, value, limit = MAP_CACHE_LIMIT) {
@@ -527,6 +530,11 @@ var NavimowerMapCard = class extends HTMLElement {
       this._preparedStaticAdoptedKey = null;
       this._preparedStaticDiscoveryLoadedKey = null;
       this._preparedStaticLoadingKey = null;
+      this._preparedLiveGeneration = Number(this._preparedLiveGeneration || 0) + 1;
+      this._preparedLiveModel = null;
+      this._preparedLiveResourceId = null;
+      this._preparedLiveLoading = false;
+      this._preparedLiveManifestAt = 0;
       this._activeSessionDrawable = false;
       this._trail = [];
       this._trailSession = null;
@@ -1417,6 +1425,83 @@ var NavimowerMapCard = class extends HTMLElement {
       if (this._preparedStaticLoadingKey === discoveryKey) this._preparedStaticLoadingKey = null;
     }
   }
+  _preparedLiveCompatible(model = this._preparedLiveModel) {
+    if (!model || model.scope !== "live_route_render_model" || Number(model.schema_version) !== 1) return false;
+    if (Number(model.invalid_segment_count || 0) > 0) return false;
+    const currentSession = finiteNumber(this._mapPayload?.trail_session, this._trailSession);
+    const preparedSession = finiteNumber(model.trail_session, null);
+    if (currentSession !== null && preparedSession !== null && Number(currentSession) !== Number(preparedSession)) return false;
+    return true;
+  }
+  _preparedLiveTransform() {
+    const matrix = Array.isArray(this._layout?.preparedMatrix) ? this._layout.preparedMatrix.map(Number) : null;
+    if (matrix?.length >= 6 && matrix.every(Number.isFinite)) {
+      return `matrix(${matrix.slice(0, 6).map((value) => value.toFixed(8)).join(" ")})`;
+    }
+    if (typeof this._layout?.sx !== "function" || typeof this._layout?.sy !== "function") return "";
+    const x0 = Number(this._layout.sx(0));
+    const y0 = Number(this._layout.sy(0));
+    const x1 = Number(this._layout.sx(1));
+    const y1 = Number(this._layout.sy(1));
+    const a = x1 - x0;
+    const d = y1 - y0;
+    if (![a, d, x0, y0].every(Number.isFinite) || Math.abs(a) < 1e-9 || Math.abs(d) < 1e-9) return "";
+    return `matrix(${[a, 0, 0, d, x0, y0].map((value) => value.toFixed(8)).join(" ")})`;
+  }
+  _preparedLiveTailSegments(model = this._preparedLiveModel) {
+    const source = this._activeTrailSegments();
+    let remaining = Math.max(0, Math.floor(finiteNumber(model?.point_count, 0)));
+    const tail = [];
+    for (const segment of source) {
+      if (!Array.isArray(segment) || segment.length < 2) continue;
+      if (remaining >= segment.length) {
+        remaining -= segment.length;
+        continue;
+      }
+      const start = Math.max(0, remaining - 1);
+      remaining = 0;
+      const piece = segment.slice(start);
+      if (piece.length >= 2) tail.push(piece);
+    }
+    return tail;
+  }
+  async _maybeLoadPreparedLive(force = false) {
+    if (!this._hass?.callApi || !this._mapPayload) return;
+    const discovery = this._mapPayload.prepared_render_model || {};
+    const manifestUrl = discovery.manifest_url || this._mapPayload?.frontend?.prepared_render_model_manifest_path;
+    if (!manifestUrl || Number(discovery?.schema_version ?? 1) !== 1) return;
+    const now = Date.now();
+    if (this._preparedLiveLoading) return;
+    if (!force && now - Number(this._preparedLiveManifestAt || 0) < PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS) return;
+    const generation = Number(this._preparedLiveGeneration || 0);
+    this._preparedLiveLoading = true;
+    this._preparedLiveManifestAt = now;
+    try {
+      const manifest = await this._hass.callApi("GET", this._preparedApiPath(manifestUrl));
+      if (generation !== Number(this._preparedLiveGeneration || 0)) return;
+      const descriptor = manifest?.live_route;
+      if (!descriptor?.resource_id || !descriptor?.url) return;
+      const resourceId = String(descriptor.resource_id);
+      if (resourceId === this._preparedLiveResourceId && this._preparedLiveCompatible()) return;
+      let model = PREPARED_LIVE_RESOURCE_CACHE.get(resourceId) || null;
+      if (!model) {
+        model = await this._hass.callApi("GET", this._preparedApiPath(descriptor.url));
+        if (generation !== Number(this._preparedLiveGeneration || 0)) return;
+        if (!this._preparedLiveCompatible(model)) return;
+        cacheSet(PREPARED_LIVE_RESOURCE_CACHE, resourceId, model, PREPARED_LIVE_CACHE_LIMIT);
+      } else if (!this._preparedLiveCompatible(model)) {
+        return;
+      }
+      this._preparedLiveModel = model;
+      this._preparedLiveResourceId = resourceId;
+      this._trailRenderKey = null;
+      this._queueRender({ trail: true });
+    } catch (error) {
+      console.debug("[Navimower Map Card] Prepared live route unavailable; using raw trail fallback", error);
+    } finally {
+      this._preparedLiveLoading = false;
+    }
+  }
   _apiPath() {
     const mapState = this._state(this._resolved.map_entity);
     if (mapState?.attributes?.api_path) return mapState.attributes.api_path;
@@ -1535,6 +1620,7 @@ var NavimowerMapCard = class extends HTMLElement {
     this._applyInitialView(false);
     this._mapPostV030?.(sourcePayload);
     void this._maybeLoadPreparedStatic?.();
+    void this._maybeLoadPreparedLive?.();
   }
   _normalizePoints(raw) {
     if (!Array.isArray(raw)) return [];
@@ -2077,6 +2163,7 @@ var NavimowerMapCard = class extends HTMLElement {
       sessions: first || sessionDrawableChanged,
       message: first
     });
+    if (trailStateChanged) void this._maybeLoadPreparedLive?.();
   }
   _trimTrail() {
     const cap = Math.max(100, Number(this._config?.trail_length) || 1e4);
@@ -2109,17 +2196,23 @@ var NavimowerMapCard = class extends HTMLElement {
       if (this._trailEl) this._trailEl.innerHTML = "";
       return;
     }
-    const segments = this._activeTrailSegments();
+    const prepared = this._preparedLiveCompatible?.() ? this._preparedLiveModel : null;
+    const preparedSegments = prepared && Array.isArray(prepared.segments) ? prepared.segments.filter((row) => String(row?.path_d || "").trim()) : [];
+    const transform = preparedSegments.length ? this._preparedLiveTransform?.() || "" : "";
+    const rawSegments = this._activeTrailSegments();
+    const tailSegments = prepared && transform ? this._preparedLiveTailSegments(prepared) : rawSegments;
+    const segmentSignature = tailSegments.map((segment) => `${segment.length}:${segment.at(-1)?.join(",") || ""}`).join(";");
     const renderKey = [
       this._historyDayOffset ?? "today",
       this._trailSession,
       this._config.trail_color,
       this._layout.scale,
-      segments.map((segment) => `${segment.length}:${segment.at(-1)?.join(",") || ""}`).join(";")
+      prepared && transform ? this._preparedLiveResourceId || "prepared-live" : "legacy-live",
+      segmentSignature
     ].join("|");
     if (renderKey === this._trailRenderKey) return;
     this._trailRenderKey = renderKey;
-    if (!segments.length) {
+    if (!preparedSegments.length && !tailSegments.length) {
       this._trailEl.innerHTML = "";
       return;
     }
@@ -2127,7 +2220,13 @@ var NavimowerMapCard = class extends HTMLElement {
     const rawSessions = Array.isArray(this._mapPayload?.sessions) ? this._mapPayload.sessions : [];
     const activeSession = [...rawSessions].reverse().find((session) => Boolean(session?.active || session?.ended_at === null && session?.started_at));
     const sessionId2 = activeSession?.id ?? activeSession?.session_id ?? this._trailSession ?? 0;
-    this._trailEl.innerHTML = segments.map((segment) => `<polyline class="nm-session-path" data-session-id="${escapeHtml(String(sessionId2))}" points="${this._pointString(segment)}" fill="none" stroke="${escapeHtml(this._config.trail_color)}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`).join("");
+    const sessionAttr = escapeHtml(String(sessionId2));
+    const color = escapeHtml(this._config.trail_color);
+    const preparedMarkup = preparedSegments.length && transform
+      ? preparedSegments.map((row) => `<path class="nm-session-path nm-prepared-live-route" data-session-id="${sessionAttr}" d="${escapeHtml(String(row.path_d))}" transform="${transform}" fill="none" stroke="${color}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`).join("")
+      : "";
+    const tailMarkup = tailSegments.map((segment) => `<polyline class="nm-session-path nm-live-tail" data-session-id="${sessionAttr}" points="${this._pointString(segment)}" fill="none" stroke="${color}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`).join("");
+    this._trailEl.innerHTML = preparedMarkup + tailMarkup;
   }
   _renderMower() {
     if (!this._mowerGroup || !this._layout) {
@@ -10094,6 +10193,73 @@ const VISUAL_DEFAULTS = Object.freeze({
     }
   }
 
+  const memberPreparedLive036 = (card, member, payload = null) => {
+    const state = memberState036(card, member?.entry_id);
+    const currentPayload = payload || state.map;
+    const model = state?.preparedLiveModel;
+    if (!model || model.scope !== "live_route_render_model" || Number(model.schema_version) !== 1) return null;
+    if (Number(model.invalid_segment_count || 0) > 0) return null;
+    const currentSession = finite036(currentPayload?.trail_session, null);
+    const preparedSession = finite036(model?.trail_session, null);
+    if (currentSession !== null && preparedSession !== null && Number(currentSession) !== Number(preparedSession)) return null;
+    return model;
+  };
+
+  const preparedLiveTailSegments036 = (model, segments) => {
+    let remaining = Math.max(0, Math.floor(finite036(model?.point_count, 0)));
+    const tail = [];
+    for (const segment of segments || []) {
+      if (!Array.isArray(segment) || segment.length < 2) continue;
+      if (remaining >= segment.length) {
+        remaining -= segment.length;
+        continue;
+      }
+      const start = Math.max(0, remaining - 1);
+      remaining = 0;
+      const piece = segment.slice(start);
+      if (piece.length >= 2) tail.push(piece);
+    }
+    return tail;
+  };
+
+  async function refreshMemberPreparedLive036(card, member, generation = currentGeneration036(card)) {
+    const state = memberState036(card, member.entry_id);
+    const payload = state.map;
+    const manifestPath = memberPreparedManifestPath036(member, payload);
+    if (!payload || !manifestPath || !card?._hass?.callApi) return;
+    const now = Date.now();
+    if (state.preparedLiveLoading) return;
+    if (now - finite036(state.preparedLiveManifestAt, 0) < PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS) return;
+    state.preparedLiveLoading = true;
+    state.preparedLiveManifestAt = now;
+    try {
+      const manifest = await callApi036(card, manifestPath);
+      if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id) || state.map !== payload) return;
+      const descriptor = manifest?.live_route;
+      if (!descriptor?.resource_id || !descriptor?.url) return;
+      const resourceId = String(descriptor.resource_id);
+      if (state.preparedLiveResourceId === resourceId && memberPreparedLive036(card, member, payload)) return;
+      let model = PREPARED_LIVE_RESOURCE_CACHE.get(resourceId) || null;
+      if (!model) {
+        model = await callApi036(card, descriptor.url);
+        if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id) || state.map !== payload) return;
+        if (!model || model.scope !== "live_route_render_model" || Number(model.schema_version) !== 1 || Number(model.invalid_segment_count || 0) > 0) return;
+        cacheSet(PREPARED_LIVE_RESOURCE_CACHE, resourceId, model, PREPARED_LIVE_CACHE_LIMIT);
+      }
+      const currentSession = finite036(payload?.trail_session, null);
+      const preparedSession = finite036(model?.trail_session, null);
+      if (currentSession !== null && preparedSession !== null && Number(currentSession) !== Number(preparedSession)) return;
+      state.preparedLiveModel = model;
+      state.preparedLiveResourceId = resourceId;
+      card._multi036MapRenderKey = null;
+      renderMultiMap036(card, true);
+    } catch (error) {
+      console.debug("[Navimower Map Card] Multi-mower prepared live route unavailable; using raw trail fallback", member?.entry_id, error);
+    } finally {
+      state.preparedLiveLoading = false;
+    }
+  }
+
   const currentGeneration036 = (card) => Number(card?._multi036Generation || 0);
 
   const generationMatches036 = (card, generation) =>
@@ -10208,6 +10374,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       state.error = null;
       renderMultiMap036(card);
       void refreshMemberPreparedStatic036(card, member, generation);
+      void refreshMemberPreparedLive036(card, member, generation);
       void refreshMemberCurrentCycle036(card, member, generation);
       return;
     }
@@ -10229,6 +10396,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       state.error = null;
       renderMultiMap036(card);
       void refreshMemberPreparedStatic036(card, member, generation);
+      void refreshMemberPreparedLive036(card, member, generation);
       void refreshMemberCurrentCycle036(card, member, generation);
     } catch (error) {
       if (generationMatches036(card, generation)) state.error = error;
@@ -10470,12 +10638,17 @@ const VISUAL_DEFAULTS = Object.freeze({
     return normalizeLiveTrailSegments036(payload?.trail_segments);
   };
 
-  const liveTrailSignature036 = (card, member, payload) => liveTrailSegments036(card, member, payload)
-    .map((segment) => {
+  const liveTrailSignature036 = (card, member, payload) => {
+    const raw = liveTrailSegments036(card, member, payload);
+    const prepared = memberPreparedLive036(card, member, payload);
+    const segments = prepared ? preparedLiveTailSegments036(prepared, raw) : raw;
+    const tail = segments.map((segment) => {
       const last = segment.at(-1) || [];
       return segment.length + ":" + Number(last[0] || 0).toFixed(3) + "," + Number(last[1] || 0).toFixed(3);
-    })
-    .join(";");
+    }).join(";");
+    const resourceId = memberState036(card, member?.entry_id)?.preparedLiveResourceId || "legacy";
+    return resourceId + "|" + tail;
+  };
 
   const memberTrailWidthMeters036 = (member) => {
     if (typeof renderedTrailWidthMeters034 === "function") return renderedTrailWidthMeters034(member?.model || member?.vehicle_type || "");
@@ -10659,7 +10832,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       const payload = memberState036(card, member.entry_id).map;
       card._zoneArtifactsHandled?.(payload, member.entry_id);
       const state = memberState036(card, member.entry_id);
-      return [member.entry_id, payload?.map?.revision, state?.preparedStaticResourceId || "legacy", card._zoneArtifactsMode?.(member.entry_id), payload?.current_cycle_render?.revision, payload?.trail_revision, liveTrailSignature036(card, member, payload)].join(":");
+      return [member.entry_id, payload?.map?.revision, state?.preparedStaticResourceId || "legacy", card._zoneArtifactsMode?.(member.entry_id), payload?.current_cycle_render?.revision, payload?.trail_revision, state?.preparedLiveResourceId || "legacy-live", liveTrailSignature036(card, member, payload)].join(":");
     }).join("|");
     const key = [mapSignature, card._historyDayOffset, card._multi036SelectedSessionKey, card?._view?.scale, card?._config?.show_zone_labels, card?._config?.avoid_zone_label_overlap, card?._config?.zone_label_font_size, card?._config?.zone_label_opacity, card?._config?.map_legend_scale, card?._config?.show_channels, card?._config?.show_vf_off_areas, card?._config?.show_gate_areas, card?._config?.show_custom_areas, card?._config?.map_background_color, card?._config?.trail_color, card?._config?.trail_opacity].join("|");
     if (key === card._multi036MapRenderKey) {
@@ -10723,9 +10896,22 @@ const VISUAL_DEFAULTS = Object.freeze({
           local.push(renderArchive036({ mowed_area: current.mowed_area, travel: { path_d: "" }, route: { path_d: "" } }, trailColor, trailOpacity, "nm-multi-current-cycle"));
         }
         const liveTrailWidth = memberTrailWidthMeters036(member);
-        for (const segment of liveTrailSegments036(card, member, payload)) {
-          const points = rawPoints036(segment);
-          if (points) local.push("<polyline class=\"nm-multi-live-trail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+        const rawLiveSegments = liveTrailSegments036(card, member, payload);
+        const preparedLive = memberPreparedLive036(card, member, payload);
+        if (preparedLive && Array.isArray(preparedLive.segments)) {
+          for (const row of preparedLive.segments) {
+            const path = String(row?.path_d || "");
+            if (path) local.push("<path class=\"nm-multi-live-trail nm-prepared-live-route\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+          }
+          for (const segment of preparedLiveTailSegments036(preparedLive, rawLiveSegments)) {
+            const points = rawPoints036(segment);
+            if (points) local.push("<polyline class=\"nm-multi-live-trail nm-live-tail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+          }
+        } else {
+          for (const segment of rawLiveSegments) {
+            const points = rawPoints036(segment);
+            if (points) local.push("<polyline class=\"nm-multi-live-trail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+          }
         }
       } else if (!card._multi036SelectedSessionKey) {
         const sessions = sessionsForDay036(card, memberState.sessions, card._historyDayOffset);

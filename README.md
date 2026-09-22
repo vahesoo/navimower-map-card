@@ -45,8 +45,9 @@ The 0.3.6 line was developed together with the Navimower 0.4.4 line. Individual 
 | Exact polygon Gate areas | 0.4.4-beta32+ |
 | Visual Gate area Save/Delete | 0.4.4-beta34+ |
 | Prepared static/layout render model | 0.4.5-beta21+; beta23/beta24 recommended for stabilized static identity/checkpoint behavior |
+| Prepared live-route SVG model | 0.4.5-beta21+; beta24 recommended for current-cycle checkpoint stability |
 
-For the current prerelease pair, use Navimower 0.4.5-beta24 or newer. Older supported integrations remain usable through the card's legacy map-render fallback, but they do not provide the beta11 prepared static/layout path.
+For the current prerelease pair, use Navimower 0.4.5-beta24 or newer. Older supported integrations remain usable through the card's legacy map/trail fallback, but they do not provide the beta11 prepared static/layout or beta12 prepared live-route paths.
 
 ## Installation with HACS
 
@@ -316,7 +317,8 @@ The editor groups related settings so the same type of setting stays in one plac
 The card deliberately keeps expensive work out of the browser where possible:
 
 - with Navimower 0.4.5-beta21+, static map geometry/layout can come from the integration's content-addressed Prepared Render Model and is fetched only when its resource identity changes;
-- older integrations keep the raw-geometry renderer as a complete fallback;
+- beta12 also consumes the content-addressed prepared live-route SVG model and keeps only the short MQTT/browser tail beyond the latest backend point count;
+- older integrations keep the raw-geometry and raw-trail renderers as complete fallbacks;
 - current-cycle mowing area is prepared by Navimower and can be fetched independently of the base map;
 - completed History sessions use backend-prepared SVG archives;
 - Multi mower requests are bounded and member maps are rendered incrementally;

@@ -9972,6 +9972,65 @@ const VISUAL_DEFAULTS = Object.freeze({
     return await card._hass.callApi("GET", apiPath036(path));
   };
 
+  const memberPreparedManifestPath036 = (member, payload) =>
+    member?.frontend?.prepared_render_model_manifest_path
+    || payload?.prepared_render_model?.manifest_url
+    || payload?.frontend?.prepared_render_model_manifest_path
+    || null;
+
+  const memberPreparedStatic036 = (card, member, payload = null) => {
+    const state = memberState036(card, member?.entry_id);
+    const model = state?.preparedStaticModel;
+    if (!model || model.scope !== "static_map_render_model" || Number(model.schema_version) !== 1) return null;
+    if (model.geometry_summary?.parity_ok === false) return null;
+    const currentRevision = String((payload || state.map)?.map?.revision ?? "");
+    const preparedRevision = String(model.map_revision ?? "");
+    if (currentRevision && preparedRevision && currentRevision !== preparedRevision) return null;
+    return model;
+  };
+
+  async function refreshMemberPreparedStatic036(card, member, generation = currentGeneration036(card)) {
+    const state = memberState036(card, member.entry_id);
+    const payload = state.map;
+    const manifestPath = memberPreparedManifestPath036(member, payload);
+    if (!payload || !manifestPath || !card?._hass?.callApi) return;
+    const key = [
+      manifestPath,
+      payload?.map?.revision ?? "",
+      fastHash(JSON.stringify(payload?.gate_areas || [])),
+      fastHash(JSON.stringify(payload?.custom_areas || []))
+    ].join("|");
+    if (state.preparedStaticLoadedKey === key && memberPreparedStatic036(card, member, payload)) return;
+    if (state.preparedStaticLoadingKey === key) return;
+    state.preparedStaticLoadingKey = key;
+    try {
+      const manifest = await callApi036(card, manifestPath);
+      if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id) || state.map !== payload) return;
+      const descriptor = manifest?.static;
+      if (!descriptor?.resource_id || !descriptor?.url) return;
+      const resourceId = String(descriptor.resource_id);
+      let model = PREPARED_STATIC_RESOURCE_CACHE.get(resourceId) || null;
+      if (!model) {
+        model = await callApi036(card, descriptor.url);
+        if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id) || state.map !== payload) return;
+        if (!model || model.scope !== "static_map_render_model" || Number(model.schema_version) !== 1 || model.geometry_summary?.parity_ok === false) return;
+        cacheSet(PREPARED_STATIC_RESOURCE_CACHE, resourceId, model, PREPARED_STATIC_CACHE_LIMIT);
+      }
+      const currentRevision = String(payload?.map?.revision ?? "");
+      const preparedRevision = String(model?.map_revision ?? "");
+      if (currentRevision && preparedRevision && currentRevision !== preparedRevision) return;
+      state.preparedStaticModel = model;
+      state.preparedStaticResourceId = resourceId;
+      state.preparedStaticLoadedKey = key;
+      card._multi036MapRenderKey = null;
+      renderMultiMap036(card, true);
+    } catch (error) {
+      console.debug("[Navimower Map Card] Multi-mower prepared static render unavailable; using legacy geometry", member?.entry_id, error);
+    } finally {
+      if (state.preparedStaticLoadingKey === key) state.preparedStaticLoadingKey = null;
+    }
+  }
+
   const currentGeneration036 = (card) => Number(card?._multi036Generation || 0);
 
   const generationMatches036 = (card, generation) =>
@@ -10085,6 +10144,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       state.mapAt = Date.now();
       state.error = null;
       renderMultiMap036(card);
+      void refreshMemberPreparedStatic036(card, member, generation);
       void refreshMemberCurrentCycle036(card, member, generation);
       return;
     }
@@ -10105,6 +10165,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       state.mapAt = Date.now();
       state.error = null;
       renderMultiMap036(card);
+      void refreshMemberPreparedStatic036(card, member, generation);
       void refreshMemberCurrentCycle036(card, member, generation);
     } catch (error) {
       if (generationMatches036(card, generation)) state.error = error;
@@ -10534,7 +10595,8 @@ const VISUAL_DEFAULTS = Object.freeze({
     const mapSignature = (site.members || []).map((member) => {
       const payload = memberState036(card, member.entry_id).map;
       card._zoneArtifactsHandled?.(payload, member.entry_id);
-      return [member.entry_id, payload?.map?.revision, card._zoneArtifactsMode?.(member.entry_id), payload?.current_cycle_render?.revision, payload?.trail_revision, liveTrailSignature036(card, member, payload)].join(":");
+      const state = memberState036(card, member.entry_id);
+      return [member.entry_id, payload?.map?.revision, state?.preparedStaticResourceId || "legacy", card._zoneArtifactsMode?.(member.entry_id), payload?.current_cycle_render?.revision, payload?.trail_revision, liveTrailSignature036(card, member, payload)].join(":");
     }).join("|");
     const key = [mapSignature, card._historyDayOffset, card._multi036SelectedSessionKey, card?._view?.scale, card?._config?.show_zone_labels, card?._config?.avoid_zone_label_overlap, card?._config?.zone_label_font_size, card?._config?.zone_label_opacity, card?._config?.map_legend_scale, card?._config?.show_channels, card?._config?.show_vf_off_areas, card?._config?.show_gate_areas, card?._config?.show_custom_areas, card?._config?.map_background_color, card?._config?.trail_color, card?._config?.trail_opacity].join("|");
     if (key === card._multi036MapRenderKey) {
@@ -10567,12 +10629,28 @@ const VISUAL_DEFAULTS = Object.freeze({
       if (!matrix || !payload) continue;
       const local = [];
       const coverageMap = new Map((payload?.coverage?.zones || []).map((item) => [Number(item.id), item]));
+      const preparedStatic = memberPreparedStatic036(card, member, payload);
+      const preparedLayers = preparedStatic?.layers || null;
+      const localPath = (row, attrs) => {
+        const path = String(row?.path_d || "");
+        return path ? "<path d=\"" + esc(path) + "\" " + attrs + "/>" : "";
+      };
 
-      for (const zone of map.zones || []) {
-        const points = rawPoints036(zone?.polygon);
-        if (!points) continue;
-        local.push("<polygon points=\"" + points + "\" fill=\"" + esc(zoneFill) + "\" fill-opacity=\"" + zoneFillOpacity.toFixed(2) + "\" stroke=\"" + esc(zoneStroke) + "\" stroke-width=\"" + zoneStrokeWidth.toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
-        if (c.show_zone_labels !== false) zoneLabelItems.push(zoneLabelItem036(card, member, matrix, zone, coverageMap, payload));
+      if (Array.isArray(preparedLayers?.zones)) {
+        for (const zone of preparedLayers.zones) {
+          const markup = localPath(zone, "fill=\"" + esc(zoneFill) + "\" fill-opacity=\"" + zoneFillOpacity.toFixed(2) + "\" stroke=\"" + esc(zoneStroke) + "\" stroke-width=\"" + zoneStrokeWidth.toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"");
+          if (markup) local.push(markup);
+        }
+        if (c.show_zone_labels !== false) {
+          for (const zone of map.zones || []) zoneLabelItems.push(zoneLabelItem036(card, member, matrix, zone, coverageMap, payload));
+        }
+      } else {
+        for (const zone of map.zones || []) {
+          const points = rawPoints036(zone?.polygon);
+          if (!points) continue;
+          local.push("<polygon points=\"" + points + "\" fill=\"" + esc(zoneFill) + "\" fill-opacity=\"" + zoneFillOpacity.toFixed(2) + "\" stroke=\"" + esc(zoneStroke) + "\" stroke-width=\"" + zoneStrokeWidth.toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+          if (c.show_zone_labels !== false) zoneLabelItems.push(zoneLabelItem036(card, member, matrix, zone, coverageMap, payload));
+        }
       }
 
       if (card._nmBeta8Clients?.has?.(String(member.entry_id))) local.push('<g data-nm-artifacts-entry="' + esc(member.entry_id) + '" pointer-events="none"></g>');
@@ -10595,37 +10673,72 @@ const VISUAL_DEFAULTS = Object.freeze({
         }
       }
 
-      for (const polygon of map.off_limit_areas || []) {
-        const points = rawPoints036(polygon);
-        if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\" fill-opacity=\".08\" stroke=\"" + esc(c.off_limit_color || "#FF5A00") + "\" stroke-width=\"" + clamp036(c.off_limit_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+      if (Array.isArray(preparedLayers?.off_limit_areas)) {
+        for (const area of preparedLayers.off_limit_areas) {
+          const markup = localPath(area, "fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\" fill-opacity=\".08\" stroke=\"" + esc(c.off_limit_color || "#FF5A00") + "\" stroke-width=\"" + clamp036(c.off_limit_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"");
+          if (markup) local.push(markup);
+        }
+      } else {
+        for (const polygon of map.off_limit_areas || []) {
+          const points = rawPoints036(polygon);
+          if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.off_limit_color || "#FF5A00") + "\" fill-opacity=\".08\" stroke=\"" + esc(c.off_limit_color || "#FF5A00") + "\" stroke-width=\"" + clamp036(c.off_limit_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+        }
       }
       if (c.show_vf_off_areas !== false) {
-        for (const polygon of map.vf_off_areas || []) {
-          const points = rawPoints036(polygon);
-          if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.vf_off_color || "#2F80ED") + "\" fill-opacity=\".06\" stroke=\"" + esc(c.vf_off_color || "#2F80ED") + "\" stroke-width=\"" + clamp036(c.vf_off_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+        if (Array.isArray(preparedLayers?.vf_off_areas)) {
+          for (const area of preparedLayers.vf_off_areas) {
+            const markup = localPath(area, "fill=\"" + esc(c.vf_off_color || "#2F80ED") + "\" fill-opacity=\".06\" stroke=\"" + esc(c.vf_off_color || "#2F80ED") + "\" stroke-width=\"" + clamp036(c.vf_off_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"");
+            if (markup) local.push(markup);
+          }
+        } else {
+          for (const polygon of map.vf_off_areas || []) {
+            const points = rawPoints036(polygon);
+            if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.vf_off_color || "#2F80ED") + "\" fill-opacity=\".06\" stroke=\"" + esc(c.vf_off_color || "#2F80ED") + "\" stroke-width=\"" + clamp036(c.vf_off_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+          }
         }
       }
       if (c.show_channels !== false) {
-        for (const channel of map.channels || []) {
-          const points = rawPoints036(channel?.points);
-          if (points) local.push("<polyline points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(c.channel_color || "#808080") + "\" stroke-width=\"" + clamp036(c.channel_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-opacity=\".58\" stroke-linecap=\"round\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+        if (Array.isArray(preparedLayers?.channels)) {
+          for (const channel of preparedLayers.channels) {
+            const markup = localPath(channel, "fill=\"none\" stroke=\"" + esc(c.channel_color || "#808080") + "\" stroke-width=\"" + clamp036(c.channel_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-opacity=\".58\" stroke-linecap=\"round\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"");
+            if (markup) local.push(markup);
+          }
+        } else {
+          for (const channel of map.channels || []) {
+            const points = rawPoints036(channel?.points);
+            if (points) local.push("<polyline points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(c.channel_color || "#808080") + "\" stroke-width=\"" + clamp036(c.channel_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-opacity=\".58\" stroke-linecap=\"round\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+          }
         }
       }
       if (c.show_gate_areas !== false) {
-        for (const gate of payload?.gate_areas || []) {
-          const polygon = rawPoints036(gate?.polygon);
-          if (polygon && (Array.isArray(gate?.polygon) ? gate.polygon.length : 0) >= 3) {
-            local.push("<polygon points=\"" + polygon + "\" fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
-            continue;
+        if (Array.isArray(preparedLayers?.gate_areas)) {
+          for (const gate of preparedLayers.gate_areas) {
+            const markup = localPath(gate, "fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"");
+            if (markup) local.push(markup);
           }
-          const x1 = finite036(gate?.x_min, null), x2 = finite036(gate?.x_max, null), y1 = finite036(gate?.y_min, null), y2 = finite036(gate?.y_max, null);
-          if ([x1, x2, y1, y2].every((value) => value !== null)) local.push("<rect x=\"" + Math.min(x1, x2).toFixed(4) + "\" y=\"" + Math.min(y1, y2).toFixed(4) + "\" width=\"" + Math.abs(x2 - x1).toFixed(4) + "\" height=\"" + Math.abs(y2 - y1).toFixed(4) + "\" fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+        } else {
+          for (const gate of payload?.gate_areas || []) {
+            const polygon = rawPoints036(gate?.polygon);
+            if (polygon && (Array.isArray(gate?.polygon) ? gate.polygon.length : 0) >= 3) {
+              local.push("<polygon points=\"" + polygon + "\" fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+              continue;
+            }
+            const x1 = finite036(gate?.x_min, null), x2 = finite036(gate?.x_max, null), y1 = finite036(gate?.y_min, null), y2 = finite036(gate?.y_max, null);
+            if ([x1, x2, y1, y2].every((value) => value !== null)) local.push("<rect x=\"" + Math.min(x1, x2).toFixed(4) + "\" y=\"" + Math.min(y1, y2).toFixed(4) + "\" width=\"" + Math.abs(x2 - x1).toFixed(4) + "\" height=\"" + Math.abs(y2 - y1).toFixed(4) + "\" fill=\"" + esc(c.gate_area_color || "#8e24aa") + "\" fill-opacity=\".14\" stroke=\"" + esc(c.gate_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.gate_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+          }
         }
       }
       if (c.show_custom_areas !== false) {
-        for (const area of payload?.custom_areas || []) {
-          const points = rawPoints036(area?.polygon);
-          if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.custom_area_color || "#8e24aa") + "\" fill-opacity=\"" + clamp036(c.custom_area_fill_opacity, 0, 1).toFixed(2) + "\" stroke=\"" + esc(c.custom_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.custom_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+        if (Array.isArray(preparedLayers?.custom_areas)) {
+          for (const area of preparedLayers.custom_areas) {
+            const markup = localPath(area, "fill=\"" + esc(c.custom_area_color || "#8e24aa") + "\" fill-opacity=\"" + clamp036(c.custom_area_fill_opacity, 0, 1).toFixed(2) + "\" stroke=\"" + esc(c.custom_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.custom_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"");
+            if (markup) local.push(markup);
+          }
+        } else {
+          for (const area of payload?.custom_areas || []) {
+            const points = rawPoints036(area?.polygon);
+            if (points) local.push("<polygon points=\"" + points + "\" fill=\"" + esc(c.custom_area_color || "#8e24aa") + "\" fill-opacity=\"" + clamp036(c.custom_area_fill_opacity, 0, 1).toFixed(2) + "\" stroke=\"" + esc(c.custom_area_color || "#8e24aa") + "\" stroke-width=\"" + clamp036(c.custom_area_stroke_width, 0.5, 12).toFixed(2) + "\" stroke-dasharray=\"10 6\" vector-effect=\"non-scaling-stroke\"/>");
+          }
         }
       }
 
@@ -10638,7 +10751,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       const mower = mowerMarkup036(card, member, matrix);
       if (mower) rootMowers.push(mower);
 
-      const station = map.station;
+      const station = preparedStatic?.station || map.station;
       if (station && Number.isFinite(Number(station.x)) && Number.isFinite(Number(station.y))) {
         const screen = transformPoint036(matrix, Number(station.x), Number(station.y));
         if (typeof card._station === "function") dockMarkers.push(card._station(screen[0], screen[1]));

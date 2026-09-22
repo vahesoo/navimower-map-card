@@ -8,6 +8,9 @@ globalThis.customElements = {
   get(name) { return registry.get(name); },
 };
 globalThis.window = { customCards: [] };
+// The v0.3 History runtime is intentionally browser-only. Presence of document
+// is enough to install that cumulative patch; this test does not need real DOM.
+globalThis.document = {};
 globalThis.Event = class {
   constructor(type, options = {}) { this.type = type; Object.assign(this, options); }
 };

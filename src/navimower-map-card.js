@@ -535,6 +535,10 @@ var NavimowerMapCard = class extends HTMLElement {
       this._preparedLiveResourceId = null;
       this._preparedLiveLoading = false;
       this._preparedLiveManifestAt = 0;
+      this._preparedLiveManifestIntervalOverrideMs = null;
+      this._preparedLiveTailPayload = null;
+      this._preparedLiveTailLocal = [];
+      this._preparedLiveLifecycleKey = null;
       this._activeSessionDrawable = false;
       this._trail = [];
       this._trailSession = null;
@@ -1448,7 +1452,69 @@ var NavimowerMapCard = class extends HTMLElement {
     if (![a, d, x0, y0].every(Number.isFinite) || Math.abs(a) < 1e-9 || Math.abs(d) < 1e-9) return "";
     return `matrix(${[a, 0, 0, d, x0, y0].map((value) => value.toFixed(8)).join(" ")})`;
   }
+  _preparedLiveTailOnlySupported(payload = this._mapPayload) {
+    return Boolean(payload?.prepared_render_model?.capabilities?.live_route_tail_only_query);
+  }
+  _preparedLiveManifestIntervalMs(payload = this._mapPayload) {
+    const advertised = finiteNumber(payload?.prepared_render_model?.live_route_min_interval_s, null);
+    const override = finiteNumber(this._preparedLiveManifestIntervalOverrideMs, null);
+    const seconds = advertised !== null ? advertised : override !== null ? override / 1000 : null;
+    return seconds !== null
+      ? Math.max(PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS, seconds * 1000)
+      : PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS;
+  }
+  _preparedLiveMapRequestPath(apiPath) {
+    const text = String(apiPath || "");
+    if (!text || !this._preparedLiveTailOnlySupported()) return text;
+    if (/[?&]prepared_live_tail_only=/.test(text)) return text;
+    return text + (text.includes("?") ? "&" : "?") + "prepared_live_tail_only=1";
+  }
+  _preparedLiveTailNeedsResource(payload = this._mapPayload) {
+    const tail = payload?.prepared_live_tail;
+    if (!tail?.usable || !tail.base_resource_id) return false;
+    return String(tail.base_resource_id) !== String(this._preparedLiveResourceId || "");
+  }
+  _appendPreparedLiveTailPoint(point) {
+    const tail = this._preparedLiveTailPayload;
+    if (!tail?.usable || !Array.isArray(point) || point.length < 2) return;
+    const normalized = [Number(point[0]), Number(point[1])];
+    if (!normalized.every(Number.isFinite)) return;
+    const backendSegments = this._normalizeTrailSegments(tail.segments, []);
+    const lastBackend = backendSegments.at(-1)?.at(-1) || null;
+    const lastLocal = this._preparedLiveTailLocal?.at(-1) || lastBackend;
+    if (lastLocal && Math.hypot(normalized[0] - lastLocal[0], normalized[1] - lastLocal[1]) < 0.12) return;
+    if (!Array.isArray(this._preparedLiveTailLocal)) this._preparedLiveTailLocal = [];
+    this._preparedLiveTailLocal.push(normalized);
+    if (this._preparedLiveTailLocal.length > 256) this._preparedLiveTailLocal.splice(0, this._preparedLiveTailLocal.length - 256);
+  }
   _preparedLiveTailSegments(model = this._preparedLiveModel) {
+    const contract = this._preparedLiveTailPayload || this._mapPayload?.prepared_live_tail;
+    const currentSession = finiteNumber(this._mapPayload?.trail_session, this._trailSession);
+    const contractSession = finiteNumber(contract?.trail_session, null);
+    const baseMatches = Boolean(
+      contract?.usable
+      && contract?.base_resource_id
+      && String(contract.base_resource_id) === String(this._preparedLiveResourceId || "")
+      && (currentSession === null || contractSession === null || Number(currentSession) === Number(contractSession))
+    );
+    if (baseMatches) {
+      const tail = this._normalizeTrailSegments(contract.segments, []).map((segment) => segment.map((point) => [...point]));
+      for (const point of this._preparedLiveTailLocal || []) {
+        let current = tail.at(-1);
+        if (!current) {
+          current = [];
+          tail.push(current);
+        }
+        const previous = current.at(-1);
+        if (previous && (point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2 > 25) {
+          current = [];
+          tail.push(current);
+        }
+        const last = current.at(-1);
+        if (!last || last[0] !== point[0] || last[1] !== point[1]) current.push(point);
+      }
+      return tail.filter((segment) => segment.length >= 2);
+    }
     const source = this._activeTrailSegments();
     let remaining = Math.max(0, Math.floor(finiteNumber(model?.point_count, 0)));
     const tail = [];
@@ -1472,13 +1538,21 @@ var NavimowerMapCard = class extends HTMLElement {
     if (!manifestUrl || Number(discovery?.schema_version ?? 1) !== 1) return;
     const now = Date.now();
     if (this._preparedLiveLoading) return;
-    if (!force && now - Number(this._preparedLiveManifestAt || 0) < PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS) return;
+    const manifestIntervalMs = this._preparedLiveManifestIntervalMs();
+    if (!force && now - Number(this._preparedLiveManifestAt || 0) < manifestIntervalMs) return;
     const generation = Number(this._preparedLiveGeneration || 0);
     this._preparedLiveLoading = true;
     this._preparedLiveManifestAt = now;
     try {
       const manifest = await this._hass.callApi("GET", this._preparedApiPath(manifestUrl));
       if (generation !== Number(this._preparedLiveGeneration || 0)) return;
+      const advertisedSeconds = finiteNumber(manifest?.live_route_min_interval_s, null);
+      if (advertisedSeconds !== null) {
+        this._preparedLiveManifestIntervalOverrideMs = Math.max(
+          PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS,
+          advertisedSeconds * 1000
+        );
+      }
       const descriptor = manifest?.live_route;
       if (!descriptor?.resource_id || !descriptor?.url) return;
       const resourceId = String(descriptor.resource_id);
@@ -1552,7 +1626,8 @@ var NavimowerMapCard = class extends HTMLElement {
     this._loadError = null;
     this._queueRender({ message: true });
     try {
-      const path = String(apiPath).replace(/^\/api\//, "").replace(/^\/+/, "");
+      const requestPath = this._preparedLiveMapRequestPath(apiPath);
+      const path = String(requestPath).replace(/^\/api\//, "").replace(/^\/+/, "");
       const payload = await this._hass.callApi("GET", path);
       const nextPayload = payload || {};
       const cachedAt = Date.now();
@@ -1572,6 +1647,16 @@ var NavimowerMapCard = class extends HTMLElement {
     sourcePayload = this._mapPreV030?.(sourcePayload) || sourcePayload;
     const nextPayload = { ...sourcePayload || {} };
     const payloadSession = finiteNumber(nextPayload.trail_session, finiteNumber(attrs.trail_session, 0));
+    const lifecycleKey = [
+      payloadSession,
+      String(nextPayload.activity || ""),
+      String(nextPayload.current_physical_zone_id ?? nextPayload.current_physical_zone ?? ""),
+      Boolean(nextPayload.trail_active)
+    ].join("|");
+    const forcePreparedLive = this._preparedLiveLifecycleKey !== null && lifecycleKey !== this._preparedLiveLifecycleKey;
+    this._preparedLiveLifecycleKey = lifecycleKey;
+    this._preparedLiveTailPayload = nextPayload.prepared_live_tail || null;
+    this._preparedLiveTailLocal = [];
     const backendSegments = this._normalizeTrailSegments(nextPayload.trail_segments, []);
     const flatBackendTrail = backendSegments.flatMap((segment) => segment);
     const directTrail = this._normalizePoints(nextPayload.trail);
@@ -1620,7 +1705,9 @@ var NavimowerMapCard = class extends HTMLElement {
     this._applyInitialView(false);
     this._mapPostV030?.(sourcePayload);
     void this._maybeLoadPreparedStatic?.();
-    void this._maybeLoadPreparedLive?.();
+    void this._maybeLoadPreparedLive?.(
+      forcePreparedLive || this._preparedLiveTailNeedsResource?.(nextPayload)
+    );
   }
   _normalizePoints(raw) {
     if (!Array.isArray(raw)) return [];
@@ -2130,7 +2217,9 @@ var NavimowerMapCard = class extends HTMLElement {
       if (key !== this._lastPointKey) {
         const priorPoint = this._trail.at(-1);
         if (!priorPoint || Math.hypot(next.x - priorPoint[0], next.y - priorPoint[1]) >= 0.12) {
-          this._trail.push([next.x, next.y]);
+          const livePoint = [next.x, next.y];
+          this._trail.push(livePoint);
+          this._appendPreparedLiveTailPoint?.(livePoint);
           this._trimTrail();
           trailChanged = true;
           if (!this._activeSessionDrawable && this._trail.length >= 2) {
@@ -9951,11 +10040,16 @@ const VISUAL_DEFAULTS = Object.freeze({
 
   const apiPath036 = (path) => String(path || "").replace(/^\/api\//, "").replace(/^\/+/, "");
 
-  const addLightweightQuery036 = (path) => {
+  const preparedLiveTailOnlySupported036 = (payload) =>
+    Boolean(payload?.prepared_render_model?.capabilities?.live_route_tail_only_query);
+
+  const addLightweightQuery036 = (path, tailOnly = false) => {
     const text = String(path || "");
     if (!text) return text;
     const separator = text.includes("?") ? "&" : "?";
-    return text + separator + "include_sessions=0&include_" + "daily" + "_trails=0&include_current_cycle=0";
+    return text + separator
+      + "include_sessions=0&include_" + "daily" + "_trails=0&include_current_cycle=0"
+      + (tailOnly ? "&prepared_live_tail_only=1" : "");
   };
 
   const anchorEntry036 = (card) => {
@@ -10205,7 +10299,22 @@ const VISUAL_DEFAULTS = Object.freeze({
     return model;
   };
 
-  const preparedLiveTailSegments036 = (model, segments) => {
+  const preparedLiveTailSegments036 = (card, member, payload, model, segments) => {
+    if (String(member?.entry_id) === String(anchorEntry036(card)) && typeof card?._preparedLiveTailSegments === "function") {
+      return card._preparedLiveTailSegments(model);
+    }
+    const state = memberState036(card, member?.entry_id);
+    const contract = payload?.prepared_live_tail;
+    const currentSession = finite036(payload?.trail_session, null);
+    const contractSession = finite036(contract?.trail_session, null);
+    if (
+      contract?.usable
+      && contract?.base_resource_id
+      && String(contract.base_resource_id) === String(state?.preparedLiveResourceId || "")
+      && (currentSession === null || contractSession === null || Number(currentSession) === Number(contractSession))
+    ) {
+      return normalizeLiveTrailSegments036(contract.segments);
+    }
     let remaining = Math.max(0, Math.floor(finite036(model?.point_count, 0)));
     const tail = [];
     for (const segment of segments || []) {
@@ -10222,19 +10331,35 @@ const VISUAL_DEFAULTS = Object.freeze({
     return tail;
   };
 
-  async function refreshMemberPreparedLive036(card, member, generation = currentGeneration036(card)) {
+  async function refreshMemberPreparedLive036(card, member, generation = currentGeneration036(card), force = false) {
     const state = memberState036(card, member.entry_id);
     const payload = state.map;
     const manifestPath = memberPreparedManifestPath036(member, payload);
     if (!payload || !manifestPath || !card?._hass?.callApi) return;
     const now = Date.now();
     if (state.preparedLiveLoading) return;
-    if (now - finite036(state.preparedLiveManifestAt, 0) < PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS) return;
+    const advertisedSeconds = finite036(
+      payload?.prepared_render_model?.live_route_min_interval_s,
+      finite036(state.preparedLiveManifestIntervalMs, null) !== null
+        ? finite036(state.preparedLiveManifestIntervalMs, null) / 1000
+        : null
+    );
+    const manifestIntervalMs = advertisedSeconds !== null
+      ? Math.max(PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS, advertisedSeconds * 1000)
+      : PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS;
+    if (!force && now - finite036(state.preparedLiveManifestAt, 0) < manifestIntervalMs) return;
     state.preparedLiveLoading = true;
     state.preparedLiveManifestAt = now;
     try {
       const manifest = await callApi036(card, manifestPath);
       if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id) || state.map !== payload) return;
+      const manifestSeconds = finite036(manifest?.live_route_min_interval_s, null);
+      if (manifestSeconds !== null) {
+        state.preparedLiveManifestIntervalMs = Math.max(
+          PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS,
+          manifestSeconds * 1000
+        );
+      }
       const descriptor = manifest?.live_route;
       if (!descriptor?.resource_id || !descriptor?.url) return;
       const resourceId = String(descriptor.resource_id);
@@ -10383,7 +10508,10 @@ const VISUAL_DEFAULTS = Object.freeze({
     const path = memberMapPath036(member);
     if (!path) return;
     try {
-      const payload = await callApi036(card, addLightweightQuery036(path));
+      const payload = await callApi036(
+        card,
+        addLightweightQuery036(path, preparedLiveTailOnlySupported036(state.map))
+      );
       if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return;
       if (payload) {
         const current = state.map?.current_cycle_render;
@@ -10396,7 +10524,15 @@ const VISUAL_DEFAULTS = Object.freeze({
       state.error = null;
       renderMultiMap036(card);
       void refreshMemberPreparedStatic036(card, member, generation);
-      void refreshMemberPreparedLive036(card, member, generation);
+      const tailBase = state.map?.prepared_live_tail?.usable
+        ? String(state.map.prepared_live_tail.base_resource_id || "")
+        : "";
+      void refreshMemberPreparedLive036(
+        card,
+        member,
+        generation,
+        Boolean(tailBase && tailBase !== String(state.preparedLiveResourceId || ""))
+      );
       void refreshMemberCurrentCycle036(card, member, generation);
     } catch (error) {
       if (generationMatches036(card, generation)) state.error = error;
@@ -10641,7 +10777,7 @@ const VISUAL_DEFAULTS = Object.freeze({
   const liveTrailSignature036 = (card, member, payload) => {
     const raw = liveTrailSegments036(card, member, payload);
     const prepared = memberPreparedLive036(card, member, payload);
-    const segments = prepared ? preparedLiveTailSegments036(prepared, raw) : raw;
+    const segments = prepared ? preparedLiveTailSegments036(card, member, payload, prepared, raw) : raw;
     const tail = segments.map((segment) => {
       const last = segment.at(-1) || [];
       return segment.length + ":" + Number(last[0] || 0).toFixed(3) + "," + Number(last[1] || 0).toFixed(3);
@@ -10903,7 +11039,7 @@ const VISUAL_DEFAULTS = Object.freeze({
             const path = String(row?.path_d || "");
             if (path) local.push("<path class=\"nm-multi-live-trail nm-prepared-live-route\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
           }
-          for (const segment of preparedLiveTailSegments036(preparedLive, rawLiveSegments)) {
+          for (const segment of preparedLiveTailSegments036(card, member, payload, preparedLive, rawLiveSegments)) {
             const points = rawPoints036(segment);
             if (points) local.push("<polyline class=\"nm-multi-live-trail nm-live-tail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
           }

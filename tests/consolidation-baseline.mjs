@@ -25,9 +25,11 @@ assert.ok(!source.includes('NAVIMOWER_MAP_CARD_VERSION = "0.2.2"'), "legacy core
 assert.match(source, /SCHEDULE_CLOSE_DELAY_MS = 2500/, "successful schedule save must retain the 2.5 s close delay");
 assert.match(source, /_v034sScheduleCloseTimer/, "schedule close timer cleanup must stay in the cumulative runtime");
 
-// Final upper bounds for the consolidated runtime. Normalize only the release
+// Upper bounds for the consolidated runtime. Normalize only the release
 // version text so beta number width cannot look like production code growth.
-assert.ok(normalizedSource.length <= 817343, `runtime grew after consolidation: ${normalizedSource.length} normalized chars`);
+// beta11 deliberately adds the Prepared Render Model static/layout client for
+// Single + Multi mower without adding another wrapper/IIFE chain.
+assert.ok(normalizedSource.length <= 844000, `runtime grew beyond beta11 feature budget: ${normalizedSource.length} normalized chars`);
 assert.ok(sourceSections.length <= 12, `source section count grew: ${sourceSections.length}`);
 assert.ok(patchMarkers.size <= 43, `runtime patch marker count grew: ${patchMarkers.size}`);
 assert.ok(iifes.length <= 50, `runtime patch IIFE count grew: ${iifes.length}`);

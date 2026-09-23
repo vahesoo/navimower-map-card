@@ -861,8 +861,8 @@ var NavimowerMapCard = class extends HTMLElement {
         .nm-session.nm-session-pulsing { color: var(--primary-text-color); }
         .nm-session-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
         .nm-session-note { opacity: .75; }
-        .nm-session-highlight { pointer-events: none; }
-        .nm-session-highlight .nm-session-selected {
+        .nm-highlight { pointer-events: none; }
+        .nm-highlight .nm-session-selected {
           animation: nm-session-glow-pulse 720ms ease-in-out 3 forwards;
           transform-box: fill-box;
           transform-origin: center;

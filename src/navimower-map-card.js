@@ -8,6 +8,7 @@ var STATIC_MAP_CACHE = /* @__PURE__ */ new Map();
 var PREPARED_STATIC_RESOURCE_CACHE = /* @__PURE__ */ new Map();
 var PREPARED_STATIC_CACHE_LIMIT = 12;
 var PREPARED_LIVE_RESOURCE_CACHE = /* @__PURE__ */ new Map();
+var PREPARED_SEMANTIC_LIVE_RESOURCE_CACHE = /* @__PURE__ */ new Map();
 var PREPARED_LIVE_CACHE_LIMIT = 32;
 var PREPARED_LIVE_MANIFEST_MIN_INTERVAL_MS = 1800;
 var CARD_TEMPLATE = null;
@@ -1437,6 +1438,19 @@ var NavimowerMapCard = class extends HTMLElement {
     if (currentSession !== null && preparedSession !== null && Number(currentSession) !== Number(preparedSession)) return false;
     return true;
   }
+  _preparedSemanticLiveCompatible(model = this._preparedSemanticLiveModel) {
+    if (!model || model.scope !== "live_semantic_route_render_model" || Number(model.schema_version) !== 1) return false;
+    if (model.available === false) return false;
+    const contract = this._preparedSemanticLiveTailPayload || this._mapPayload?.prepared_live_semantic_tail;
+    const expectedSession = contract?.base_session_id
+      ?? contract?.session_id
+      ?? this._mapPayload?.active_session?.id
+      ?? this._mapPayload?.active_session_id
+      ?? null;
+    if (expectedSession !== null && expectedSession !== undefined && model.session_id
+        && String(expectedSession) !== String(model.session_id)) return false;
+    return Array.isArray(model.cutting_segments) && Array.isArray(model.travel_segments);
+  }
   _preparedLiveTransform() {
     const matrix = Array.isArray(this._layout?.preparedMatrix) ? this._layout.preparedMatrix.map(Number) : null;
     if (matrix?.length >= 6 && matrix.every(Number.isFinite)) {
@@ -1455,6 +1469,13 @@ var NavimowerMapCard = class extends HTMLElement {
   _preparedLiveTailOnlySupported(payload = this._mapPayload) {
     return Boolean(payload?.prepared_render_model?.capabilities?.live_route_tail_only_query);
   }
+  _preparedSemanticLiveTailOnlySupported(payload = this._mapPayload) {
+    const capabilities = payload?.prepared_render_model?.capabilities || {};
+    return Boolean(
+      capabilities.live_semantic_route_resource
+      && capabilities.live_semantic_tail_only_query
+    );
+  }
   _preparedLiveManifestIntervalMs(payload = this._mapPayload) {
     const advertised = finiteNumber(payload?.prepared_render_model?.live_route_min_interval_s, null);
     const override = finiteNumber(this._preparedLiveManifestIntervalOverrideMs, null);
@@ -1465,7 +1486,12 @@ var NavimowerMapCard = class extends HTMLElement {
   }
   _preparedLiveMapRequestPath(apiPath) {
     const text = String(apiPath || "");
-    if (!text || !this._preparedLiveTailOnlySupported()) return text;
+    if (!text) return text;
+    if (this._preparedSemanticLiveTailOnlySupported()) {
+      if (/[?&]prepared_live_semantic_tail_only=/.test(text)) return text;
+      return text + (text.includes("?") ? "&" : "?") + "prepared_live_semantic_tail_only=1";
+    }
+    if (!this._preparedLiveTailOnlySupported()) return text;
     if (/[?&]prepared_live_tail_only=/.test(text)) return text;
     return text + (text.includes("?") ? "&" : "?") + "prepared_live_tail_only=1";
   }
@@ -1473,6 +1499,23 @@ var NavimowerMapCard = class extends HTMLElement {
     const tail = payload?.prepared_live_tail;
     if (!tail?.usable || !tail.base_resource_id) return false;
     return String(tail.base_resource_id) !== String(this._preparedLiveResourceId || "");
+  }
+  _preparedSemanticLiveTailNeedsResource(payload = this._mapPayload) {
+    const tail = payload?.prepared_live_semantic_tail;
+    if (!tail?.usable || !tail.base_resource_id) return false;
+    return String(tail.base_resource_id) !== String(this._preparedSemanticLiveResourceId || "");
+  }
+  _preparedSemanticLiveTailRows() {
+    const tail = this._preparedSemanticLiveTailPayload || this._mapPayload?.prepared_live_semantic_tail;
+    if (!tail?.usable || !tail.base_resource_id) return null;
+    if (String(tail.base_resource_id) !== String(this._preparedSemanticLiveResourceId || "")) return null;
+    const modelSession = this._preparedSemanticLiveModel?.session_id;
+    const baseSession = tail.base_session_id ?? tail.session_id ?? null;
+    if (modelSession && baseSession && String(modelSession) !== String(baseSession)) return null;
+    return {
+      cutting: Array.isArray(tail.cutting_segments) ? tail.cutting_segments : [],
+      travel: Array.isArray(tail.travel_segments) ? tail.travel_segments : [],
+    };
   }
   _appendPreparedLiveTailPoint(point) {
     const tail = this._preparedLiveTailPayload;
@@ -1553,6 +1596,28 @@ var NavimowerMapCard = class extends HTMLElement {
           advertisedSeconds * 1000
         );
       }
+
+      const preferSemantic = this._preparedSemanticLiveTailOnlySupported();
+      const semanticDescriptor = preferSemantic ? manifest?.live_semantic_route : null;
+      if (semanticDescriptor?.resource_id && semanticDescriptor?.url) {
+        const resourceId = String(semanticDescriptor.resource_id);
+        if (resourceId === this._preparedSemanticLiveResourceId && this._preparedSemanticLiveCompatible()) return;
+        let model = PREPARED_SEMANTIC_LIVE_RESOURCE_CACHE.get(resourceId) || null;
+        if (!model) {
+          model = await this._hass.callApi("GET", this._preparedApiPath(semanticDescriptor.url));
+          if (generation !== Number(this._preparedLiveGeneration || 0)) return;
+          if (!this._preparedSemanticLiveCompatible(model)) return;
+          cacheSet(PREPARED_SEMANTIC_LIVE_RESOURCE_CACHE, resourceId, model, PREPARED_LIVE_CACHE_LIMIT);
+        } else if (!this._preparedSemanticLiveCompatible(model)) {
+          return;
+        }
+        this._preparedSemanticLiveModel = model;
+        this._preparedSemanticLiveResourceId = resourceId;
+        this._trailRenderKey = null;
+        this._queueRender({ trail: true });
+        return;
+      }
+
       const descriptor = manifest?.live_route;
       if (!descriptor?.resource_id || !descriptor?.url) return;
       const resourceId = String(descriptor.resource_id);
@@ -1656,6 +1721,7 @@ var NavimowerMapCard = class extends HTMLElement {
     const forcePreparedLive = this._preparedLiveLifecycleKey !== null && lifecycleKey !== this._preparedLiveLifecycleKey;
     this._preparedLiveLifecycleKey = lifecycleKey;
     this._preparedLiveTailPayload = nextPayload.prepared_live_tail || null;
+    this._preparedSemanticLiveTailPayload = nextPayload.prepared_live_semantic_tail || null;
     this._preparedLiveTailLocal = [];
     const backendSegments = this._normalizeTrailSegments(nextPayload.trail_segments, []);
     const flatBackendTrail = backendSegments.flatMap((segment) => segment);
@@ -1706,7 +1772,9 @@ var NavimowerMapCard = class extends HTMLElement {
     this._mapPostV030?.(sourcePayload);
     void this._maybeLoadPreparedStatic?.();
     void this._maybeLoadPreparedLive?.(
-      forcePreparedLive || this._preparedLiveTailNeedsResource?.(nextPayload)
+      forcePreparedLive
+      || this._preparedSemanticLiveTailNeedsResource?.(nextPayload)
+      || this._preparedLiveTailNeedsResource?.(nextPayload)
     );
   }
   _normalizePoints(raw) {
@@ -2285,6 +2353,53 @@ var NavimowerMapCard = class extends HTMLElement {
       if (this._trailEl) this._trailEl.innerHTML = "";
       return;
     }
+
+    const semantic = this._preparedSemanticLiveCompatible?.() ? this._preparedSemanticLiveModel : null;
+    const semanticTransform = semantic ? this._preparedLiveTransform?.() || "" : "";
+    const semanticTail = semantic ? this._preparedSemanticLiveTailRows?.() : null;
+    if (semantic && semanticTransform && semanticTail) {
+      const cutting = [
+        ...(Array.isArray(semantic.cutting_segments) ? semantic.cutting_segments : []),
+        ...semanticTail.cutting,
+      ].filter((row) => String(row?.path_d || "").trim());
+      const travel = [
+        ...(Array.isArray(semantic.travel_segments) ? semantic.travel_segments : []),
+        ...semanticTail.travel,
+      ].filter((row) => String(row?.path_d || "").trim());
+      const semanticSignature = [
+        this._preparedSemanticLiveResourceId || "",
+        this._preparedSemanticLiveTailPayload?.current_point_count ?? "",
+        this._preparedSemanticLiveTailPayload?.point_count ?? "",
+        cutting.length,
+        travel.length,
+      ].join(":");
+      const renderKey = [
+        this._historyDayOffset ?? "today",
+        this._trailSession,
+        this._config.trail_color,
+        this._config.trail_opacity,
+        this._layout.scale,
+        "semantic-live",
+        semanticSignature,
+      ].join("|");
+      if (renderKey === this._trailRenderKey) return;
+      this._trailRenderKey = renderKey;
+
+      const width = trailWidth034(this);
+      const travelWidth = Math.max(2, Math.min(width, finiteNumber(this._layout?.scale, 1) * 0.08));
+      const opacity = clamp(finiteNumber(this._config.trail_opacity, 0.55), 0, 1).toFixed(2);
+      const sessionId2 = semantic.session_id ?? this._trailSession ?? 0;
+      const sessionAttr = escapeHtml(String(sessionId2));
+      const color = escapeHtml(this._config.trail_color);
+      const pathMarkup = (rows, cssClass, strokeWidth) => rows.map(
+        (row) => `<path class="nm-session-path ${cssClass}" data-session-id="${sessionAttr}" d="${escapeHtml(String(row.path_d))}" transform="${semanticTransform}" fill="none" stroke="${color}" stroke-width="${strokeWidth.toFixed(1)}" stroke-opacity="${opacity}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`
+      ).join("");
+      this._trailEl.innerHTML =
+        pathMarkup(cutting, "nm-semantic-live-cutting", width)
+        + pathMarkup(travel, "nm-semantic-live-travel", travelWidth);
+      return;
+    }
+
     const prepared = this._preparedLiveCompatible?.() ? this._preparedLiveModel : null;
     const preparedSegments = prepared && Array.isArray(prepared.segments) ? prepared.segments.filter((row) => String(row?.path_d || "").trim()) : [];
     const transform = preparedSegments.length ? this._preparedLiveTransform?.() || "" : "";
@@ -10146,13 +10261,25 @@ const VISUAL_DEFAULTS = Object.freeze({
   const preparedLiveTailOnlySupported036 = (payload) =>
     Boolean(payload?.prepared_render_model?.capabilities?.live_route_tail_only_query);
 
-  const addLightweightQuery036 = (path, tailOnly = false) => {
+  const preparedSemanticLiveSupported036 = (payload) => {
+    const capabilities = payload?.prepared_render_model?.capabilities || {};
+    return Boolean(
+      capabilities.live_semantic_route_resource
+      && capabilities.live_semantic_tail_only_query
+    );
+  };
+
+  const addLightweightQuery036 = (path, liveMode = "none") => {
     const text = String(path || "");
     if (!text) return text;
     const separator = text.includes("?") ? "&" : "?";
     return text + separator
       + "include_sessions=0&include_" + "daily" + "_trails=0&include_current_cycle=0"
-      + (tailOnly ? "&prepared_live_tail_only=1" : "");
+      + (liveMode === "semantic"
+        ? "&prepared_live_semantic_tail_only=1"
+        : liveMode === "legacy"
+          ? "&prepared_live_tail_only=1"
+          : "");
   };
 
   const anchorEntry036 = (card) => {
@@ -10407,6 +10534,36 @@ const VISUAL_DEFAULTS = Object.freeze({
     return model;
   };
 
+  const memberPreparedSemanticLive036 = (card, member, payload = null) => {
+    const state = memberState036(card, member?.entry_id);
+    const currentPayload = payload || state.map;
+    const model = state?.preparedSemanticLiveModel;
+    if (!model || model.scope !== "live_semantic_route_render_model" || Number(model.schema_version) !== 1 || model.available === false) return null;
+    const tail = currentPayload?.prepared_live_semantic_tail;
+    const expectedSession = tail?.base_session_id
+      ?? tail?.session_id
+      ?? currentPayload?.active_session?.id
+      ?? currentPayload?.active_session_id
+      ?? null;
+    if (expectedSession && model.session_id && String(expectedSession) !== String(model.session_id)) return null;
+    if (!Array.isArray(model.cutting_segments) || !Array.isArray(model.travel_segments)) return null;
+    return model;
+  };
+
+  const preparedSemanticTailRows036 = (card, member, payload) => {
+    const state = memberState036(card, member?.entry_id);
+    const tail = payload?.prepared_live_semantic_tail;
+    if (!tail?.usable || !tail.base_resource_id) return null;
+    if (String(tail.base_resource_id) !== String(state?.preparedSemanticLiveResourceId || "")) return null;
+    const modelSession = state?.preparedSemanticLiveModel?.session_id;
+    const baseSession = tail.base_session_id ?? tail.session_id ?? null;
+    if (modelSession && baseSession && String(modelSession) !== String(baseSession)) return null;
+    return {
+      cutting: Array.isArray(tail.cutting_segments) ? tail.cutting_segments : [],
+      travel: Array.isArray(tail.travel_segments) ? tail.travel_segments : [],
+    };
+  };
+
   const preparedLiveTailSegments036 = (card, member, payload, model, segments) => {
     if (String(member?.entry_id) === String(anchorEntry036(card)) && typeof card?._preparedLiveTailSegments === "function") {
       return card._preparedLiveTailSegments(model);
@@ -10468,6 +10625,26 @@ const VISUAL_DEFAULTS = Object.freeze({
           manifestSeconds * 1000
         );
       }
+
+      const semantic = preparedSemanticLiveSupported036(payload);
+      const semanticDescriptor = semantic ? manifest?.live_semantic_route : null;
+      if (semanticDescriptor?.resource_id && semanticDescriptor?.url) {
+        const resourceId = String(semanticDescriptor.resource_id);
+        if (state.preparedSemanticLiveResourceId === resourceId && memberPreparedSemanticLive036(card, member, payload)) return;
+        let model = PREPARED_SEMANTIC_LIVE_RESOURCE_CACHE.get(resourceId) || null;
+        if (!model) {
+          model = await callApi036(card, semanticDescriptor.url);
+          if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id) || state.map !== payload) return;
+          if (!model || model.scope !== "live_semantic_route_render_model" || Number(model.schema_version) !== 1 || model.available === false) return;
+          cacheSet(PREPARED_SEMANTIC_LIVE_RESOURCE_CACHE, resourceId, model, PREPARED_LIVE_CACHE_LIMIT);
+        }
+        state.preparedSemanticLiveModel = model;
+        state.preparedSemanticLiveResourceId = resourceId;
+        card._multi036MapRenderKey = null;
+        renderMultiMap036(card, true);
+        return;
+      }
+
       const descriptor = manifest?.live_route;
       if (!descriptor?.resource_id || !descriptor?.url) return;
       const resourceId = String(descriptor.resource_id);
@@ -10605,7 +10782,12 @@ const VISUAL_DEFAULTS = Object.freeze({
       state.map = card._mapPayload;
       state.mapAt = Date.now();
       state.error = null;
-      if (card._preparedLiveCompatible?.()) {
+      if (card._preparedSemanticLiveCompatible?.()) {
+        state.preparedSemanticLiveModel = card._preparedSemanticLiveModel;
+        state.preparedSemanticLiveResourceId = card._preparedSemanticLiveResourceId;
+        state.preparedLiveManifestAt = card._preparedLiveManifestAt || state.preparedLiveManifestAt;
+        state.preparedLiveManifestIntervalMs = card._preparedLiveManifestIntervalMs?.() || state.preparedLiveManifestIntervalMs;
+      } else if (card._preparedLiveCompatible?.()) {
         state.preparedLiveModel = card._preparedLiveModel;
         state.preparedLiveResourceId = card._preparedLiveResourceId;
         state.preparedLiveManifestAt = card._preparedLiveManifestAt || state.preparedLiveManifestAt;
@@ -10624,7 +10806,14 @@ const VISUAL_DEFAULTS = Object.freeze({
     try {
       const payload = await callApi036(
         card,
-        addLightweightQuery036(path, preparedLiveTailOnlySupported036(state.map))
+        addLightweightQuery036(
+          path,
+          preparedSemanticLiveSupported036(state.map)
+            ? "semantic"
+            : preparedLiveTailOnlySupported036(state.map)
+              ? "legacy"
+              : "none"
+        )
       );
       if (!generationMatches036(card, generation) || !memberById036(card, member.entry_id)) return;
       if (payload) {
@@ -10638,6 +10827,9 @@ const VISUAL_DEFAULTS = Object.freeze({
       state.error = null;
       renderMultiMap036(card);
       void refreshMemberPreparedStatic036(card, member, generation);
+      const semanticTailBase = state.map?.prepared_live_semantic_tail?.usable
+        ? String(state.map.prepared_live_semantic_tail.base_resource_id || "")
+        : "";
       const tailBase = state.map?.prepared_live_tail?.usable
         ? String(state.map.prepared_live_tail.base_resource_id || "")
         : "";
@@ -10645,7 +10837,11 @@ const VISUAL_DEFAULTS = Object.freeze({
         card,
         member,
         generation,
-        Boolean(tailBase && tailBase !== String(state.preparedLiveResourceId || ""))
+        Boolean(
+          semanticTailBase
+            ? semanticTailBase !== String(state.preparedSemanticLiveResourceId || "")
+            : tailBase && tailBase !== String(state.preparedLiveResourceId || "")
+        )
       );
       void refreshMemberCurrentCycle036(card, member, generation);
     } catch (error) {
@@ -10922,6 +11118,24 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
 
   const liveTrailSignature036 = (card, member, payload) => {
+    const state = memberState036(card, member?.entry_id);
+    const semantic = memberPreparedSemanticLive036(card, member, payload);
+    const semanticTail = semantic ? preparedSemanticTailRows036(card, member, payload) : null;
+    if (semantic && semanticTail) {
+      const rows = [
+        ...semantic.cutting_segments,
+        ...semantic.travel_segments,
+        ...semanticTail.cutting,
+        ...semanticTail.travel,
+      ];
+      return [
+        "semantic",
+        state?.preparedSemanticLiveResourceId || "",
+        payload?.prepared_live_semantic_tail?.current_point_count ?? "",
+        payload?.prepared_live_semantic_tail?.point_count ?? "",
+        rows.length,
+      ].join("|");
+    }
     const raw = liveTrailSegments036(card, member, payload);
     const prepared = memberPreparedLive036(card, member, payload);
     const segments = prepared ? preparedLiveTailSegments036(card, member, payload, prepared, raw) : raw;
@@ -10929,7 +11143,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       const last = segment.at(-1) || [];
       return segment.length + ":" + Number(last[0] || 0).toFixed(3) + "," + Number(last[1] || 0).toFixed(3);
     }).join(";");
-    const resourceId = memberState036(card, member?.entry_id)?.preparedLiveResourceId || "legacy";
+    const resourceId = state?.preparedLiveResourceId || "legacy";
     return resourceId + "|" + tail;
   };
 
@@ -11115,7 +11329,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       const payload = memberState036(card, member.entry_id).map;
       card._zoneArtifactsHandled?.(payload, member.entry_id);
       const state = memberState036(card, member.entry_id);
-      return [member.entry_id, payload?.map?.revision, state?.preparedStaticResourceId || "legacy", card._zoneArtifactsMode?.(member.entry_id), payload?.current_cycle_render?.revision, payload?.trail_revision, state?.preparedLiveResourceId || "legacy-live", liveTrailSignature036(card, member, payload)].join(":");
+      return [member.entry_id, payload?.map?.revision, state?.preparedStaticResourceId || "legacy", card._zoneArtifactsMode?.(member.entry_id), payload?.current_cycle_render?.revision, payload?.trail_revision, state?.preparedSemanticLiveResourceId || state?.preparedLiveResourceId || "legacy-live", liveTrailSignature036(card, member, payload)].join(":");
     }).join("|");
     const key = [mapSignature, card._historyDayOffset, card._multi036SelectedSessionKey, card?._view?.scale, card?._config?.show_zone_labels, card?._config?.avoid_zone_label_overlap, card?._config?.zone_label_font_size, card?._config?.zone_label_opacity, card?._config?.map_legend_scale, card?._config?.show_channels, card?._config?.show_vf_off_areas, card?._config?.show_gate_areas, card?._config?.show_custom_areas, card?._config?.map_background_color, card?._config?.trail_color, card?._config?.trail_opacity].join("|");
     if (key === card._multi036MapRenderKey) {
@@ -11179,21 +11393,37 @@ const VISUAL_DEFAULTS = Object.freeze({
           local.push(renderArchive036({ mowed_area: current.mowed_area, travel: { path_d: "" }, route: { path_d: "" } }, trailColor, trailOpacity, "nm-multi-current-cycle"));
         }
         const liveTrailWidth = memberTrailWidthMeters036(member);
-        const rawLiveSegments = liveTrailSegments036(card, member, payload);
-        const preparedLive = memberPreparedLive036(card, member, payload);
-        if (preparedLive && Array.isArray(preparedLive.segments)) {
-          for (const row of preparedLive.segments) {
+        const semanticLive = memberPreparedSemanticLive036(card, member, payload);
+        const semanticTail = semanticLive ? preparedSemanticTailRows036(card, member, payload) : null;
+        if (semanticLive && semanticTail) {
+          const cuttingRows = [...semanticLive.cutting_segments, ...semanticTail.cutting];
+          const travelRows = [...semanticLive.travel_segments, ...semanticTail.travel];
+          for (const row of cuttingRows) {
             const path = String(row?.path_d || "");
-            if (path) local.push("<path class=\"nm-multi-live-trail nm-prepared-live-route\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+            if (path) local.push("<path class=\"nm-multi-live-trail nm-semantic-live-cutting\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
           }
-          for (const segment of preparedLiveTailSegments036(card, member, payload, preparedLive, rawLiveSegments)) {
-            const points = rawPoints036(segment);
-            if (points) local.push("<polyline class=\"nm-multi-live-trail nm-live-tail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+          const travelWidth = Math.min(liveTrailWidth, 0.08);
+          for (const row of travelRows) {
+            const path = String(row?.path_d || "");
+            if (path) local.push("<path class=\"nm-multi-live-trail nm-semantic-live-travel\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + travelWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
           }
         } else {
-          for (const segment of rawLiveSegments) {
-            const points = rawPoints036(segment);
-            if (points) local.push("<polyline class=\"nm-multi-live-trail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+          const rawLiveSegments = liveTrailSegments036(card, member, payload);
+          const preparedLive = memberPreparedLive036(card, member, payload);
+          if (preparedLive && Array.isArray(preparedLive.segments)) {
+            for (const row of preparedLive.segments) {
+              const path = String(row?.path_d || "");
+              if (path) local.push("<path class=\"nm-multi-live-trail nm-prepared-live-route\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+            }
+            for (const segment of preparedLiveTailSegments036(card, member, payload, preparedLive, rawLiveSegments)) {
+              const points = rawPoints036(segment);
+              if (points) local.push("<polyline class=\"nm-multi-live-trail nm-live-tail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+            }
+          } else {
+            for (const segment of rawLiveSegments) {
+              const points = rawPoints036(segment);
+              if (points) local.push("<polyline class=\"nm-multi-live-trail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+            }
           }
         }
       } else if (!card._multi036SelectedSessionKey) {

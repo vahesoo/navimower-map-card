@@ -862,11 +862,14 @@ var NavimowerMapCard = class extends HTMLElement {
         .nm-session-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
         .nm-session-note { opacity: .75; }
         .nm-session-highlight { pointer-events: none; }
-        .nm-session-highlight polyline { animation: nm-session-route-pulse 600ms ease-in-out 3 forwards; }
-        @keyframes nm-session-route-pulse {
-          0%, 100% { opacity: .06; stroke-width: var(--nm-highlight-width); filter: none; }
-          50% { opacity: 1; stroke-width: var(--nm-highlight-pulse-width);
-            filter: drop-shadow(0 0 7px var(--nm-highlight-color)); }
+        .nm-session-highlight .nm-session-selected {
+          animation: nm-session-glow-pulse 720ms ease-in-out 3 forwards;
+          transform-box: fill-box;
+          transform-origin: center;
+        }
+        @keyframes nm-session-glow-pulse {
+          0%, 100% { opacity: .10; filter: none; }
+          50% { opacity: 1; filter: drop-shadow(0 0 10px var(--nm-highlight-color)); }
         }
         @media (max-width: 480px) {
           ha-card { padding: 10px; }
@@ -2344,7 +2347,7 @@ var NavimowerMapCard = class extends HTMLElement {
     });
   }
   _renderTrail() {
-    if (this._historySelectedSessionId || this._historyDayOffset !== null) {
+    if (this._historyDayOffset !== null) {
       this._trailRenderKey = "history";
       if (this._trailEl) this._trailEl.innerHTML = "";
       return;
@@ -3834,6 +3837,26 @@ function archiveSvg(render, layout, color, opacity, id) {
   }
   return `<g class="nm-session-archive" data-session-id="${safeId}" opacity="${safeOpacity}" transform="${matrix.value}">${parts.join("")}</g>`;
 }
+function archiveHighlightSvg(render, layout, color, id, width = 4) {
+  if (!validArchive(render)) return "";
+  const matrix = layoutMatrix(layout);
+  if (!matrix) return "";
+  const safeColor = escapeHtml2(color || "#43a047");
+  const safeId = escapeHtml2(id);
+  const glowWidth = Math.max(2, finite(width, 4)).toFixed(1);
+  const areaPath = String(render?.mowed_area?.path_d || "").trim();
+  const travelPath = String(render?.travel?.path_d || "").trim();
+  const routePath = String(render?.route?.path_d || "").trim();
+  const parts = [];
+  if (areaPath) {
+    parts.push(`<path class="nm-session-area nm-session-glow-area" d="${escapeHtml2(areaPath)}" fill="${safeColor}" fill-opacity=".12" fill-rule="evenodd" clip-rule="evenodd" stroke="${safeColor}" stroke-width="${glowWidth}" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`);
+  }
+  for (const path of [travelPath, routePath]) {
+    if (path) parts.push(`<path class="nm-session-glow-route" d="${escapeHtml2(path)}" fill="none" stroke="${safeColor}" stroke-width="${glowWidth}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`);
+  }
+  if (!parts.length) return "";
+  return `<g class="nm-session-selected nm-session-archive-glow" data-session-id="${safeId}" style="--nm-highlight-color:${safeColor}" transform="${matrix.value}">${parts.join("")}</g>`;
+}
 function localDayStart(offset = 0) {
   const date = /* @__PURE__ */ new Date();
   date.setHours(0, 0, 0, 0);
@@ -4290,7 +4313,13 @@ function patchCard() {
     const session = this._sessionRecords({ applyLimit: false }).find((item) => String(item.id) === this._historySelectedSessionId);
     if (!session || session.active || !this._highlightEl || !this._layout) return;
     const render = renderEntry(this, session);
-    if (render) this._highlightEl.innerHTML = archiveSvg(render, this._layout, this._config.trail_color, 1, session.id);
+    if (render) this._highlightEl.innerHTML = archiveHighlightSvg(
+      render,
+      this._layout,
+      this._config.trail_color,
+      session.id,
+      Math.min(trailWidth034(this) * 1.35, 12)
+    );
   };
   const originalPulseSessionPath = proto._pulseSessionPath;
   proto._pulseSessionPath = async function patchedPulseSessionPath(requestedId) {
@@ -4313,7 +4342,13 @@ function patchCard() {
     this._highlightEl.innerHTML = "";
     this._sessionsEl?.querySelectorAll(".nm-session-pulsing").forEach((item) => item.classList.remove("nm-session-pulsing"));
     const color = escapeHtml2(this._config.trail_color);
-    const svg = archiveSvg(render, this._layout, this._config.trail_color, 1, session.id);
+    const svg = archiveHighlightSvg(
+      render,
+      this._layout,
+      this._config.trail_color,
+      session.id,
+      Math.min(trailWidth034(this) * 1.35, 12)
+    );
     this._highlightEl.innerHTML = svg;
     const button = [...this._sessionsEl?.querySelectorAll(".nm-session[data-session-id]") || []].find((item) => String(item.dataset.sessionId) === String(requestedId));
     button?.classList.add("nm-session-pulsing");
@@ -11165,6 +11200,22 @@ const VISUAL_DEFAULTS = Object.freeze({
     return parts.length ? "<g class=\"nm-multi-session-render " + esc(cssClass) + "\" opacity=\"" + clamp036(opacity, 0, 1).toFixed(2) + "\">" + parts.join("") + "</g>" : "";
   };
 
+  const renderArchiveGlow036 = (render, color) => {
+    if (!render) return "";
+    const area = String(render?.mowed_area?.path_d || "").trim();
+    const travel = String(render?.travel?.path_d || "").trim();
+    const route = String(render?.route?.path_d || "").trim();
+    const safeColor = esc(color || "#43a047");
+    const parts = [];
+    if (area) parts.push("<path class=\"nm-multi-session-area nm-session-glow-area\" d=\"" + esc(area) + "\" fill=\"" + safeColor + "\" fill-opacity=\".12\" fill-rule=\"evenodd\" clip-rule=\"evenodd\" stroke=\"" + safeColor + "\" stroke-width=\"4\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+    for (const path of [travel, route]) {
+      if (path) parts.push("<path class=\"nm-session-glow-route\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + safeColor + "\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+    }
+    return parts.length
+      ? "<g class=\"nm-multi-session-render nm-multi-selected-session nm-session-selected\" style=\"--nm-highlight-color:" + safeColor + "\">" + parts.join("") + "</g>"
+      : "";
+  };
+
   const zoneLabelItem036 = (card, member, matrix, zone, coverageMap, payload) => {
     const polygon = Array.isArray(zone?.polygon) ? zone.polygon : [];
     const valid = polygon.filter((point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
@@ -11387,7 +11438,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       }
 
       if (card._nmBeta8Clients?.has?.(String(member.entry_id))) local.push('<g data-nm-artifacts-entry="' + esc(member.entry_id) + '" pointer-events="none"></g>');
-      if (!card._multi036SelectedSessionKey && (card._historyDayOffset === null || card._historyDayOffset === undefined)) {
+      if (card._historyDayOffset === null || card._historyDayOffset === undefined) {
         const current = payload?.current_cycle_render;
         if (!card._zoneArtifactsHandled?.(payload, member.entry_id) && current?.scope === "current_cycle") {
           local.push(renderArchive036({ mowed_area: current.mowed_area, travel: { path_d: "" }, route: { path_d: "" } }, trailColor, trailOpacity, "nm-multi-current-cycle"));
@@ -11426,7 +11477,7 @@ const VISUAL_DEFAULTS = Object.freeze({
             }
           }
         }
-      } else if (!card._multi036SelectedSessionKey) {
+      } else {
         const sessions = sessionsForDay036(card, memberState.sessions, card._historyDayOffset);
         for (const session of sessions) {
           const cacheKey = String(member.entry_id) + ":" + sessionId036(session);
@@ -11507,7 +11558,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       const selectedKey = card._multi036SelectedSessionKey;
       if (selectedKey && selectedKey.startsWith(String(member.entry_id) + ":")) {
         const selectedRender = card._multi036RenderCache?.get?.(selectedKey);
-        if (selectedRender) local.push(renderArchive036(selectedRender, trailColor, 1, "nm-multi-selected-session"));
+        if (selectedRender) local.push(renderArchiveGlow036(selectedRender, trailColor));
       }
 
       const mower = mowerMarkup036(card, member, matrix);
@@ -11979,7 +12030,7 @@ const VISUAL_DEFAULTS = Object.freeze({
         ".nm-multi-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.nm-multi-command-grid button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;padding:7px 8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit;font-size:.84rem;font-weight:650;cursor:pointer}.nm-multi-command-grid button:disabled{opacity:.45;cursor:default}.nm-multi-command-grid ha-icon{--mdc-icon-size:19px}",
         ".nm-multi-command-status{padding:6px 4px 0;text-align:center;color:var(--secondary-text-color);font-size:.74rem}.nm-multi-command-status.error{color:var(--error-color,#db4437)}",
         ".nm-sessions.nm-multi-sessions-active{grid-template-columns:1fr!important;gap:7px!important;width:100%}.nm-multi-session-group{display:grid;grid-template-columns:minmax(80px,auto) 1fr;align-items:start;gap:8px 12px;width:100%}.nm-multi-session-heading{padding-top:2px;color:var(--secondary-text-color);font-size:.76rem;font-weight:750}.nm-multi-session-rows{display:flex;flex-wrap:wrap;gap:5px 10px;min-width:0}.nm-multi-session-empty{color:var(--secondary-text-color);font-size:.8rem;opacity:.7}",
-        ".nm-multi-selected-session .nm-multi-session-area{animation:nm-multi-session-pulse 600ms ease-in-out 3 forwards}@keyframes nm-multi-session-pulse{0%,100%{opacity:.1}50%{opacity:1;filter:drop-shadow(0 0 7px var(--nm-highlight-color,#43a047))}}",
+        ".nm-multi-selected-session{animation:nm-multi-session-pulse 720ms ease-in-out 3 forwards}@keyframes nm-multi-session-pulse{0%,100%{opacity:.1;filter:none}50%{opacity:1;filter:drop-shadow(0 0 10px var(--nm-highlight-color,#43a047))}}",
         ".nm-multi-mower-error{filter:drop-shadow(0 0 7px var(--error-color,#db4437))}.nm-multi-notification-mower{flex:0 0 auto;padding:1px 6px;border-radius:10px;background:var(--secondary-background-color);color:var(--primary-text-color);font-weight:700}",
         "@media(max-width:620px){.nm-multi-controls{grid-template-columns:1fr}.nm-multi-session-group{grid-template-columns:1fr;gap:2px}.nm-multi-session-heading{padding-left:4px}.nm-multi-command-grid button span{font-size:.8rem}}"
       ].join("\n");
@@ -15640,11 +15691,6 @@ const VISUAL_DEFAULTS = Object.freeze({
 
   const renderBackendCurrentCycle = (card) => {
     const current = card?._mapPayload?.current_cycle_render;
-    if (card?._historySelectedSessionId) {
-      if (card._historyEl) card._historyEl.innerHTML = "";
-      card._renderSelectedSessionArchive?.();
-      return true;
-    }
     if (card?._historyDayOffset !== null || current?.scope !== "current_cycle") return false;
     if (!card?._historyEl || !card?._layout) return true;
     const area = current?.mowed_area;
@@ -15762,8 +15808,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     proto._renderHistory = function beta6RenderHistory(...args) {
       if (this._renderArtifactsBeta8?.()) return;
       const current = this?._mapPayload?.current_cycle_render;
-      const currentView = !this?._historySelectedSessionId
-        && (this?._historyDayOffset === null || this?._historyDayOffset === undefined)
+      const currentView = (this?._historyDayOffset === null || this?._historyDayOffset === undefined)
         && current?.scope === "current_cycle";
       if (currentView && this?._historyEl && this?._layout) {
         const path = String(current?.mowed_area?.path_d || "").trim();
@@ -15822,8 +15867,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     };
     proto._renderTrail = function beta6RenderTrail(...args) {
       if (
-        this?._historySelectedSessionId
-        || (this?._historyDayOffset !== null && this?._historyDayOffset !== undefined)
+        (this?._historyDayOffset !== null && this?._historyDayOffset !== undefined)
         || !this?._trailEl
         || !this?._layout
       ) {
@@ -16116,8 +16160,8 @@ const VISUAL_DEFAULTS = Object.freeze({
   let maskSequence = 0;
   const plainId = (id) => /^[1-9][0-9]{0,9}$/.test(String(id));
   const basePath = (entry) => "/api/navimower/map/" + encodeURIComponent(entry);
-  const currentView = (card) => !card._historySelectedSessionId && !card._multi036SelectedSessionKey
-    && (card._historyDayOffset === null || card._historyDayOffset === undefined);
+  const currentView = (card) =>
+    card._historyDayOffset === null || card._historyDayOffset === undefined;
   const authKey = (hass) => hass?.connection || hass?.auth || hass;
   const cycles = (payload) => payload?.vendor_trail_debug?.cycle_ids || {};
   const freshness = (payload) => String(payload?.vendor_trail_debug?.current_cycle_key ?? payload?.vendor_trail_revision ?? "");

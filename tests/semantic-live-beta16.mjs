@@ -96,7 +96,7 @@ card._renderTrail();
 assert.match(card._trailEl.innerHTML, /nm-semantic-live-cutting/);
 assert.match(card._trailEl.innerHTML, /nm-semantic-live-travel/);
 assert.match(card._trailEl.innerHTML, /stroke-opacity="0\.55"/);
-assert.match(card._trailEl.innerHTML, /stroke-width="8\.3"/);
+assert.match(card._trailEl.innerHTML, /stroke-width="6\.3"/);
 assert.match(card._trailEl.innerHTML, /stroke-width="2\.0"/);
 assert.ok(
   card._trailEl.innerHTML.indexOf("nm-semantic-live-cutting")

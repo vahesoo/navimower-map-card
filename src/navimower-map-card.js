@@ -3855,7 +3855,7 @@ function archiveHighlightSvg(render, layout, color, id, width = 4) {
     if (path) parts.push(`<path class="nm-session-glow-route" d="${escapeHtml2(path)}" fill="none" stroke="${safeColor}" stroke-width="${glowWidth}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`);
   }
   if (!parts.length) return "";
-  return `<g class="nm-session-selected nm-session-archive-glow" data-session-id="${safeId}" style="--nm-highlight-color:${safeColor}" transform="${matrix.value}">${parts.join("")}</g>`;
+  return `<g class="nm-session-selected nm-session-archive-glow" data-session-id="${safeId}" style="--nm-highlight-color:${safeColor}"><g class="nm-session-glow-geometry" transform="${matrix.value}">${parts.join("")}</g></g>`;
 }
 function localDayStart(offset = 0) {
   const date = /* @__PURE__ */ new Date();

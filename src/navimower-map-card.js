@@ -2245,7 +2245,15 @@ var NavimowerMapCard = class extends HTMLElement {
     const mapState = this._state(this._resolved.map_entity);
     const mapAttrs = mapState?.attributes || {};
     const mowerState2 = this._state(this._mowerEntity());
-    const status = this._text(this._resolved.status_entity, mapAttrs.activity || this._mapPayload?.activity || "unknown");
+    const status = this._text(
+      this._resolved.status_entity,
+      mapAttrs.display_state
+        || this._mapPayload?.display_state
+        || mowerState2?.attributes?.display_state
+        || mapAttrs.activity
+        || this._mapPayload?.activity
+        || "unknown"
+    );
     const normalizedStatus = String(status || "").toLowerCase();
     const mowerActivity = String(mowerState2?.attributes?.activity || mowerState2?.attributes?.state || "").toLowerCase();
     const mapActivity = String(mapAttrs.activity || this._mapPayload?.activity || "").toLowerCase();
@@ -2464,7 +2472,17 @@ var NavimowerMapCard = class extends HTMLElement {
     const parts = [];
     const mapState = this._state(this._resolved.map_entity);
     const mapAttrs = mapState?.attributes || {};
-    const status = this._text(this._resolved.status_entity, mapAttrs.activity || this._mapPayload?.activity || "—");
+    const mowerState = this._state(this._mowerEntity());
+    const status = this._text(
+      this._resolved.status_entity,
+      mapAttrs.display_state
+        || this._mapPayload?.display_state
+        || mowerState?.attributes?.display_state
+        || mapAttrs.activity
+        || this._mapPayload?.activity
+        || mowerState?.state
+        || "—"
+    );
     const zone = this._text(this._resolved.zone_entity, mapAttrs.current_physical_zone || this._mapPayload?.current_physical_zone || "—");
     const battery = this._number(this._resolved.battery_entity);
     const x = this._number(this._resolved.x_entity);
@@ -11585,11 +11603,20 @@ const VISUAL_DEFAULTS = Object.freeze({
     return !text || ["unknown", "unavailable", "none"].includes(text.toLowerCase()) ? null : text;
   };
 
+  const memberDisplayState036 = (card, member, mower) => {
+    const payload = memberState036(card, member?.entry_id).map || {};
+    return cleanMemberText036(
+      payload?.display_state
+      || mower?.attributes?.display_state
+      || mower?.state
+    );
+  };
+
   const memberMeta036 = (card, member, mower) => {
     const c = card?._config || {};
     const entities = memberEntities036(member);
     const items = [];
-    const status = cleanMemberText036(mower?.state);
+    const status = memberDisplayState036(card, member, mower);
     if (c.show_status !== false && status) items.push('<span class="nm-multi-meta-status">' + esc(status) + '</span>');
     items.push('<span class="nm-multi-meta-spacer"></span>');
     const zone = cleanMemberText036(state036(card, entities.current_physical_zone)?.state);
@@ -11626,6 +11653,8 @@ const VISUAL_DEFAULTS = Object.freeze({
         return [
           member.entry_id,
           state036(card, entities.mower)?.state,
+          state036(card, entities.mower)?.attributes?.display_state,
+          memberState036(card, member.entry_id).map?.display_state,
           state036(card, entities.mower)?.last_updated,
           state036(card, entities.current_physical_zone)?.state,
           state036(card, entities.battery)?.state,

@@ -28,7 +28,8 @@ assert.match(
 
 // Multi mower already follows the safe pattern: member-map carries the matrix,
 // while the selected glow group itself has no transform.
-assert.match(source, /class="nm-multi-member-map"[^\n]+transform=/);
+assert.ok(source.includes('class=\\\"nm-multi-member-map\\\"'), "Multi member map wrapper must remain present");
+assert.ok(source.includes('transform=\\\"" + matrixString036(matrix)'), "Multi member map must keep its matrix on the parent");
 assert.match(source, /nm-multi-selected-session nm-session-selected/);
 
 console.log("History glow beta18: Single filter stays in screen space while geometry keeps the map matrix");

@@ -2245,15 +2245,17 @@ var NavimowerMapCard = class extends HTMLElement {
     const mapState = this._state(this._resolved.map_entity);
     const mapAttrs = mapState?.attributes || {};
     const mowerState2 = this._state(this._mowerEntity());
-    const status = this._text(
-      this._resolved.status_entity,
-      mapAttrs.display_state
-        || this._mapPayload?.display_state
-        || mowerState2?.attributes?.display_state
-        || mapAttrs.activity
-        || this._mapPayload?.activity
-        || "unknown"
-    );
+    const explicitStatus = this._config?.status_entity
+      ? this._text(this._config.status_entity, null)
+      : null;
+    const status = explicitStatus
+      || mapAttrs.display_state
+      || this._mapPayload?.display_state
+      || mowerState2?.attributes?.display_state
+      || this._text(
+        this._resolved.status_entity,
+        mapAttrs.activity || this._mapPayload?.activity || "unknown"
+      );
     const normalizedStatus = String(status || "").toLowerCase();
     const mowerActivity = String(mowerState2?.attributes?.activity || mowerState2?.attributes?.state || "").toLowerCase();
     const mapActivity = String(mapAttrs.activity || this._mapPayload?.activity || "").toLowerCase();
@@ -2473,16 +2475,17 @@ var NavimowerMapCard = class extends HTMLElement {
     const mapState = this._state(this._resolved.map_entity);
     const mapAttrs = mapState?.attributes || {};
     const mowerState = this._state(this._mowerEntity());
-    const status = this._text(
-      this._resolved.status_entity,
-      mapAttrs.display_state
-        || this._mapPayload?.display_state
-        || mowerState?.attributes?.display_state
-        || mapAttrs.activity
-        || this._mapPayload?.activity
-        || mowerState?.state
-        || "—"
-    );
+    const explicitStatus = this._config?.status_entity
+      ? this._text(this._config.status_entity, null)
+      : null;
+    const status = explicitStatus
+      || mapAttrs.display_state
+      || this._mapPayload?.display_state
+      || mowerState?.attributes?.display_state
+      || this._text(
+        this._resolved.status_entity,
+        mapAttrs.activity || this._mapPayload?.activity || mowerState?.state || "—"
+      );
     const zone = this._text(this._resolved.zone_entity, mapAttrs.current_physical_zone || this._mapPayload?.current_physical_zone || "—");
     const battery = this._number(this._resolved.battery_entity);
     const x = this._number(this._resolved.x_entity);

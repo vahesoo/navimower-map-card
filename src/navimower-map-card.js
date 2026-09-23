@@ -657,11 +657,9 @@ var NavimowerMapCard = class extends HTMLElement {
         <div class="nm-header">
           <div class="nm-title"></div>
           <button type="button" class="nm-history-button" aria-label="Open mowing history" title="Mowing history">
-            <span>History</span>
             <ha-icon icon="mdi:history"></ha-icon>
           </button>
           <button type="button" class="nm-schedule-button" aria-label="Open mowing schedule" title="Mowing schedule">
-            <span>Schedule</span>
             <ha-icon icon="mdi:calendar-clock"></ha-icon>
           </button>
         </div>
@@ -709,14 +707,14 @@ var NavimowerMapCard = class extends HTMLElement {
         ha-card { padding: 12px; overflow: hidden; }
         .nm-header { display: flex; align-items: center; gap: 8px; min-height: 32px; margin: 0 2px 8px; }
         .nm-title { flex: 1; min-width: 0; font-size: 1.05rem; font-weight: 600; color: var(--primary-text-color); }
-        .nm-history-button, .nm-schedule-button { min-height: 34px; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
-          padding: 0 9px 0 11px; border: 0; border-radius: 18px; cursor: pointer; color: var(--secondary-text-color);
-          background: transparent; font: inherit; font-size: .86rem; font-weight: 600; }
+        .nm-history-button, .nm-schedule-button { width: 34px; height: 34px; min-height: 34px; flex: 0 0 auto;
+          display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+          color: var(--secondary-text-color); background: transparent; font: inherit; }
         .nm-history-button.active, .nm-schedule-button.active { color: #FF5A00; }
         .nm-history-button:hover, .nm-history-button:focus-visible,
         .nm-schedule-button:hover, .nm-schedule-button:focus-visible {
           background: color-mix(in srgb, currentColor 10%, transparent); outline: none; }
-        .nm-history-button ha-icon, .nm-schedule-button ha-icon { --mdc-icon-size: 20px; }
+        .nm-history-button ha-icon, .nm-schedule-button ha-icon { --mdc-icon-size: 22px; }
         .nm-history-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 2px 9px; }
         .nm-history-bar[hidden] { display: none; }
         .nm-history-choice { min-height: 32px; padding: 5px 10px; border: 1px solid var(--divider-color);
@@ -5386,23 +5384,15 @@ async function markAllNotificationsRead(card) {
 function ensureBeta2NotificationDom(card) {
   if (!card?._domReady) return;
   const button = card.querySelector?.(".nm-notification-button");
-  if (button && !button.querySelector?.(".nm-notification-button-label")) {
-    const label = document.createElement("span");
-    label.className = "nm-notification-button-label";
-    label.textContent = "Notifications";
-    const icon = button.querySelector?.("ha-icon");
-    if (icon) button.insertBefore(label, icon);
-    else button.appendChild(label);
-  }
+  button?.querySelector?.(".nm-notification-button-label")?.remove?.();
   if (card._notificationBeta2StylesApplied) return;
   const style = card.querySelector?.("style");
   if (!style) return;
   card._notificationBeta2StylesApplied = true;
   style.textContent += `
-    .nm-notification-button { width: auto; min-width: 34px; height: 34px; flex: 0 0 auto;
-      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-      padding: 0 9px 0 11px; border-radius: 18px; font: inherit; font-size: .86rem; font-weight: 600; }
-    .nm-notification-button-label { color: inherit; white-space: nowrap; }
+    .nm-notification-button { width: 34px; min-width: 34px; height: 34px; flex: 0 0 auto;
+      display: grid; place-items: center; padding: 0; border-radius: 50%; font: inherit; }
+    .nm-notification-button-label { display: none; }
     .nm-notification-head { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
       align-items: center; gap: 10px; }
     .nm-notification-title { justify-self: start; }
@@ -14672,7 +14662,8 @@ const VISUAL_DEFAULTS = Object.freeze({
   function ensureUi19(card) {
     if (!card?._domReady || typeof document === "undefined") return;
     const wrap = card.querySelector?.(".nm-wrap");
-    if (!wrap || !card._svgEl) return;
+    const header = card.querySelector?.(".nm-header-actions") || card.querySelector?.(".nm-header");
+    if (!wrap || !header || !card._svgEl) return;
 
     if (!card._gate19Button) {
       const button = document.createElement("button");
@@ -14680,8 +14671,10 @@ const VISUAL_DEFAULTS = Object.freeze({
       button.className = "nm-gate19-button";
       button.setAttribute("aria-label", "Edit gate areas");
       button.setAttribute("title", "Edit gate areas");
-      button.innerHTML = '<ha-icon icon="mdi:pencil"></ha-icon>';
-      wrap.appendChild(button);
+      button.innerHTML = '<ha-icon icon="mdi:vector-square-edit"></ha-icon>';
+      const settings = header.querySelector?.(".nm-settings-button");
+      if (settings) settings.before(button);
+      else header.appendChild(button);
       button.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -14691,6 +14684,13 @@ const VISUAL_DEFAULTS = Object.freeze({
         button.classList.toggle("active", !card._gate19Menu.hidden);
       });
       card._gate19Button = button;
+    } else if (card._gate19Button.parentNode !== header) {
+      const settings = header.querySelector?.(".nm-settings-button");
+      if (settings) settings.before(card._gate19Button);
+      else header.appendChild(card._gate19Button);
+    } else {
+      const settings = header.querySelector?.(".nm-settings-button");
+      if (settings && card._gate19Button.nextElementSibling !== settings) settings.before(card._gate19Button);
     }
 
     if (!card._gate19Menu) {
@@ -14757,9 +14757,9 @@ const VISUAL_DEFAULTS = Object.freeze({
       const style = document.createElement("style");
       style.dataset.gateEditor19 = "true";
       style.textContent = [
-        ".nm-gate19-button{position:absolute;top:10px;right:10px;z-index:8;width:40px;height:40px;display:grid;place-items:center;padding:0;border:1px solid color-mix(in srgb,var(--divider-color) 75%,transparent);border-radius:50%;cursor:pointer;color:var(--primary-text-color);background:color-mix(in srgb,var(--card-background-color,#fff) 88%,transparent);box-shadow:0 2px 8px rgba(0,0,0,.22);backdrop-filter:blur(5px)}",
-        ".nm-gate19-button:hover,.nm-gate19-button:focus-visible,.nm-gate19-button.active{color:#8e24aa;background:color-mix(in srgb,var(--card-background-color,#fff) 94%,#8e24aa 6%);outline:none}.nm-gate19-button ha-icon{--mdc-icon-size:21px}",
-        ".nm-gate19-menu{position:absolute;top:56px;right:10px;z-index:8;width:min(270px,calc(100% - 20px));max-height:min(58%,360px);overflow:auto;padding:8px;border:1px solid var(--divider-color);border-radius:12px;color:var(--primary-text-color);background:color-mix(in srgb,var(--card-background-color,#fff) 94%,transparent);box-shadow:0 4px 18px rgba(0,0,0,.28);backdrop-filter:blur(7px)}.nm-gate19-menu[hidden]{display:none}",
+        ".nm-gate19-button{width:34px;height:34px;min-width:34px;flex:0 0 auto;display:grid;place-items:center;padding:0;border:0;border-radius:50%;cursor:pointer;color:var(--secondary-text-color);background:transparent}",
+        ".nm-gate19-button:hover,.nm-gate19-button:focus-visible{background:color-mix(in srgb,currentColor 10%,transparent);outline:none}.nm-gate19-button.active{color:#8e24aa;background:color-mix(in srgb,#8e24aa 10%,transparent)}.nm-gate19-button ha-icon{--mdc-icon-size:22px}",
+        ".nm-gate19-menu{position:absolute;top:10px;right:10px;z-index:8;width:min(270px,calc(100% - 20px));max-height:min(58%,360px);overflow:auto;padding:8px;border:1px solid var(--divider-color);border-radius:12px;color:var(--primary-text-color);background:color-mix(in srgb,var(--card-background-color,#fff) 94%,transparent);box-shadow:0 4px 18px rgba(0,0,0,.28);backdrop-filter:blur(7px)}.nm-gate19-menu[hidden]{display:none}",
         ".nm-gate19-menu-title{padding:5px 8px 7px;font-size:.86rem;font-weight:750}.nm-gate19-group+.nm-gate19-group{margin-top:7px;padding-top:7px;border-top:1px solid var(--divider-color)}.nm-gate19-group-title{padding:3px 8px;color:var(--secondary-text-color);font-size:.74rem;font-weight:750;text-transform:uppercase}",
         ".nm-gate19-menu-item{width:100%;min-height:38px;display:flex;align-items:center;gap:9px;padding:7px 9px;border:0;border-radius:9px;cursor:pointer;text-align:left;color:var(--primary-text-color);background:transparent;font:inherit;font-size:.86rem}.nm-gate19-menu-item:hover,.nm-gate19-menu-item:focus-visible{background:var(--secondary-background-color);outline:none}.nm-gate19-menu-item.add{color:#8e24aa;font-weight:700}.nm-gate19-menu-item ha-icon{--mdc-icon-size:19px}.nm-gate19-empty{padding:10px 8px;color:var(--secondary-text-color);font-size:.82rem}",
         ".nm-gate19-panel{position:absolute;left:10px;right:10px;bottom:10px;z-index:9;padding:11px;border:1px solid var(--divider-color);border-radius:12px;color:var(--primary-text-color);background:color-mix(in srgb,var(--card-background-color,#fff) 95%,transparent);box-shadow:0 4px 18px rgba(0,0,0,.30);backdrop-filter:blur(7px)}.nm-gate19-panel[hidden]{display:none}",

@@ -63,14 +63,14 @@ card._mapPayload.current_cycle_render = {scope: "current_cycle", revision: "c", 
 card._renderHistory();
 assert.ok(card._historyEl.innerHTML.includes(cyclePath));
 await card._pulseSessionPath(session.id);
-assert.equal(card._historyEl.innerHTML, "");
-assert.equal(card._trailEl.innerHTML, "");
+assert.ok(card._historyEl.innerHTML.includes(cyclePath), "selected session must not hide the current-day base");
 assert.ok(card._highlightEl.innerHTML.includes(aPath));
+assert.ok(card._highlightEl.innerHTML.includes("nm-session-selected"));
 assert.ok(!card._highlightEl.innerHTML.includes(bPath));
 assert.ok(!card._highlightEl.innerHTML.includes(cyclePath));
 
-// Multi-mower selection must hide cumulative geometry from both members and
-// render exactly the chosen mower/session archive.
+// Multi-mower selection keeps cumulative/live geometry visible and adds only
+// the chosen mower/session glow overlay.
 const multi = new Card();
 multi._config = {...card._config, multi_mower: true, show_zone_labels: false, show_map_legend: false};
 multi._queueRender = () => {};
@@ -89,8 +89,8 @@ multi._multi036SelectedSessionKey = "m2:session-a";
 multi._multi036RenderCache = new Map([["m2:session-a", archive(aPath)]]);
 context.multiTest.renderMultiMap036(multi, true);
 assert.ok(multi._multi036Layer.innerHTML.includes(aPath));
-assert.ok(!multi._multi036Layer.innerHTML.includes(cyclePath));
-assert.ok(!multi._multi036Layer.innerHTML.includes("nm-multi-live-trail"));
+assert.ok(multi._multi036Layer.innerHTML.includes(cyclePath), "Multi selection must retain current-cycle geometry");
+assert.ok(multi._multi036Layer.innerHTML.includes("nm-multi-live-trail"), "Multi selection must retain live trail");
 assert.equal((multi._multi036Layer.innerHTML.match(/nm-multi-selected-session/g) || []).length, 1);
 
 // Source version changes cause deferred refresh while the retained SVG remains.

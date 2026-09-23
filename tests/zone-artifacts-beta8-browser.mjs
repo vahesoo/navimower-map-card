@@ -136,8 +136,8 @@ const checks = async () => {
     const selected={mowed_area:{path_d:"M1 1L2 1L2 2Z"},travel:{path_d:""}};
     multi._multi036RenderCache=new Map([["m2:session-a",selected]]); multi._multi036SelectedSessionKey="m2:session-a";
     multiTest.renderMultiMap036(multi,true);
-    ok([...multi._multi036Layer.querySelectorAll("[data-nm-artifacts-entry]")].every((n)=>n.style.display==="none"),"History selection hides all cumulative masks");
-    ok(multi._multi036Layer.querySelectorAll(".nm-multi-selected-session").length===1,"exactly selected History session is shown");
+    ok([...multi._multi036Layer.querySelectorAll("[data-nm-artifacts-entry]")].every((n)=>n.style.display!=="none"),"History selection keeps current-day cumulative masks visible");
+    ok(multi._multi036Layer.querySelectorAll(".nm-multi-selected-session").length===1,"selected History session adds one glow overlay");
     multi._multi036SelectedSessionKey=null; multiTest.renderMultiMap036(multi,true);
     ok(multi._multi036Layer.querySelector(`[data-entry-id="m2"] [data-zone-id="37"]`)===multiNode,"History return reuses masks");
     multi.disconnectedCallback();

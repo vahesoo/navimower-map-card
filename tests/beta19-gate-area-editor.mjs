@@ -14,7 +14,7 @@ assert.match(pkg.scripts.test, /beta19-gate-area-editor\.mjs/);
 
 for (const token of [
   BETA19_MARKER,
-  'icon="mdi:pencil"',
+  'icon="mdi:vector-square-edit"',
   'className = "nm-gate19-button"',
   'data-gate19-vertex',
   'data-gate19-midpoint',
@@ -36,7 +36,9 @@ for (const token of [
   assert.ok(source.includes(token), `prepared runtime must include ${token}`);
 }
 
-assert.match(source, /position:absolute;top:10px;right:10px/);
+assert.match(source, /const header = card\.querySelector\?\.\("\.nm-header-actions"\) \|\| card\.querySelector\?\.\("\.nm-header"\)/);
+assert.match(source, /settings\.before\(button\)|settings\.before\(card\._gate19Button\)/);
+assert.doesNotMatch(source, /\.nm-gate19-button\{position:absolute/);
 assert.match(source, /editor\.points\.length < 3/);
 assert.match(source, /editor\.points\.length <= 3/);
 assert.match(source, /editor\.points\.splice\(index, 0, point\)/);

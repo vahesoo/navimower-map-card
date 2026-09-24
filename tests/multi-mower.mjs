@@ -29,7 +29,8 @@ for (const token of [
   "autoMowerIcon032",
   'callService("navimower", "mark_notification_read"',
   'callService("navimower", "mark_all_notifications_read"',
-  'callService("navimower", "resume"',
+  'const service = contract && continueTaskServiceAvailable(card._hass) ? "continue_task" : "resume";',
+  'callService("navimower", service,',
   'callService("lawn_mower", command',
 ]) {
   assert.ok(source.includes(token), `multi-mower runtime is missing ${token}`);

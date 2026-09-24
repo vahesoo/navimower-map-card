@@ -45,9 +45,10 @@ for (const obsolete of [
 }
 
 for (const needle of [
-  'globalThis.document?.querySelector?.("home-assistant")?.hass',
-  'String(state?.attributes?.model_family || "").toLowerCase() === "i2_lidar"',
-  'autoMowerIcon032(state?.attributes?.model) === "i2_lidar"',
+  "Card.lidarSupportedEntities037",
+  "rememberLidarFrontend",
+  "frontend?.terrain_overlay?.supported",
+  "Array.from(lidarSupportedEntities)",
   '{ field: "entity", operator: "in", value: lidarEntities }',
   '{ field: "multi_mower", operator: "eq", value: true }',
   '{ field: "terrain_overlay", operator: "in", value: ["terrain", "elevation"] }',

@@ -39,28 +39,28 @@ const googleOption = () => {
   return option;
 };
 
-Card.__navimowerGoogleSatelliteConfigured = false;
-Card.__navimowerGoogleSatelliteAvailable = false;
+Card.googleSatelliteConfigured036 = false;
+Card.googleSatelliteAvailable036 = false;
 let option = googleOption();
 assert.equal(option.disabled, true);
 assert.equal(option.label, "Google Satellite — requires Google Map Tiles API setup");
 
-Card.__navimowerGoogleSatelliteConfigured = true;
-Card.__navimowerGoogleSatelliteAvailable = false;
+Card.googleSatelliteConfigured036 = true;
+Card.googleSatelliteAvailable036 = false;
 option = googleOption();
 assert.equal(option.disabled, true);
 assert.equal(option.label, "Google Satellite — check Google Map Tiles API setup");
 
-Card.__navimowerGoogleSatelliteConfigured = true;
-Card.__navimowerGoogleSatelliteAvailable = true;
+Card.googleSatelliteConfigured036 = true;
+Card.googleSatelliteAvailable036 = true;
 option = googleOption();
 assert.equal(option.disabled, false);
 assert.equal(option.label, "Google Satellite");
 
 for (const needle of [
   "rememberGoogleSatelliteAvailability",
-  "Card.__navimowerGoogleSatelliteConfigured = google.configured",
-  "Card.__navimowerGoogleSatelliteAvailable = google.available",
+  "Card.googleSatelliteConfigured036 = google.configured",
+  "Card.googleSatelliteAvailable036 = google.available",
   "disabled: !googleAvailable",
 ]) {
   assert.ok(source.includes(needle), `Missing beta26 Google underlay capability contract: ${needle}`);

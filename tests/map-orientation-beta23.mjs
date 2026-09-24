@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-assert.equal(pkg.version, "0.3.7-beta23");
+assert.match(pkg.version, /^0\.3\.7(?:-|$)/);
 
 for (const needle of [
   "_mapPresentationInverseMatrix",

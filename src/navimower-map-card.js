@@ -184,17 +184,17 @@ var LABELS = Object.freeze({
   title: "Title",
   entity: "Mower entity",
   auto_entities: "Auto-detect related Navimower entities",
-  show_status: "Show status",
-  show_zone: "Show physical zone",
-  show_battery: "Show battery",
-  show_position: "Show X/Y position",
-  show_zone_labels: "Show zone labels",
-  avoid_zone_label_overlap: "Prevent zone label overlap",
-  show_vf_off_areas: "Show VisionFence / VF-off areas",
-  show_gate_areas: "Show gate areas",
-  show_channels: "Show channels",
-  show_map_legend: "Show map legend",
-  show_session_legend: "Show session times",
+  show_status: "Status",
+  show_zone: "Physical zone",
+  show_battery: "Battery",
+  show_position: "X/Y position",
+  show_zone_labels: "Zone labels",
+  avoid_zone_label_overlap: "Prevent label overlap",
+  show_vf_off_areas: "VisionFence / VF-off areas",
+  show_gate_areas: "Gate areas",
+  show_channels: "Channels",
+  show_map_legend: "Map legend",
+  show_session_legend: "Session times",
   session_count: "Maximum sessions shown",
   history_days: "History days",
   mower_icon: "Mower icon",
@@ -9623,19 +9623,41 @@ const VISUAL_DEFAULTS = Object.freeze({
     "show_schedule_button",
     "show_settings_button",
   ];
+  const DISPLAY_GROUPS = [
+    { heading: "display_mower_group", grid: "display_mower_grid", fields: ["show_status", "show_zone", "show_battery", "show_position"] },
+    { heading: "display_map_group", grid: "display_map_grid", fields: ["show_zone_labels", "avoid_zone_label_overlap", "show_vf_off_areas", "show_gate_areas", "show_channels", "show_custom_areas", "show_map_legend"] },
+    { heading: "display_history_group", grid: "display_history_grid", fields: ["show_session_legend", "history_days"] },
+    { heading: "display_header_group", grid: "display_header_grid", fields: BUTTON_FIELDS },
+  ];
+  const DISPLAY_FIELDS = DISPLAY_GROUPS.flatMap((group) => group.fields);
   const CUSTOM_FIELDS = [
     "show_custom_areas",
     "custom_area_fill_opacity",
     "custom_area_stroke_width",
     "custom_area_color",
   ];
-  const MOVE_FIELDS = [...BUTTON_FIELDS, ...CUSTOM_FIELDS];
+  const MOVE_FIELDS = [...new Set([...DISPLAY_FIELDS, ...CUSTOM_FIELDS])];
   const LABELS = {
-    show_history_button: "Show History button",
-    show_notifications_button: "Show Notifications button",
-    show_schedule_button: "Show Schedule button",
-    show_settings_button: "Show Settings button",
-    show_custom_areas: "Show custom areas",
+    display_mower_group: "Mower information",
+    display_map_group: "Map elements",
+    display_history_group: "History",
+    display_header_group: "Header buttons",
+    show_status: "Status",
+    show_zone: "Physical zone",
+    show_battery: "Battery",
+    show_position: "X/Y position",
+    show_zone_labels: "Zone labels",
+    avoid_zone_label_overlap: "Prevent label overlap",
+    show_vf_off_areas: "VisionFence / VF-off areas",
+    show_gate_areas: "Gate areas",
+    show_channels: "Channels",
+    show_map_legend: "Map legend",
+    show_session_legend: "Session times",
+    show_history_button: "History",
+    show_notifications_button: "Notifications",
+    show_schedule_button: "Schedule",
+    show_settings_button: "Settings",
+    show_custom_areas: "Custom areas",
     custom_area_fill_opacity: "Custom area fill opacity",
     custom_area_stroke_width: "Custom area border width",
     custom_area_color: "Custom area color",
@@ -9784,28 +9806,38 @@ const VISUAL_DEFAULTS = Object.freeze({
       const form = previousGetConfigForm.apply(this, args);
       if (!form || !Array.isArray(form.schema)) return form;
 
+      const displayed = form.schema.find((item) => item?.name === "display")
+        || sectionContaining(form.schema, "show_zone_labels")
+        || sectionContaining(form.schema, "show_map_legend")
+        || form.schema[0];
       const captured = collect(form.schema, MOVE_FIELDS);
       remove(form.schema, MOVE_FIELDS);
       form.schema = form.schema.filter((item) => item?.name !== "custom_area_appearance");
 
-      const displayed = sectionContaining(form.schema, "show_zone_labels")
-        || sectionContaining(form.schema, "show_map_legend")
-        || form.schema[0];
       const appearance = sectionContaining(form.schema, "trail_opacity")
         || sectionContaining(form.schema, "mower_scale")
         || form.schema.find((item) => item?.name === "appearance");
       const colors = form.schema.find((item) => item?.name === "map_colors")
         || sectionContaining(form.schema, "trail_color");
 
-      const displayedGrid = gridIn(displayed);
       const appearanceGrid = gridIn(appearance);
       const colorsGrid = gridIn(colors);
 
-      if (displayedGrid?.schema) {
-        displayedGrid.schema.push(
-          captured.get("show_custom_areas") || booleanField("show_custom_areas"),
-          ...BUTTON_FIELDS.map((name) => captured.get(name) || booleanField(name)),
-        );
+      if (displayed?.schema) {
+        displayed.schema = DISPLAY_GROUPS.flatMap((group) => [
+          { type: "constant", name: group.heading },
+          {
+            type: "grid",
+            name: group.grid,
+            flatten: true,
+            column_min_width: "240px",
+            schema: group.fields.map((name) => captured.get(name) || (
+              name === "history_days"
+                ? { name, selector: { number: { min: 1, max: 31, step: 1, mode: "box" } } }
+                : booleanField(name)
+            )),
+          },
+        ]);
       }
       if (appearanceGrid?.schema) {
         appearanceGrid.schema.push(
@@ -15910,11 +15942,31 @@ const VISUAL_DEFAULTS = Object.freeze({
       return true;
     });
     form.schema = strip(form.schema);
+    const rootHass = globalThis.document?.querySelector?.("home-assistant")?.hass;
+    const lidarEntities = Object.entries(rootHass?.states || {})
+      .filter(([entityId, state]) => entityId.startsWith("lawn_mower.")
+        && (String(state?.attributes?.model_family || "").toLowerCase() === "i2_lidar"
+          || autoMowerIcon032(state?.attributes?.model) === "i2_lidar"))
+      .map(([entityId]) => entityId);
+    const lidarVisibility = [
+      ...(lidarEntities.length ? [
+        { field: "entity", operator: "in", value: lidarEntities },
+        { field: "mower_entity", operator: "in", value: lidarEntities },
+        { condition: "and", conditions: [
+          { field: "multi_mower", operator: "eq", value: true },
+          { field: "entity", operator: "exists" },
+        ] },
+      ] : []),
+      { field: "terrain_overlay", operator: "in", value: ["terrain", "elevation"] },
+    ];
     const settings = {
       type: "expandable",
       name: "terrain_overlay_settings",
       title: "LiDAR overlay",
       flatten: true,
+      visible: lidarVisibility.length === 1
+        ? lidarVisibility[0]
+        : { condition: "or", conditions: lidarVisibility },
       schema: [{
         type: "grid",
         name: "terrain_overlay_grid",

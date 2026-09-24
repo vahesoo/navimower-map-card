@@ -156,6 +156,8 @@ var DEFAULTS = Object.freeze({
   enable_zoom: true,
   initial_zoom: 1,
   initial_focus: "map",
+  map_orientation: "native",
+  map_rotation: 0,
   remember_view: false,
   max_zoom: 8,
   zone_fill_color: "#81c784",
@@ -199,6 +201,8 @@ var LABELS = Object.freeze({
   enable_zoom: "Enable zoom and pan",
   initial_zoom: "Initial zoom",
   initial_focus: "Initial focus",
+  map_orientation: "Map orientation",
+  map_rotation: "Custom rotation",
   remember_view: "Remember last view in this browser",
   max_zoom: "Maximum zoom",
   map_legend_opacity: "Map legend background opacity",
@@ -281,6 +285,8 @@ var NavimowerMapCard = class extends HTMLElement {
       enable_zoom: DEFAULTS.enable_zoom,
       initial_zoom: DEFAULTS.initial_zoom,
       initial_focus: DEFAULTS.initial_focus,
+      map_orientation: DEFAULTS.map_orientation,
+      map_rotation: DEFAULTS.map_rotation,
       remember_view: DEFAULTS.remember_view,
       max_zoom: DEFAULTS.max_zoom,
       map_legend_opacity: DEFAULTS.map_legend_opacity,
@@ -357,7 +363,7 @@ var NavimowerMapCard = class extends HTMLElement {
         {
           type: "expandable",
           name: "zoom",
-          title: "Zoom and initial view",
+          title: "Map zoom and rotate",
           flatten: true,
           schema: [
             {
@@ -379,6 +385,23 @@ var NavimowerMapCard = class extends HTMLElement {
                       ]
                     }
                   }
+                },
+                {
+                  name: "map_orientation",
+                  selector: {
+                    select: {
+                      options: [
+                        { value: "native", label: "Native" },
+                        { value: "north_up", label: "North up" },
+                        { value: "custom", label: "Custom" }
+                      ]
+                    }
+                  }
+                },
+                {
+                  name: "map_rotation",
+                  visible: { field: "map_orientation", value: "custom" },
+                  selector: { number: { min: -180, max: 180, step: 1, mode: "slider", unit_of_measurement: "°" } }
                 },
                 { name: "remember_view", selector: { boolean: {} } },
                 { name: "max_zoom", selector: { number: { min: 2, max: 16, step: 1, mode: "box" } } }
@@ -514,6 +537,11 @@ var NavimowerMapCard = class extends HTMLElement {
     if (!incoming.entity && incoming.mower_entity) incoming.entity = incoming.mower_entity;
     this._config = { ...DEFAULTS, ...incoming };
     this._config.auto_entities = normalizeBoolean(incoming.auto_entities, DEFAULTS.auto_entities);
+    const mapOrientation = String(incoming.map_orientation ?? DEFAULTS.map_orientation).trim().toLowerCase();
+    this._config.map_orientation = ["native", "north_up", "custom"].includes(mapOrientation)
+      ? mapOrientation
+      : DEFAULTS.map_orientation;
+    this._config.map_rotation = clamp(finiteNumber(incoming.map_rotation, DEFAULTS.map_rotation), -180, 180);
     this._resolutionKey = null;
     this._resolved = {};
     this._deviceId = null;
@@ -1195,6 +1223,18 @@ var NavimowerMapCard = class extends HTMLElement {
     const channels = Array.isArray(map.channels) ? map.channels : [];
     const gateAreas = Array.isArray(this._mapPayload?.gate_areas) ? this._mapPayload.gate_areas : [];
     const station = map.station || null;
+    const presentationOffset = Array.isArray(descriptor?.offset) ? descriptor.offset.map(Number) : null;
+    const presentationSpan = Array.isArray(descriptor?.span) ? descriptor.span.map(Number) : null;
+    const presentationBounds = presentationOffset?.length >= 2
+      && presentationSpan?.length >= 2
+      && [...presentationOffset, ...presentationSpan].every(Number.isFinite)
+      ? {
+          minX: presentationOffset[0],
+          maxX: presentationOffset[0] + presentationSpan[0] * Math.abs(matrix[0]),
+          minY: presentationOffset[1],
+          maxY: presentationOffset[1] + presentationSpan[1] * Math.abs(matrix[3])
+        }
+      : null;
     this._layout = {
       map,
       zones,
@@ -1207,6 +1247,7 @@ var NavimowerMapCard = class extends HTMLElement {
       preparedResourceId: this._preparedStaticResourceId || null,
       preparedMatrix: matrix,
       scale: Math.abs(matrix[0]),
+      presentationBounds,
       sx: (worldX) => matrix[0] * Number(worldX) + matrix[4],
       sy: (worldY) => matrix[3] * Number(worldY) + matrix[5]
     };
@@ -1975,6 +2016,12 @@ var NavimowerMapCard = class extends HTMLElement {
       gateAreas,
       station,
       scale,
+      presentationBounds: {
+        minX: offsetX,
+        maxX: offsetX + spanX * scale,
+        minY: offsetY,
+        maxY: offsetY + spanY * scale
+      },
       sx: (worldX) => offsetX + (worldX - minX) * scale,
       sy: (worldY) => offsetY + (maxY - worldY) * scale
     };
@@ -3520,6 +3567,11 @@ var NavimowerMapCard = class extends HTMLElement {
         cy = this._layout.sy(Number(station.y));
       }
     }
+    if (focus !== "map") {
+      const presented = this._mapPresentationTransformPoint(cx, cy);
+      cx = presented[0];
+      cy = presented[1];
+    }
     this._view = { scale, cx, cy };
     this._initialViewApplied = true;
     this._clampView();
@@ -3560,6 +3612,144 @@ var NavimowerMapCard = class extends HTMLElement {
     this._view.cx = clamp(finiteNumber(this._view.cx, VIEW_SIZE / 2), half, VIEW_SIZE - half);
     this._view.cy = clamp(finiteNumber(this._view.cy, VIEW_SIZE / 2), half, VIEW_SIZE - half);
   }
+  _multiMapPresentationActive() {
+    return Boolean(this._multi036Layer && this._multi036Layer.style.display !== "none");
+  }
+  _singleNorthRotationDeg() {
+    const georeference = this._mapPayload?.georeference
+      || this._mapPayload?.map?.georeference
+      || this._preparedStaticModel?.georeference
+      || null;
+    const radians = finiteNumber(georeference?.rotation_rad, null);
+    return radians === null ? null : radians * 180 / Math.PI;
+  }
+  _mapPresentationRotationDeg() {
+    const mode = String(this._config?.map_orientation || "native").toLowerCase();
+    if (mode === "native") return 0;
+    const desired = mode === "custom"
+      ? clamp(finiteNumber(this._config?.map_rotation, 0), -180, 180)
+      : 0;
+    if (this._multiMapPresentationActive()) return desired;
+    const nativeRotation = this._singleNorthRotationDeg();
+    if (nativeRotation === null) return mode === "custom" ? desired : 0;
+    return desired - nativeRotation;
+  }
+  _mapPresentationBounds() {
+    if (this._multiMapPresentationActive()) {
+      const box = this._multi036Site?.combined_svg_bounds;
+      if (!box) return null;
+      const minX = finiteNumber(box.min_x, null);
+      const minY = finiteNumber(box.min_y, null);
+      const maxX = finiteNumber(box.max_x, null);
+      const maxY = finiteNumber(box.max_y, null);
+      if ([minX, minY, maxX, maxY].some((value) => value === null)) return null;
+      const width = Math.max(1, maxX - minX);
+      const height = Math.max(1, maxY - minY);
+      const padding = 55;
+      const scale = Math.min((VIEW_SIZE - padding * 2) / width, (VIEW_SIZE - padding * 2) / height);
+      const drawnWidth = width * scale;
+      const drawnHeight = height * scale;
+      return {
+        minX: (VIEW_SIZE - drawnWidth) / 2,
+        maxX: (VIEW_SIZE + drawnWidth) / 2,
+        minY: (VIEW_SIZE - drawnHeight) / 2,
+        maxY: (VIEW_SIZE + drawnHeight) / 2
+      };
+    }
+    return this._layout?.presentationBounds || null;
+  }
+  _mapPresentationFitScale(angle = this._mapPresentationRotationDeg()) {
+    const bounds = this._mapPresentationBounds();
+    if (!bounds) return 1;
+    const width = Math.max(1, finiteNumber(bounds.maxX, VIEW_SIZE) - finiteNumber(bounds.minX, 0));
+    const height = Math.max(1, finiteNumber(bounds.maxY, VIEW_SIZE) - finiteNumber(bounds.minY, 0));
+    const radians = Math.abs(finiteNumber(angle, 0)) * Math.PI / 180;
+    const cosine = Math.abs(Math.cos(radians));
+    const sine = Math.abs(Math.sin(radians));
+    const rotatedWidth = width * cosine + height * sine;
+    const rotatedHeight = width * sine + height * cosine;
+    if (!Number.isFinite(rotatedWidth) || !Number.isFinite(rotatedHeight)) return 1;
+    return Math.min(1, VIEW_SIZE / Math.max(1, rotatedWidth), VIEW_SIZE / Math.max(1, rotatedHeight));
+  }
+  _mapPresentationMatrix() {
+    const angle = this._mapPresentationRotationDeg();
+    const fit = this._mapPresentationFitScale(angle);
+    const radians = angle * Math.PI / 180;
+    const cosine = Math.cos(radians) * fit;
+    const sine = Math.sin(radians) * fit;
+    const center = VIEW_SIZE / 2;
+    const a = cosine;
+    const b = sine;
+    const c = -sine;
+    const d = cosine;
+    const e = center - a * center - c * center;
+    const f = center - b * center - d * center;
+    return { angle, fit, matrix: [a, b, c, d, e, f] };
+  }
+  _mapPresentationTransformPoint(x, y) {
+    const { matrix } = this._mapPresentationMatrix();
+    const px = finiteNumber(x, VIEW_SIZE / 2);
+    const py = finiteNumber(y, VIEW_SIZE / 2);
+    return [
+      matrix[0] * px + matrix[2] * py + matrix[4],
+      matrix[1] * px + matrix[3] * py + matrix[5]
+    ];
+  }
+  _mapPresentationClientToRoot(clientX, clientY) {
+    const node = this._multiMapPresentationActive() ? this._multi036Layer : this._baseEl;
+    if (!node || typeof DOMPoint !== "function") return null;
+    try {
+      const matrix = node.getScreenCTM?.();
+      if (!matrix) return null;
+      const point = new DOMPoint(Number(clientX), Number(clientY)).matrixTransform(matrix.inverse());
+      return [point.x, point.y];
+    } catch (_error) {
+      return null;
+    }
+  }
+  _mapPresentationNodes() {
+    const single = [
+      this._baseEl,
+      this._mowedAreaEl,
+      this._highlightEl,
+      this._detailsEl,
+      this._labelsEl,
+      this._dynamicEl
+    ].filter(Boolean);
+    const multi = [
+      this._osm036MultiLayer,
+      this._nm037Beta3MultiTerrainLayer,
+      this._multi036Layer
+    ].filter(Boolean);
+    return { single, multi };
+  }
+  _setMapPresentationTransform(node, active, matrix) {
+    if (!node) return;
+    const key = "data-nm-map-orientation-base-transform";
+    if (!node.hasAttribute(key)) node.setAttribute(key, node.getAttribute("transform") || "");
+    const base = node.getAttribute(key) || "";
+    if (!active) {
+      if (base) node.setAttribute("transform", base);
+      else node.removeAttribute("transform");
+      return;
+    }
+    const presentation = `matrix(${matrix.map((value) => Number(value).toFixed(10)).join(" ")})`;
+    node.setAttribute("transform", base ? presentation + " " + base : presentation);
+  }
+  _syncMapPresentationRotation() {
+    if (!this._svgEl) return;
+    const state = this._mapPresentationMatrix();
+    const activeMulti = this._multiMapPresentationActive();
+    const nodes = this._mapPresentationNodes();
+    nodes.single.forEach((node) => this._setMapPresentationTransform(node, !activeMulti, state.matrix));
+    nodes.multi.forEach((node) => this._setMapPresentationTransform(node, activeMulti, state.matrix));
+    this._mapPresentationState = state;
+    const wrap = this.querySelector?.(".nm-wrap");
+    if (wrap) {
+      const background = String(this._config?.map_background_color || "").trim();
+      wrap.style.background = background || "var(--secondary-background-color)";
+    }
+  }
   _applyViewBox() {
     if (!this._svgEl) return;
     this._clampView();
@@ -3567,6 +3757,7 @@ var NavimowerMapCard = class extends HTMLElement {
     const left = this._view.cx - size / 2;
     const top = this._view.cy - size / 2;
     this._svgEl.setAttribute("viewBox", `${left.toFixed(2)} ${top.toFixed(2)} ${size.toFixed(2)} ${size.toFixed(2)}`);
+    this._syncMapPresentationRotation();
     this._mowerRenderKey = null;
     this._renderMower();
     this._syncTouchAction();
@@ -6598,7 +6789,11 @@ function mowerTransform032(card, cx, cy, heading) {
   const degrees = Number.isFinite(heading) ? 90 - heading : 90;
   const zoom = Math.max(1, finiteNumber(card?._view?.scale, 1));
   const normalizedScale = 58.83 / spec.height;
-  const scale = normalizedScale * clamp(finiteNumber(card?._config?.mower_scale, 1), 0.5, 2.5) / zoom;
+  const presentationFit = Math.max(
+    0.01,
+    finiteNumber(card?._mapPresentationState?.fit, card?._mapPresentationFitScale?.() || 1),
+  );
+  const scale = normalizedScale * clamp(finiteNumber(card?._config?.mower_scale, 1), 0.5, 2.5) / zoom / presentationFit;
   return "translate(" + Number(cx).toFixed(1) + "," + Number(cy).toFixed(1) + ") rotate(" + degrees.toFixed(1) + ") scale(" + scale.toFixed(4) + ") translate(" + (-spec.width / 2).toFixed(2) + "," + (-spec.height / 2).toFixed(2) + ")";
 }
 function patchCard032Beta1() {
@@ -11135,7 +11330,8 @@ const VISUAL_DEFAULTS = Object.freeze({
     const screen = transformPoint036(matrix, x, y);
     const siteRotation = Math.atan2(matrix[1], matrix[0]) * 180 / Math.PI;
     const degrees = siteRotation + (Number.isFinite(heading) ? 90 - heading : 90);
-    const scale = 58.83 / spec.height * clamp036(card?._config?.mower_scale, 0.5, 2.5) / zoom;
+    const presentationFit = Math.max(0.01, Number(card?._mapPresentationState?.fit || card?._mapPresentationFitScale?.() || 1));
+    const scale = 58.83 / spec.height * clamp036(card?._config?.mower_scale, 0.5, 2.5) / zoom / presentationFit;
     const mowerState = String(state036(card, entities.mower)?.state || "").toLowerCase();
     const errorClass = ["error", "blocked", "unavailable"].includes(mowerState) ? " nm-multi-mower-error" : "";
     const liveKey = [x.toFixed(3), y.toFixed(3), Number.isFinite(heading) ? heading.toFixed(4) : "", mowerState, zoom.toFixed(3)].join(":");
@@ -11596,6 +11792,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     else layer.innerHTML = parts.join("");
     card._drawZoneArtifactMembers?.();
     card._multi036LiveRenderKey = liveSignature;
+    card._syncMapPresentationRotation?.();
   }
 
   const displayName036 = (member) => String(member?.name || member?.model || "Mower");
@@ -11953,6 +12150,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       card._renderFooter?.();
       card._renderControls?.();
       card._renderSessions?.();
+      card._syncMapPresentationRotation?.();
       return;
     }
     card._historyRenderKey = null;
@@ -11961,6 +12159,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     card._view = { scale: Math.max(1, finite036(card?._config?.initial_zoom, 1)), cx: 500, cy: 500 };
     card._initialViewApplied = true;
     card._applyViewBox?.();
+    card._syncMapPresentationRotation?.();
     void refreshMembers036(card, true);
     renderMulti036(card);
   }
@@ -12007,6 +12206,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       layer.style.display = "none";
       card._svgEl.appendChild(layer);
       card._multi036Layer = layer;
+      card._syncMapPresentationRotation?.();
     }
     if (!card._multi036Controls && card._controlsEl) {
       const controls = document.createElement("div");
@@ -12797,7 +12997,10 @@ const VISUAL_DEFAULTS = Object.freeze({
     ensureAttribution(card, underlayEnabled(card) && visible);
   };
 
-  proto._syncOsmUnderlay036 = function beta7SyncOsmUnderlay() { syncCard(this); };
+  proto._syncOsmUnderlay036 = function beta7SyncOsmUnderlay() {
+    syncCard(this);
+    this._syncMapPresentationRotation?.();
+  };
 
   const previousStub = Card.getStubConfig?.bind(Card);
   Card.getStubConfig = (...args) => ({ ...(previousStub?.(...args) || {}), map_underlay: "none", osm_underlay_opacity: DEFAULT_OPACITY });
@@ -14143,7 +14346,8 @@ const VISUAL_DEFAULTS = Object.freeze({
     if (target.mode !== "multi") {
       const layout = card?._layout;
       if (!layout?.sx || !layout?.sy) return null;
-      return [layout.sx(x), layout.sy(y)];
+      const root = [layout.sx(x), layout.sy(y)];
+      return card?._mapPresentationTransformPoint?.(root[0], root[1]) || root;
     }
     const group = memberGroup19(card, target.entryId);
     const svg = card?._svgEl;
@@ -14174,7 +14378,8 @@ const VISUAL_DEFAULTS = Object.freeze({
         return null;
       }
     }
-    const root = rootPoint19(card, clientX, clientY);
+    const root = card?._mapPresentationClientToRoot?.(clientX, clientY)
+      || rootPoint19(card, clientX, clientY);
     const layout = card?._layout;
     if (!root || !layout?.sx || !layout?.sy) return null;
     const sx0 = Number(layout.sx(0)), sx1 = Number(layout.sx(1));
@@ -15567,6 +15772,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       if (multi) multi.style.display = "none";
       syncSingle(card, kind);
     }
+    card._syncMapPresentationRotation?.();
   };
 
   function scheduleTerrain(card, delay = 0) {

@@ -27,9 +27,9 @@ assert.match(source, /_v034sScheduleCloseTimer/, "schedule close timer cleanup m
 
 // Upper bounds for the consolidated runtime. Normalize only the release
 // version text so beta number width cannot look like production code growth.
-// beta17 keeps History selection as a glow overlay and retains day/current
-// geometry inside the existing core and Multi runtimes without a new wrapper.
-assert.ok(normalizedSource.length <= 887000, `runtime grew beyond beta17 feature budget: ${normalizedSource.length} normalized chars`);
+// beta22 adds map-orientation presentation math and editor controls directly
+// inside the consolidated core/Multi runtimes without adding another wrapper.
+assert.ok(normalizedSource.length <= 893000, `runtime grew beyond beta22 feature budget: ${normalizedSource.length} normalized chars`);
 assert.ok(sourceSections.length <= 12, `source section count grew: ${sourceSections.length}`);
 assert.ok(patchMarkers.size <= 43, `runtime patch marker count grew: ${patchMarkers.size}`);
 assert.ok(iifes.length <= 50, `runtime patch IIFE count grew: ${iifes.length}`);

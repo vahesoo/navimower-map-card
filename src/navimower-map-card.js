@@ -6787,7 +6787,11 @@ function mowerTransform032(card, cx, cy, heading) {
   const degrees = Number.isFinite(heading) ? 90 - heading : 90;
   const zoom = Math.max(1, finiteNumber(card?._view?.scale, 1));
   const normalizedScale = 58.83 / spec.height;
-  const scale = normalizedScale * clamp(finiteNumber(card?._config?.mower_scale, 1), 0.5, 2.5) / zoom;
+  const presentationFit = Math.max(
+    0.01,
+    finiteNumber(card?._mapPresentationState?.fit, card?._mapPresentationFitScale?.() || 1),
+  );
+  const scale = normalizedScale * clamp(finiteNumber(card?._config?.mower_scale, 1), 0.5, 2.5) / zoom / presentationFit;
   return "translate(" + Number(cx).toFixed(1) + "," + Number(cy).toFixed(1) + ") rotate(" + degrees.toFixed(1) + ") scale(" + scale.toFixed(4) + ") translate(" + (-spec.width / 2).toFixed(2) + "," + (-spec.height / 2).toFixed(2) + ")";
 }
 function patchCard032Beta1() {

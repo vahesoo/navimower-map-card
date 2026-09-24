@@ -23,7 +23,7 @@ A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo
 - **Map geometry** — zones, Off-limit areas, VF-off areas, Channels, Gate areas, charging station and integration-defined Custom Areas.
 - **Visual editor** — grouped Displayed information, Appearance, Colors, Map underlay, Notifications, Schedule and Settings controls.
 - **Error feedback** — the mower icon gets a red pulsing glow while the `lawn_mower` entity reports an error.
-- **Zoom and pan** — mouse wheel, pinch zoom, pan, initial focus and optional browser-side view memory. Normal pan/zoom is intentionally suspended while the gate-area editor is active.
+- **Zoom, pan and orientation** — mouse wheel, pinch zoom, pan, initial focus and optional browser-side view memory. Map orientation can stay in the mower's native frame, use geographic North-up, or use a custom rotation. Normal pan/zoom is intentionally suspended while the gate-area editor is active.
 - **Performance-oriented rendering** — static geometry and prepared mowing-area artifacts are reused; live mower pose changes do not rebuild every site layer.
 
 ## Requirements and compatibility
@@ -259,6 +259,8 @@ show_session_legend: true
 enable_zoom: true
 initial_zoom: 1
 initial_focus: map
+map_orientation: native
+# map_rotation: 12.5   # used when map_orientation: custom
 remember_view: false
 max_zoom: 8
 

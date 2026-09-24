@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-assert.equal(pkg.version, "0.3.7-beta24");
+assert.match(pkg.version, /^0\.3\.7(?:-|$)/);
 
 for (const needle of [
   "DISPLAY_GROUPS",
@@ -49,7 +49,6 @@ for (const needle of [
   'String(state?.attributes?.model_family || "").toLowerCase() === "i2_lidar"',
   'autoMowerIcon032(state?.attributes?.model) === "i2_lidar"',
   '{ field: "entity", operator: "in", value: lidarEntities }',
-  '{ field: "mower_entity", operator: "in", value: lidarEntities }',
   '{ field: "multi_mower", operator: "eq", value: true }',
   '{ field: "terrain_overlay", operator: "in", value: ["terrain", "elevation"] }',
   'visible: lidarVisibility.length === 1',

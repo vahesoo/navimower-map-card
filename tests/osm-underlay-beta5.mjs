@@ -16,7 +16,8 @@ assert.match(packageJson.scripts.test, /osm-underlay-beta5\.mjs/);
 
 assert.match(source, /0\.3\.6-beta5: optional OpenStreetMap underlay/);
 assert.match(source, /map_underlay/);
-assert.match(source, /osm_underlay_opacity/);
+assert.match(source, /underlay_opacity/);
+assert.doesNotMatch(source, /osm_underlay_opacity/);
 if (releaseMinor >= 7) {
   assert.doesNotMatch(source, /https:\/\/tile\.openstreetmap\.org\//);
   assert.match(source, /osm_tile=1&z=/);

@@ -115,7 +115,7 @@ assert.ok(card._labelsEl.innerHTML.includes('opacity="0.80"'));
 // Completed history stubs without a drawable route are hidden, while the active
 // session remains visible until its first usable route arrives.
 const sessionCard = new Card();
-sessionCard._config = { session_count: 6 };
+sessionCard._config = {};
 sessionCard._trail = [];
 sessionCard._mapPayload = {
   sessions: [
@@ -125,7 +125,7 @@ sessionCard._mapPayload = {
     { id: "active", started_at: "2026-08-02T10:00:00Z", ended_at: null, active: true, points: [] },
   ],
 };
-const filteredSessions = sessionCard._sessionRecords({ applyLimit: false });
+const filteredSessions = sessionCard._sessionRecords();
 assert.deepEqual(filteredSessions.map((session) => session.id), ["real", "active"]);
 assert.equal(filteredSessions.find((session) => session.id === "real").drawable, true);
 assert.equal(filteredSessions.find((session) => session.id === "active").drawable, false);
@@ -239,7 +239,7 @@ assert.equal(queued.mower, false);
 // Schema-v5 daily trails replace older same-day routes zone by zone, while the
 // active cycle stays on the separate live-trail layer.
 const dailyCard = new Card();
-dailyCard._config = { session_count: 6, trail_color: "#43a047" };
+dailyCard._config = { trail_color: "#43a047" };
 dailyCard._layout = { scale: 10, sx: (value) => value * 10, sy: (value) => value * 10 };
 dailyCard._historyDayOffset = null;
 dailyCard._historyEl = { innerHTML: "" };

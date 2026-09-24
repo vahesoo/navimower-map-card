@@ -129,7 +129,6 @@ var H2_MOWER_SVG = `
 var DEFAULTS = Object.freeze({
   title: "Navimower Map",
   entity: null,
-  mower_entity: null,
   auto_entities: true,
   map_entity: null,
   x_entity: null,
@@ -141,7 +140,6 @@ var DEFAULTS = Object.freeze({
   schedule_entity: null,
   schedule_switch_entity: null,
   trail_length: 1e4,
-  session_count: 6,
   show_status: true,
   show_zone: true,
   show_battery: true,
@@ -170,8 +168,6 @@ var DEFAULTS = Object.freeze({
   vf_off_color: "#2F80ED",
   channel_color: "#686868",
   gate_area_color: "#8e24aa",
-  mower_body_color: "#263238",
-  mower_accent_color: "#ff6d00",
   dock_color: "#37474f",
   map_legend_opacity: 0.58,
   map_legend_scale: 1,
@@ -195,7 +191,6 @@ var LABELS = Object.freeze({
   show_channels: "Channels",
   show_map_legend: "Map legend",
   show_session_legend: "Session times",
-  session_count: "Maximum sessions shown",
   history_days: "History days",
   mower_icon: "Mower icon",
   enable_zoom: "Enable zoom and pan",
@@ -281,7 +276,6 @@ var NavimowerMapCard = class extends HTMLElement {
       show_channels: DEFAULTS.show_channels,
       show_map_legend: DEFAULTS.show_map_legend,
       show_session_legend: DEFAULTS.show_session_legend,
-      session_count: DEFAULTS.session_count,
       enable_zoom: DEFAULTS.enable_zoom,
       initial_zoom: DEFAULTS.initial_zoom,
       initial_focus: DEFAULTS.initial_focus,
@@ -303,8 +297,6 @@ var NavimowerMapCard = class extends HTMLElement {
       vf_off_color: DEFAULTS.vf_off_color,
       channel_color: DEFAULTS.channel_color,
       gate_area_color: DEFAULTS.gate_area_color,
-      mower_body_color: DEFAULTS.mower_body_color,
-      mower_accent_color: DEFAULTS.mower_accent_color,
       dock_color: DEFAULTS.dock_color,
       mower_scale: DEFAULTS.mower_scale,
       dock_scale: DEFAULTS.dock_scale,
@@ -354,8 +346,7 @@ var NavimowerMapCard = class extends HTMLElement {
                 { name: "show_gate_areas", selector: { boolean: {} } },
                 { name: "show_channels", selector: { boolean: {} } },
                 { name: "show_map_legend", selector: { boolean: {} } },
-                { name: "show_session_legend", selector: { boolean: {} } },
-                { name: "session_count", selector: { number: { min: 1, max: 24, step: 1, mode: "box" } } }
+                { name: "show_session_legend", selector: { boolean: {} } }
               ]
             }
           ]
@@ -527,14 +518,13 @@ var NavimowerMapCard = class extends HTMLElement {
     this._refreshAfterReconnect = false;
   }
   setConfig(config) {
-    if (!config || !(config.entity || config.mower_entity || config.status_entity || config.map_entity)) {
+    if (!config || !(config.entity || config.status_entity || config.map_entity)) {
       throw new Error("Navimower Map Card: select a mower entity");
     }
-    const previousEntity = this._config?.entity || this._config?.mower_entity || this._config?.status_entity;
+    const previousEntity = this._config?.entity || this._config?.status_entity;
     const previousScheduleEntity = this._config?.schedule_entity || null;
     const previousScheduleSwitchEntity = this._config?.schedule_switch_entity || null;
     const incoming = { ...config };
-    if (!incoming.entity && incoming.mower_entity) incoming.entity = incoming.mower_entity;
     this._config = { ...DEFAULTS, ...incoming };
     this._config.auto_entities = normalizeBoolean(incoming.auto_entities, DEFAULTS.auto_entities);
     const mapOrientation = String(incoming.map_orientation ?? DEFAULTS.map_orientation).trim().toLowerCase();
@@ -1074,8 +1064,8 @@ var NavimowerMapCard = class extends HTMLElement {
   _explicitEntities() {
     const c = this._config || {};
     return {
-      mower_entity: c.entity || c.mower_entity || c.status_entity || null,
-      status_entity: c.status_entity || c.entity || c.mower_entity || null,
+      mower_entity: c.entity || c.status_entity || null,
+      status_entity: c.status_entity || c.entity || null,
       map_entity: c.map_entity || null,
       x_entity: c.x_entity || null,
       y_entity: c.y_entity || null,
@@ -1088,7 +1078,7 @@ var NavimowerMapCard = class extends HTMLElement {
   }
   _resolveEntities() {
     if (!this._config || !this._hass) return;
-    const mower = this._config.entity || this._config.mower_entity || this._config.status_entity || "";
+    const mower = this._config.entity || this._config.status_entity || "";
     const key = [
       mower,
       this._config.auto_entities,
@@ -2166,7 +2156,7 @@ var NavimowerMapCard = class extends HTMLElement {
       return `<line x1="${this._layout.sx(Number(p1[0])).toFixed(1)}" y1="${this._layout.sy(Number(p1[1])).toFixed(1)}" x2="${this._layout.sx(Number(p2[0])).toFixed(1)}" y2="${this._layout.sy(Number(p2[1])).toFixed(1)}" stroke="${escapeHtml(this._config.zone_stroke_color)}" stroke-width="3" stroke-linecap="round"${solid ? "" : ' stroke-dasharray="10 7"'}/>`;
     }).join("");
   }
-  _sessionRecords({ applyLimit = true } = {}) {
+  _sessionRecords() {
     const rawSessions = Array.isArray(this._mapPayload?.sessions) ? this._mapPayload.sessions : [];
     const normalized = rawSessions.map((session, index) => {
       const active = Boolean(session.active || session.ended_at === null && session.started_at);
@@ -2200,10 +2190,10 @@ var NavimowerMapCard = class extends HTMLElement {
         drawable: this._hasDrawableSegment(activeSegments)
       });
     }
-    return applyLimit ? normalized.slice(-Math.max(1, Number(this._config.session_count) || 6)) : normalized;
+    return normalized;
   }
   _sessionsForCurrentView() {
-    const sessions = this._sessionRecords({ applyLimit: false });
+    const sessions = this._sessionRecords();
     const offset = this._historyDayOffset === null ? 0 : Number(this._historyDayOffset) || 0;
     return sessionsForHistoryDay032(sessions, offset);
   }
@@ -2233,7 +2223,6 @@ var NavimowerMapCard = class extends HTMLElement {
     const renderKey = [
       this._mapStaticSignature,
       this._historyDayOffset ?? "today",
-      this._config.session_count,
       this._config.trail_color,
       this._layout.scale,
       this._mapPayload?.daily_trails?.revision ?? "",
@@ -2252,7 +2241,7 @@ var NavimowerMapCard = class extends HTMLElement {
   }
   _pulseSessionPath(sessionId2) {
     if (!this._highlightEl || !this._layout) return;
-    const session = this._sessionRecords({ applyLimit: false }).find((item) => String(item.id) === String(sessionId2));
+    const session = this._sessionRecords().find((item) => String(item.id) === String(sessionId2));
     if (!session || !session.drawable) return;
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
     this._highlightEl.innerHTML = "";
@@ -3148,7 +3137,6 @@ var NavimowerMapCard = class extends HTMLElement {
     const sessions = this._sessionsForCurrentView();
     const renderKey = [
       this._historyDayOffset ?? "today",
-      this._config.session_count,
       this._config.trail_color,
       this._config.trail_opacity,
       sessions.map((session) => `${session.id}:${session.started_at}:${session.ended_at}:${session.active}:${session.drawable}`).join(";")
@@ -4475,7 +4463,7 @@ function patchCard() {
     void loadSessionIndex(this, originalApiPath, force);
     this._syncFrontendSchedulerPayloadBeta2?.();
   };
-  proto._sessionRecords = function patchedSessionRecords({ applyLimit = true } = {}) {
+  proto._sessionRecords = function patchedSessionRecords() {
     ensureState(this);
     const mapSessions = Array.isArray(this._mapPayload?.sessions) ? this._mapPayload.sessions : [];
     const indexed = Array.isArray(this._v030SessionIndex) ? this._v030SessionIndex : mapSessions;
@@ -4522,7 +4510,7 @@ function patchCard() {
         drawable: this._hasDrawableSegment(segments)
       });
     }
-    return applyLimit ? rows.slice(-Math.max(1, Number(this._config?.session_count) || 6)) : rows;
+    return rows;
   };
   proto._dailyTrailRecords = function noCompletedLineFallback() {
     return null;
@@ -4539,7 +4527,6 @@ function patchCard() {
     const renderKey = [
       this._mapStaticSignature,
       this._historyDayOffset ?? "today",
-      this._config.session_count,
       this._config.trail_color,
       this._config.trail_opacity,
       this._layout.scale,
@@ -4556,7 +4543,7 @@ function patchCard() {
     )).join("");
   };
   proto._renderSelectedSessionArchive = function renderSelectedSessionArchive() {
-    const session = this._sessionRecords({ applyLimit: false }).find((item) => String(item.id) === this._historySelectedSessionId);
+    const session = this._sessionRecords().find((item) => String(item.id) === this._historySelectedSessionId);
     if (!session || session.active || !this._highlightEl || !this._layout) return;
     const render = renderEntry(this, session);
     if (render) this._highlightEl.innerHTML = archiveHighlightSvg(
@@ -4574,7 +4561,7 @@ function patchCard() {
     this._historyRenderKey = null;
     this._renderHistory();
     this._renderTrail();
-    const session = this._sessionRecords({ applyLimit: false }).find((item) => String(item.id) === String(requestedId));
+    const session = this._sessionRecords().find((item) => String(item.id) === String(requestedId));
     if (!session || session.active) return originalPulseSessionPath.call(this, requestedId);
     let render = renderEntry(this, session);
     if (!render) {
@@ -4606,7 +4593,6 @@ function patchCard() {
     loadVisibleRenders(this, sessions, originalApiPath);
     const renderKey = [
       this._historyDayOffset ?? "today",
-      this._config.session_count,
       this._config.trail_color,
       this._config.trail_opacity,
       sessions.map((session) => `${session.id}:${session.active}:${session.drawable}:${session.renderLoading}`).join(";")
@@ -5249,7 +5235,7 @@ function resolveNotificationEntity(card) {
   if (explicit && hass.states[explicit]) return explicit;
   const resolved = card?._resolved?.notification_entity;
   if (resolved && hass.states[resolved]) return resolved;
-  const mowerEntity = card?._resolved?.mower_entity || card?._config?.entity || card?._config?.mower_entity || card?._config?.status_entity;
+  const mowerEntity = card?._resolved?.mower_entity || card?._config?.entity || card?._config?.status_entity;
   const named = notificationEntityCandidates(mowerEntity).find((entityId) => hass.states[entityId]);
   const found = named || sameDeviceNotificationEntity(card);
   if (found && card?._resolved) {
@@ -5510,8 +5496,8 @@ function patchCard6() {
 if (globalThis.customElements) patchCard6();
 
 // src/navimower-map-card-v036n.js
-var NOTIFICATION_PAGE_SIZE_DEFAULT = 3;
-var NOTIFICATION_PAGE_SIZE_LIMITS = Object.freeze({ minimum: 1, maximum: 5 });
+var NOTIFICATION_DISPLAY_COUNT_DEFAULT = 5;
+var NOTIFICATION_DISPLAY_COUNT_LIMITS = Object.freeze({ minimum: 1, maximum: 10 });
 var NOTIFICATION_MARK_READ_ON_OPEN_DEFAULT = false;
 function escapeHtml5(value) {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
@@ -5524,18 +5510,18 @@ function booleanValue(value, fallback = false) {
   if (["false", "0", "no", "off"].includes(text)) return false;
   return Boolean(value);
 }
-function notificationPageSize(config = {}) {
-  const value = Math.floor(Number(config?.notification_page_size));
-  if (!Number.isFinite(value)) return NOTIFICATION_PAGE_SIZE_DEFAULT;
+function notificationDisplayCount(config = {}) {
+  const value = Math.floor(Number(config?.notification_count));
+  if (!Number.isFinite(value)) return NOTIFICATION_DISPLAY_COUNT_DEFAULT;
   return Math.min(
-    NOTIFICATION_PAGE_SIZE_LIMITS.maximum,
-    Math.max(NOTIFICATION_PAGE_SIZE_LIMITS.minimum, value)
+    NOTIFICATION_DISPLAY_COUNT_LIMITS.maximum,
+    Math.max(NOTIFICATION_DISPLAY_COUNT_LIMITS.minimum, value)
   );
 }
 function normalizeNotificationActionConfig(config = {}) {
   return {
     ...config || {},
-    notification_page_size: notificationPageSize(config),
+    notification_count: notificationDisplayCount(config),
     notification_mark_read_on_open: booleanValue(
       config?.notification_mark_read_on_open,
       NOTIFICATION_MARK_READ_ON_OPEN_DEFAULT
@@ -5570,11 +5556,11 @@ function extendNotificationConfigForm(form) {
           schema: [
             { name: "notification_mark_read_on_open", selector: { boolean: {} } },
             {
-              name: "notification_page_size",
+              name: "notification_count",
               selector: {
                 number: {
-                  min: NOTIFICATION_PAGE_SIZE_LIMITS.minimum,
-                  max: NOTIFICATION_PAGE_SIZE_LIMITS.maximum,
+                  min: NOTIFICATION_DISPLAY_COUNT_LIMITS.minimum,
+                  max: NOTIFICATION_DISPLAY_COUNT_LIMITS.maximum,
                   step: 1,
                   mode: "box"
                 }
@@ -5590,7 +5576,7 @@ function extendNotificationConfigForm(form) {
   const originalComputeLabel = typeof next.computeLabel === "function" ? next.computeLabel : null;
   next.computeLabel = (schema) => {
     if (schema?.name === "notification_mark_read_on_open") return "Mark notifications as read when opening";
-    if (schema?.name === "notification_page_size") return "Notifications per page";
+    if (schema?.name === "notification_count") return "Notifications to show";
     return originalComputeLabel?.(schema) || schema?.name || "";
   };
   return next;
@@ -5601,7 +5587,7 @@ function resolveNotificationEntity2(card) {
   if (explicit && hass?.states?.[explicit]) return explicit;
   const resolved = card?._resolved?.notification_entity;
   if (resolved && hass?.states?.[resolved]) return resolved;
-  const mowerEntity = card?._resolved?.mower_entity || card?._config?.entity || card?._config?.mower_entity || card?._config?.status_entity;
+  const mowerEntity = card?._resolved?.mower_entity || card?._config?.entity || card?._config?.status_entity;
   const candidate = notificationEntityCandidates(mowerEntity).find((entityId) => hass?.states?.[entityId]);
   if (candidate && card?._resolved) {
     card._resolved = { ...card._resolved, notification_entity: candidate };
@@ -5718,7 +5704,7 @@ function renderNotificationDialog2(card) {
   ensureBeta2NotificationDom(card);
   const { entityId, state } = notificationState2(card);
   const items = notificationItemsWithMessageIds(state);
-  const pageSize = notificationPageSize(card?._config);
+  const pageSize = notificationDisplayCount(card?._config);
   const page = notificationPage(items, card._notificationPage, pageSize);
   card._notificationPage = page.page;
   const unread = hasUnreadNotifications(items);
@@ -6096,7 +6082,7 @@ function renderNotificationDialog3(card) {
   ensureCompactNotificationStyles(card);
   const { entityId, state } = notificationState3(card);
   const items = notificationItemsWithMessageIds(state);
-  const pageSize = notificationPageSize(card?._config);
+  const pageSize = notificationDisplayCount(card?._config);
   const page = notificationPage(items, card._notificationPage, pageSize);
   card._notificationPage = page.page;
   const unread = hasUnreadNotifications(items);
@@ -6321,7 +6307,6 @@ function normalizeBeta4Config(config = {}) {
     ...config || {},
     notification_count: notificationCount(config)
   };
-  delete next.notification_page_size;
   return next;
 }
 function enforceTwoRowHeader(card) {
@@ -6347,15 +6332,8 @@ function findSchema5(node, name) {
   }
   return null;
 }
-function removeSchemaField(node, name) {
-  if (!node || typeof node !== "object") return;
-  if (!Array.isArray(node.schema)) return;
-  node.schema = node.schema.filter((item) => item?.name !== name);
-  for (const child of node.schema) removeSchemaField(child, name);
-}
 function extendBeta4ConfigForm(form) {
   const next = form && typeof form === "object" ? form : { schema: [] };
-  removeSchemaField(next, "notification_page_size");
   const notifications = findSchema5(next, "notifications");
   const grid = findSchema5(notifications, "notifications_grid") || notifications;
   if (grid && Array.isArray(grid.schema) && !findSchema5(grid, "notification_count")) {
@@ -6384,7 +6362,7 @@ function resolveNotificationEntity3(card) {
   if (explicit && hass?.states?.[explicit]) return explicit;
   const resolved = card?._resolved?.notification_entity;
   if (resolved && hass?.states?.[resolved]) return resolved;
-  const mowerEntity = card?._resolved?.mower_entity || card?._config?.entity || card?._config?.mower_entity || card?._config?.status_entity;
+  const mowerEntity = card?._resolved?.mower_entity || card?._config?.entity || card?._config?.status_entity;
   const candidate = notificationEntityCandidates(mowerEntity).find((entityId) => hass?.states?.[entityId]);
   if (candidate && card?._resolved) {
     card._resolved = { ...card._resolved, notification_entity: candidate };
@@ -6826,7 +6804,7 @@ function sessionsForHistoryDay032(sessions, dayOffset) {
   });
 }
 function mowerModel032(card) {
-  const entityId = card?._resolved?.mower_entity || card?._resolved?.status_entity || card?._config?.entity || card?._config?.mower_entity;
+  const entityId = card?._resolved?.mower_entity || card?._resolved?.status_entity || card?._config?.entity;
   const state = entityId ? card?._hass?.states?.[entityId] : null;
   return String(
     card?._mowerModel032 ||
@@ -6892,7 +6870,6 @@ function patchCard032Beta1() {
   const originalStub = Card.getStubConfig;
   Card.getStubConfig = function beta032Stub(...args) {
     const config = { ...(originalStub?.apply(this, args) || {}) };
-    delete config.session_count;
     config.history_days = 3;
     config.mower_icon = "auto";
     return config;
@@ -6916,9 +6893,6 @@ function patchCard032Beta1() {
     };
     const walk = (node) => {
       if (Array.isArray(node)) {
-        for (let i = node.length - 1; i >= 0; i -= 1) {
-if (node[i]?.name === "session_count") node.splice(i, 1);
-        }
         const historyIndex = node.findIndex((item) => item?.name === "show_session_legend");
         if (historyIndex >= 0 && !node.some((item) => item?.name === "history_days")) {
 node.splice(historyIndex + 1, 0, historyField);
@@ -9261,7 +9235,6 @@ if (globalThis.customElements) patchCustomAreas0342();
     const entityId = card?._resolved?.mower_entity ||
       card?._resolved?.status_entity ||
       card?._config?.entity ||
-      card?._config?.mower_entity ||
       null;
     return entityId ? card?._hass?.states?.[entityId] || null : null;
   };
@@ -9708,13 +9681,12 @@ const VISUAL_DEFAULTS = Object.freeze({
           )
         )
       );
-      const previousIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
+      const previousIdentity = this._config?.entity || this._config?.map_entity || null;
       const result = previousSetConfig.call(this, prepared);
-      const currentIdentity = this._config?.entity || this._config?.mower_entity || this._config?.map_entity || null;
+      const currentIdentity = this._config?.entity || this._config?.map_entity || null;
       if (!this._v030Renders || previousIdentity && previousIdentity !== currentIdentity) resetArchiveState(this);
       if (this._config) {
         this._config.notification_count = normalized.notification_count;
-        delete this._config.notification_page_size;
       }
       enforceTwoRowHeader(this);
       if (this._historyDayOffset !== null && Number(this._historyDayOffset) >= this._config.history_days) {
@@ -12175,28 +12147,19 @@ const VISUAL_DEFAULTS = Object.freeze({
   function renderMultiNotifications036(card) {
     if (!multiActive036(card) || !card?._modalHostEl || !card._notificationDialogOpen) return;
     const items = notificationItems036(card);
-    const pageSize = typeof notificationPageSize === "function" ? notificationPageSize(card._config || {}) : Math.max(1, Math.min(10, Number(card?._config?.notification_page_size) || 3));
-    const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
-    card._multi036NotificationPage = Math.max(0, Math.min(pageCount - 1, Number(card._multi036NotificationPage) || 0));
-    const pageItems = items.slice(card._multi036NotificationPage * pageSize, card._multi036NotificationPage * pageSize + pageSize);
+    const visibleItems = items.slice(0, notificationCount(card._config || {}));
     const unread = items.some((item) => item.read === false);
-    const body = pageItems.length ? pageItems.map((item) => {
+    const body = visibleItems.length ? visibleItems.map((item) => {
       const member = item.member;
       const stamp = typeof formatNotificationTimestamp === "function" ? formatNotificationTimestamp(item.created_at ?? item.addtime, card._hass) : (date036(item.created_at ?? item.addtime)?.toLocaleString() || "Time unavailable");
       const id = String(item.message_id ?? item.messageId ?? item.id ?? "");
       const code = item.notification_code ?? item.error_code ?? item.event_code ?? item.code ?? null;
       return "<article class=\"nm-notification-item" + (item.read === false ? " unread" : "") + "\"><div class=\"nm-notification-meta\"><span class=\"nm-notification-dot\"></span><span class=\"nm-multi-notification-mower\">" + esc(displayName036(member)) + "</span><span class=\"nm-notification-time\">" + esc(stamp) + "</span>" + (code ? "<span class=\"nm-notification-code\">" + esc(code) + "</span>" : "") + "</div><div class=\"nm-notification-item-title\">" + esc(item.title || "Notification") + "</div>" + (item.content ? "<div class=\"nm-notification-content\">" + esc(item.content) + "</div>" : "") + (item.read === false && id ? "<button type=\"button\" class=\"nm-notification-mark-read\" data-multi-notification-read=\"" + esc(id) + "\" data-entry-id=\"" + esc(member.entry_id) + "\">Mark as read</button>" : "") + "</article>";
     }).join("") : "<div class=\"nm-notification-empty\">No notifications available.</div>";
-    const pager = pageCount > 1 ? "<div class=\"nm-notification-pager\"><button type=\"button\" data-multi-notification-page=\"previous\"" + (card._multi036NotificationPage <= 0 ? " disabled" : "") + ">Previous</button><span class=\"nm-notification-page-label\">" + (card._multi036NotificationPage + 1) + " / " + pageCount + "</span><button type=\"button\" data-multi-notification-page=\"next\"" + (card._multi036NotificationPage >= pageCount - 1 ? " disabled" : "") + ">Next</button></div>" : "";
-    card._modalHostEl.innerHTML = "<div class=\"nm-backdrop nm-notification-backdrop\"><div class=\"nm-dialog nm-notification-dialog\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Notifications\"><div class=\"nm-notification-head\"><div class=\"nm-notification-title\">Notifications</div>" + (unread ? "<button type=\"button\" class=\"nm-notification-mark-all\" data-multi-notification-all>Mark all as read</button>" : "<span></span>") + "<button type=\"button\" class=\"nm-notification-close\" aria-label=\"Close notifications\"><ha-icon icon=\"mdi:close\"></ha-icon></button></div><div class=\"nm-notification-body\">" + body + "</div>" + pager + "</div></div>";
+    card._modalHostEl.innerHTML = "<div class=\"nm-backdrop nm-notification-backdrop\"><div class=\"nm-dialog nm-notification-dialog\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Notifications\"><div class=\"nm-notification-head\"><div class=\"nm-notification-title\">Notifications</div>" + (unread ? "<button type=\"button\" class=\"nm-notification-mark-all\" data-multi-notification-all>Mark all as read</button>" : "<span></span>") + "<button type=\"button\" class=\"nm-notification-close\" aria-label=\"Close notifications\"><ha-icon icon=\"mdi:close\"></ha-icon></button></div><div class=\"nm-notification-body\">" + body + "</div></div></div>";
     const backdrop = card._modalHostEl.querySelector?.(".nm-notification-backdrop");
     backdrop?.addEventListener("click", (event) => { if (event.target === backdrop) card._closeNotificationDialog?.(); });
     card._modalHostEl.querySelector?.(".nm-notification-close")?.addEventListener("click", () => card._closeNotificationDialog?.());
-    card._modalHostEl.querySelectorAll?.("[data-multi-notification-page]").forEach((button) => button.addEventListener("click", () => {
-      if (button.disabled) return;
-      card._multi036NotificationPage += button.dataset.multiNotificationPage === "next" ? 1 : -1;
-      renderMultiNotifications036(card);
-    }));
     card._modalHostEl.querySelectorAll?.("[data-multi-notification-read]").forEach((button) => button.addEventListener("click", async () => {
       const member = memberById036(card, button.dataset.entryId);
       const deviceId = memberDevice036(member);
@@ -12532,7 +12495,6 @@ const VISUAL_DEFAULTS = Object.freeze({
       this._beta6ManagedOpen = false;
       this._beta2ScheduleOpen = false;
       this._notificationDialogOpen = true;
-      this._multi036NotificationPage = 0;
       renderMultiNotifications036(this);
       syncMultiNotificationBell036(this);
     };
@@ -12625,7 +12587,7 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
   const underlayEnabled = (card) => ["openstreetmap", "estonia_orthophoto", "estonia_hybrid", "google_satellite"].includes(underlayProvider(card))
     && providerAvailable(card);
-  const underlayOpacity = (card) => clamp(card?._config?.underlay_opacity ?? card?._config?.osm_underlay_opacity ?? DEFAULT_OPACITY, 0.1, 1);
+  const underlayOpacity = (card) => clamp(card?._config?.underlay_opacity ?? DEFAULT_OPACITY, 0.1, 1);
   const googleTileTemplate = (card) => String(frontendUnderlayMetadata(card)?.google_satellite?.tile_api_path_template || "");
   const googleMaxZoom = (card) => clamp(card?._googleSatelliteMaxZoom11 ?? DEFAULT_ZOOM, 15, DEFAULT_ZOOM);
   const isEstoniaLocation = (lat, lon) => {
@@ -13138,7 +13100,7 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
 
   const previousStub = Card.getStubConfig?.bind(Card);
-  Card.getStubConfig = (...args) => ({ ...(previousStub?.(...args) || {}), map_underlay: "none", osm_underlay_opacity: DEFAULT_OPACITY });
+  Card.getStubConfig = (...args) => ({ ...(previousStub?.(...args) || {}), map_underlay: "none", underlay_opacity: DEFAULT_OPACITY });
 
   const previousForm = Card.getConfigForm?.bind(Card);
   Card.getConfigForm = (...args) => {
@@ -13173,7 +13135,7 @@ const VISUAL_DEFAULTS = Object.freeze({
               { value: "openstreetmap", label: "OpenStreetMap" },
               ...(estoniaUnderlayAvailable ? [{ value: "estonia_orthophoto", label: "Maa- ja Ruumiamet Ortofoto" }] : []),
             ] } } },
-            { name: "osm_underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
+            { name: "underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
           );
         }
         return true;
@@ -13183,7 +13145,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     };
     walkArrays(form.schema);
     const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema, data) => schema?.name === "map_underlay" ? "Map underlay" : schema?.name === "osm_underlay_opacity" ? "Map underlay opacity" : baseLabel?.(schema, data) || schema?.name || "";
+    form.computeLabel = (schema, data) => schema?.name === "map_underlay" ? "Map underlay" : schema?.name === "underlay_opacity" ? "Underlay opacity" : baseLabel?.(schema, data) || schema?.name || "";
     return form;
   };
 
@@ -13192,7 +13154,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     proto.setConfig = function beta5OsmSetConfig(config) {
       const next = { ...(config || {}) };
       if (next.map_underlay === undefined) next.map_underlay = "none";
-      if (next.osm_underlay_opacity === undefined) next.osm_underlay_opacity = DEFAULT_OPACITY;
+      if (next.underlay_opacity === undefined) next.underlay_opacity = DEFAULT_OPACITY;
       const result = previousSetConfig.call(this, next);
       queueMicrotask(() => syncCard(this));
       queueMicrotask(() => this._syncOsmUnderlay036?.());
@@ -13203,7 +13165,7 @@ const VISUAL_DEFAULTS = Object.freeze({
   const previousStaticCacheKey = proto._staticCacheKey;
   if (typeof previousStaticCacheKey === "function") {
     proto._staticCacheKey = function beta5OsmStaticKey(...args) {
-      return [previousStaticCacheKey.apply(this, args), this?._config?.map_underlay || "none", this?._config?.underlay_opacity ?? this?._config?.osm_underlay_opacity ?? DEFAULT_OPACITY].join("|");
+      return [previousStaticCacheKey.apply(this, args), this?._config?.map_underlay || "none", this?._config?.underlay_opacity ?? DEFAULT_OPACITY].join("|");
     };
   }
 
@@ -13242,7 +13204,7 @@ const VISUAL_DEFAULTS = Object.freeze({
   Card.getConfigForm = (...args) => {
     const form = previousForm?.(...args) || { schema: [] };
     if (!Array.isArray(form.schema)) return form;
-    const names = new Set(["map_underlay", "osm_underlay_opacity"]);
+    const names = new Set(["map_underlay", "underlay_opacity"]);
     const remove = (items) => {
       for (const item of Array.isArray(items) ? items : []) {
         if (!Array.isArray(item?.schema)) continue;
@@ -13267,12 +13229,12 @@ const VISUAL_DEFAULTS = Object.freeze({
             { value: "none", label: "None" },
             { value: "openstreetmap", label: "OpenStreetMap" },
           ] } } },
-          { name: "osm_underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
+          { name: "underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
         ],
       }],
     });
     const baseLabel = typeof form.computeLabel === "function" ? form.computeLabel : null;
-    form.computeLabel = (schema, data) => schema?.name === "map_underlay" ? "Map underlay" : schema?.name === "osm_underlay_opacity" ? "OSM opacity" : baseLabel?.(schema, data) || schema?.name || "";
+    form.computeLabel = (schema, data) => schema?.name === "map_underlay" ? "Map underlay" : schema?.name === "underlay_opacity" ? "Underlay opacity" : baseLabel?.(schema, data) || schema?.name || "";
     return form;
   };
 
@@ -13323,7 +13285,7 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
   const clamp10 = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
   const provider10 = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
-  const opacity10 = (card) => clamp10(finite10(card?._config?.underlay_opacity ?? card?._config?.osm_underlay_opacity, 0.55), 0.1, 1);
+  const opacity10 = (card) => clamp10(finite10(card?._config?.underlay_opacity, 0.55), 0.1, 1);
   const georeference10 = (card) => card?._mapPayload?.georeference || card?._mapPayload?.map?.georeference || null;
   const validGeoreference10 = (value) => {
     if (!value || typeof value !== "object") return false;
@@ -13875,9 +13837,6 @@ const VISUAL_DEFAULTS = Object.freeze({
   if (typeof previousSetConfig === "function") {
     proto.setConfig = function beta11MapUnderlaySetConfig(config) {
       const next = { ...(config || {}) };
-      if (next.underlay_opacity === undefined && next.osm_underlay_opacity !== undefined) {
-        next.underlay_opacity = next.osm_underlay_opacity;
-      }
       if (next.underlay_opacity === undefined) next.underlay_opacity = DEFAULT_OPACITY11;
       const result = previousSetConfig.call(this, next);
       this._scheduleDetail10?.();
@@ -13911,10 +13870,8 @@ const VISUAL_DEFAULTS = Object.freeze({
   const previousStub = Card.getStubConfig?.bind(Card);
   Card.getStubConfig = (...args) => {
     const config = { ...(previousStub?.(...args) || {}) };
-    const legacyOpacity = config.osm_underlay_opacity;
-    delete config.osm_underlay_opacity;
     if (config.map_underlay === undefined) config.map_underlay = "none";
-    if (config.underlay_opacity === undefined) config.underlay_opacity = legacyOpacity ?? DEFAULT_OPACITY11;
+    if (config.underlay_opacity === undefined) config.underlay_opacity = DEFAULT_OPACITY11;
     return config;
   };
 
@@ -13922,7 +13879,7 @@ const VISUAL_DEFAULTS = Object.freeze({
   Card.getConfigForm = (...args) => {
     const form = previousForm?.(...args) || { schema: [] };
     if (!Array.isArray(form.schema)) return form;
-    const fieldNames = new Set(["map_underlay", "osm_underlay_opacity", "underlay_opacity"]);
+    const fieldNames = new Set(["map_underlay", "underlay_opacity"]);
     const strip = (items) => (Array.isArray(items) ? items : []).filter((item) => {
       if (item?.name === "map_underlay_settings" || fieldNames.has(item?.name)) return false;
       if (Array.isArray(item?.schema)) item.schema = strip(item.schema);
@@ -14311,9 +14268,9 @@ const VISUAL_DEFAULTS = Object.freeze({
   const previousSetConfig = proto.setConfig;
   if (typeof previousSetConfig === "function") {
     proto.setConfig = function beta16SetConfig(config) {
-      const previous = this?._config?.entity || this?._config?.mower_entity || null;
+      const previous = this?._config?.entity || null;
       const result = previousSetConfig.call(this, config);
-      const current = this?._config?.entity || this?._config?.mower_entity || null;
+      const current = this?._config?.entity || null;
       if (previous !== current) {
         this._historySelectedSessionId = null;
         this._retainedCycleSourceKey = null;
@@ -15951,7 +15908,6 @@ const VISUAL_DEFAULTS = Object.freeze({
     const lidarVisibility = [
       ...(lidarEntities.length ? [
         { field: "entity", operator: "in", value: lidarEntities },
-        { field: "mower_entity", operator: "in", value: lidarEntities },
         { condition: "and", conditions: [
           { field: "multi_mower", operator: "eq", value: true },
           { field: "entity", operator: "exists" },
@@ -16513,9 +16469,9 @@ const VISUAL_DEFAULTS = Object.freeze({
   if (typeof previousSetConfig === "function") {
     proto.setConfig = function beta7SetConfig(config) {
       this._closeArtifactClients?.(config);
-      const previous = this?._config?.entity || this?._config?.mower_entity || null;
+      const previous = this?._config?.entity || null;
       const result = previousSetConfig.call(this, config);
-      const current = this?._config?.entity || this?._config?.mower_entity || null;
+      const current = this?._config?.entity || null;
       if (previous !== current) {
         this._nm037Beta7Loading = null;
         this._nm037Beta7Pending = false;
@@ -16905,7 +16861,7 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
   function closeClients(card) { for (const client of card._nmBeta8Clients?.values?.() || []) client.close(); card._nmBeta8Clients?.clear?.(); }
   proto._closeArtifactClients = function(config) {
-    if (this._config?.entity !== config?.entity || this._config?.mower_entity !== config?.mower_entity
+    if (this._config?.entity !== config?.entity
         || this._config?.multi_mower !== config?.multi_mower) closeClients(this);
   };
   const previousDisconnected = proto.disconnectedCallback;

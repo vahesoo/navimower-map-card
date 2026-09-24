@@ -301,7 +301,7 @@ dock_scale: 1.1
 zone_marker_scale: 1.1
 ```
 
-The visual editor is the authoritative way to discover currently supported values. Legacy `osm_underlay_opacity` is still read for compatibility, while newly edited cards use `underlay_opacity`.
+The visual editor is the authoritative way to discover currently supported values. Map underlay opacity uses the canonical `underlay_opacity` setting.
 
 ## Visual editor
 

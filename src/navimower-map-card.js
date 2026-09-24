@@ -1356,16 +1356,6 @@ var NavimowerMapCard = class extends HTMLElement {
         const path = String(gate?.path_d || "");
         if (!path) continue;
         details.push(`<path d="${escape(path)}" transform="${transform}" fill="${escape(c.gate_area_color)}" fill-opacity=".14" stroke="${escape(c.gate_area_color)}" stroke-width="${finiteNumber(c.gate_area_stroke_width, 1.5)}" stroke-dasharray="10 6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`);
-        const centroid = Array.isArray(gate?.centroid) ? gate.centroid : null;
-        const bounds = Array.isArray(gate?.bounds) ? gate.bounds : null;
-        if (centroid?.length >= 2) {
-          const gateX = this._layout.sx(Number(centroid[0]));
-          const gateY = bounds?.length >= 4 ? this._layout.sy(Number(bounds[3])) + 24 : this._layout.sy(Number(centroid[1]));
-          const gateLabel = gate.name || "Gate area";
-          labels.push(this._label(gateX, gateY, gateLabel, 19));
-          const gateWidth = Math.max(54, String(gateLabel).length * 11.5);
-          labelObstacles.push({ left: gateX - gateWidth / 2, right: gateX + gateWidth / 2, top: gateY - 21, bottom: gateY + 7 });
-        }
       }
     }
 
@@ -1380,7 +1370,8 @@ var NavimowerMapCard = class extends HTMLElement {
         + ((prepared.channels || []).length > 0 && c.show_channels !== false ? 1 : 0)
         + ((prepared.gate_areas || []).length > 0 && c.show_gate_areas !== false ? 1 : 0);
       const legendScale = clamp(finiteNumber(c.map_legend_scale, 1), 0.5, 2);
-      labelObstacles.push({ left: 8, right: 8 + 172 * legendScale, top: 8, bottom: 8 + (32 + legendRows * 30) * legendScale });
+      const legendBox = { left: 8, right: 8 + 172 * legendScale, top: 8, bottom: 8 + (32 + legendRows * 30) * legendScale };
+      labelObstacles.push(this._mapPresentationInverseBox?.(legendBox) || legendBox);
     }
 
     const arrangedZoneLabels = c.avoid_zone_label_overlap === false
@@ -2117,26 +2108,15 @@ var NavimowerMapCard = class extends HTMLElement {
         const polygon = (Array.isArray(channel?.polygon) ? channel.polygon : [])
           .map((point) => [Number(point?.[0]), Number(point?.[1])])
           .filter((point) => point.every(Number.isFinite));
-        let gateX;
-        let gateY;
         if (polygon.length >= 3) {
-          const screen = polygon.map((point) => [sx(point[0]), sy(point[1])]);
           details.push(`<polygon points="${this._pointString(polygon)}" fill="${escapeHtml(c.gate_area_color)}" fill-opacity=".14" stroke="${escapeHtml(c.gate_area_color)}" stroke-width="3" stroke-dasharray="10 6" stroke-linejoin="round"/>`);
-          gateX = screen.reduce((sum, point) => sum + point[0], 0) / screen.length;
-          gateY = Math.min(...screen.map((point) => point[1])) + 24;
         } else {
           const x1 = sx(Number(channel.x_min));
           const x2 = sx(Number(channel.x_max));
           const y1 = sy(Number(channel.y_max));
           const y2 = sy(Number(channel.y_min));
           details.push(`<rect x="${Math.min(x1, x2).toFixed(1)}" y="${Math.min(y1, y2).toFixed(1)}" width="${Math.abs(x2 - x1).toFixed(1)}" height="${Math.abs(y2 - y1).toFixed(1)}" fill="${escapeHtml(c.gate_area_color)}" fill-opacity=".14" stroke="${escapeHtml(c.gate_area_color)}" stroke-width="3" stroke-dasharray="10 6"/>`);
-          gateX = (x1 + x2) / 2;
-          gateY = Math.min(y1, y2) + 24;
         }
-        const gateLabel = channel.name || "Gate area";
-        labels.push(this._label(gateX, gateY, gateLabel, 19));
-        const gateWidth = Math.max(54, String(gateLabel).length * 11.5);
-        labelObstacles.push({ left: gateX - gateWidth / 2, right: gateX + gateWidth / 2, top: gateY - 21, bottom: gateY + 7 });
       });
     }
     if (station && Number.isFinite(Number(station.x)) && Number.isFinite(Number(station.y))) {
@@ -2145,7 +2125,8 @@ var NavimowerMapCard = class extends HTMLElement {
     if (c.show_map_legend) {
       const legendRows = 2 + (c.show_vf_off_areas !== false ? 1 : 0) + (channels.length > 0 ? 1 : 0) + (gateAreas.length > 0 ? 1 : 0);
       const legendScale = clamp(finiteNumber(c.map_legend_scale, 1), 0.5, 2);
-      labelObstacles.push({ left: 8, right: 8 + 172 * legendScale, top: 8, bottom: 8 + (32 + legendRows * 30) * legendScale });
+      const legendBox = { left: 8, right: 8 + 172 * legendScale, top: 8, bottom: 8 + (32 + legendRows * 30) * legendScale };
+      labelObstacles.push(this._mapPresentationInverseBox?.(legendBox) || legendBox);
     }
     const arrangedZoneLabels = c.avoid_zone_label_overlap === false ? zoneLabels.map((item) => ({ ...item, cx: item.anchorX, cy: item.anchorY, ...this._pillMetrics(item.value), moved: false })) : this._layoutZoneLabels(zoneLabels, labelObstacles);
     const zoneLeaders = [];
@@ -3238,7 +3219,7 @@ var NavimowerMapCard = class extends HTMLElement {
   }
   _station(cx, cy) {
     const scale = clamp(finiteNumber(this._config.dock_scale, 1), 0.5, 2.5);
-    return `<g class="nm-dock-marker" transform="translate(${cx.toFixed(1)},${cy.toFixed(1)}) scale(${scale.toFixed(2)})">
+    return `<g class="nm-dock-marker" data-marker-cx="${cx.toFixed(1)}" data-marker-cy="${cy.toFixed(1)}" data-dock-scale="${scale.toFixed(2)}" transform="translate(${cx.toFixed(1)},${cy.toFixed(1)}) scale(${scale.toFixed(2)})">
       <rect x="-18" y="-18" width="36" height="36" rx="9" fill="${escapeHtml(this._config.dock_color)}" stroke="#fff" stroke-width="3"/>
       <path d="M4 -13 L-8 2 H-1 L-5 13 L9 -4 H2 Z" fill="#69f0ae"/>
     </g>`;
@@ -3694,6 +3675,61 @@ var NavimowerMapCard = class extends HTMLElement {
       matrix[0] * px + matrix[2] * py + matrix[4],
       matrix[1] * px + matrix[3] * py + matrix[5]
     ];
+  }
+  _mapPresentationInverseMatrix(matrix = null) {
+    const source = Array.isArray(matrix) && matrix.length >= 6
+      ? matrix.map((value) => Number(value))
+      : this._mapPresentationMatrix().matrix;
+    const [a, b, c, d, e, f] = source;
+    const determinant = a * d - b * c;
+    if (!source.every(Number.isFinite) || !Number.isFinite(determinant) || Math.abs(determinant) < 1e-12) {
+      return [1, 0, 0, 1, 0, 0];
+    }
+    return [
+      d / determinant,
+      -b / determinant,
+      -c / determinant,
+      a / determinant,
+      (c * f - d * e) / determinant,
+      (b * e - a * f) / determinant
+    ];
+  }
+  _mapPresentationInverseTransformPoint(x, y) {
+    const matrix = this._mapPresentationInverseMatrix();
+    const px = finiteNumber(x, VIEW_SIZE / 2);
+    const py = finiteNumber(y, VIEW_SIZE / 2);
+    return [
+      matrix[0] * px + matrix[2] * py + matrix[4],
+      matrix[1] * px + matrix[3] * py + matrix[5]
+    ];
+  }
+  _mapPresentationSourceCorners() {
+    const scale = Math.max(0.05, finiteNumber(this._view?.scale, 1));
+    const span = VIEW_SIZE / scale;
+    const cx = finiteNumber(this._view?.cx, VIEW_SIZE / 2);
+    const cy = finiteNumber(this._view?.cy, VIEW_SIZE / 2);
+    const half = span / 2;
+    return [
+      [cx - half, cy - half],
+      [cx + half, cy - half],
+      [cx - half, cy + half],
+      [cx + half, cy + half]
+    ].map(([x, y]) => this._mapPresentationInverseTransformPoint(x, y));
+  }
+  _mapPresentationInverseBox(box) {
+    if (!box) return box;
+    const points = [
+      [box.left, box.top],
+      [box.right, box.top],
+      [box.left, box.bottom],
+      [box.right, box.bottom]
+    ].map(([x, y]) => this._mapPresentationInverseTransformPoint(x, y));
+    return {
+      left: Math.min(...points.map((point) => point[0])),
+      right: Math.max(...points.map((point) => point[0])),
+      top: Math.min(...points.map((point) => point[1])),
+      bottom: Math.max(...points.map((point) => point[1]))
+    };
   }
   _mapPresentationClientToRoot(clientX, clientY) {
     const node = this._multiMapPresentationActive() ? this._multi036Layer : this._baseEl;
@@ -4828,6 +4864,35 @@ function markerTransform(cx, cy, zoom) {
   const inverse = 1 / Math.max(1, finiteNumber3(zoom, 1));
   return `translate(${Number(cx).toFixed(1)},${Number(cy).toFixed(1)}) scale(${inverse.toFixed(5)}) translate(${-Number(cx).toFixed(1)},${-Number(cy).toFixed(1)})`;
 }
+function presentationMarkerState(card) {
+  const state = card?._mapPresentationMatrix?.() || {};
+  const matrix = Array.isArray(state.matrix) && state.matrix.length >= 6
+    ? state.matrix.map((value) => Number(value))
+    : [1, 0, 0, 1, 0, 0];
+  return {
+    angle: finiteNumber3(state.angle, 0),
+    fit: Math.max(0.01, finiteNumber3(state.fit, 1)),
+    matrix
+  };
+}
+function presentationMarkerTransform(card, cx, cy, zoom) {
+  const state = presentationMarkerState(card);
+  const inverseZoom = 1 / Math.max(1, finiteNumber3(zoom, 1));
+  const scale = inverseZoom / state.fit;
+  const rotation = Math.abs(state.angle) < 1e-9 ? 0 : -state.angle;
+  return `translate(${Number(cx).toFixed(1)},${Number(cy).toFixed(1)}) rotate(${rotation.toFixed(5)}) scale(${scale.toFixed(5)}) translate(${-Number(cx).toFixed(1)},${-Number(cy).toFixed(1)})`;
+}
+function dockMarkerTransform(card, cx, cy, scale) {
+  const state = presentationMarkerState(card);
+  const rotation = Math.abs(state.angle) < 1e-9 ? 0 : -state.angle;
+  const counterScale = finiteNumber3(scale, 1) / state.fit;
+  return `translate(${Number(cx).toFixed(1)},${Number(cy).toFixed(1)}) rotate(${rotation.toFixed(5)}) scale(${counterScale.toFixed(5)})`;
+}
+function inversePresentationMatrixString(card) {
+  const state = presentationMarkerState(card);
+  const inverse = card?._mapPresentationInverseMatrix?.(state.matrix) || [1, 0, 0, 1, 0, 0];
+  return `matrix(${inverse.map((value) => Number(value).toFixed(10)).join(" ")})`;
+}
 function leaderEndpoint({ anchorX, anchorY, cx, cy, width, height, zoom }) {
   const dx = Number(anchorX) - Number(cx);
   const dy = Number(anchorY) - Number(cy);
@@ -4849,33 +4914,53 @@ function leaderEndpoint({ anchorX, anchorY, cx, cy, width, height, zoom }) {
   };
 }
 function applyZoneMarkerScale(card) {
-  const root = card?._labelsEl;
-  if (!root?.querySelectorAll) return;
   const zoom = Math.max(1, finiteNumber3(card?._view?.scale, 1));
-  root.querySelectorAll(".nm-zone-label[data-marker-cx][data-marker-cy]").forEach((marker) => {
-    const cx = finiteNumber3(marker.dataset.markerCx, null);
-    const cy = finiteNumber3(marker.dataset.markerCy, null);
-    const body = marker.querySelector?.(".nm-zone-marker-body");
-    if (cx === null || cy === null || !body?.setAttribute) return;
-    body.setAttribute("transform", markerTransform(cx, cy, zoom));
-    body.querySelector?.("rect")?.setAttribute?.("vector-effect", "non-scaling-stroke");
-  });
-  root.querySelectorAll(".nm-zone-label-leader[data-marker-cx]").forEach((leader) => {
-    const values = {
-      anchorX: finiteNumber3(leader.dataset.anchorX, null),
-      anchorY: finiteNumber3(leader.dataset.anchorY, null),
-      cx: finiteNumber3(leader.dataset.markerCx, null),
-      cy: finiteNumber3(leader.dataset.markerCy, null),
-      width: finiteNumber3(leader.dataset.markerWidth, null),
-      height: finiteNumber3(leader.dataset.markerHeight, null),
-      zoom
-    };
-    if (Object.values(values).slice(0, 6).some((value) => value === null)) return;
-    const endpoint = leaderEndpoint(values);
-    leader.setAttribute("x2", endpoint.x.toFixed(1));
-    leader.setAttribute("y2", endpoint.y.toFixed(1));
-    leader.setAttribute("vector-effect", "non-scaling-stroke");
-  });
+  const presentation = presentationMarkerState(card);
+  const presentationAdjusted = Math.abs(presentation.angle) > 1e-9 || Math.abs(presentation.fit - 1) > 1e-9;
+  const labelRoots = [card?._labelsEl, card?._multi036Layer].filter((root) => root?.querySelectorAll);
+  for (const root of labelRoots) {
+    root.querySelectorAll(".nm-zone-label[data-marker-cx][data-marker-cy]").forEach((marker) => {
+      const cx = finiteNumber3(marker.dataset.markerCx, null);
+      const cy = finiteNumber3(marker.dataset.markerCy, null);
+      const body = marker.querySelector?.(".nm-zone-marker-body");
+      if (cx === null || cy === null || !body?.setAttribute) return;
+      body.setAttribute("transform", presentationMarkerTransform(card, cx, cy, zoom));
+      body.querySelector?.("rect")?.setAttribute?.("vector-effect", "non-scaling-stroke");
+    });
+    root.querySelectorAll(".nm-zone-label-leader[data-marker-cx]").forEach((leader) => {
+      const values = {
+        anchorX: finiteNumber3(leader.dataset.anchorX, null),
+        anchorY: finiteNumber3(leader.dataset.anchorY, null),
+        cx: finiteNumber3(leader.dataset.markerCx, null),
+        cy: finiteNumber3(leader.dataset.markerCy, null),
+        width: finiteNumber3(leader.dataset.markerWidth, null),
+        height: finiteNumber3(leader.dataset.markerHeight, null),
+        zoom
+      };
+      if (Object.values(values).slice(0, 6).some((value) => value === null)) return;
+      const endpoint = presentationAdjusted ? { x: values.cx, y: values.cy } : leaderEndpoint(values);
+      leader.setAttribute("x2", endpoint.x.toFixed(1));
+      leader.setAttribute("y2", endpoint.y.toFixed(1));
+      leader.setAttribute("vector-effect", "non-scaling-stroke");
+    });
+  }
+
+  const dockRoots = [card?._detailsEl, card?._multi036Layer].filter((root) => root?.querySelectorAll);
+  for (const root of dockRoots) {
+    root.querySelectorAll(".nm-dock-marker[data-marker-cx][data-marker-cy]").forEach((marker) => {
+      const cx = finiteNumber3(marker.dataset.markerCx, null);
+      const cy = finiteNumber3(marker.dataset.markerCy, null);
+      const scale = finiteNumber3(marker.dataset.dockScale, 1);
+      if (cx === null || cy === null) return;
+      marker.setAttribute("transform", dockMarkerTransform(card, cx, cy, scale));
+    });
+  }
+
+  const legend = card?._multi036Layer?.querySelector?.(".nm-multi-map-legend");
+  if (legend?.setAttribute) {
+    const legendScale = clamp4(finiteNumber3(card?._config?.map_legend_scale, 1), 0.5, 2);
+    legend.setAttribute("transform", inversePresentationMatrixString(card) + ` translate(14 14) scale(${legendScale.toFixed(2)})`);
+  }
 }
 function wrapMarkerRefresh(proto, methodName) {
   const original = proto?.[methodName];
@@ -4926,7 +5011,7 @@ function patchCard3() {
     const markerCy = Number(cy).toFixed(1);
     const attrs = interactive ? ` class="nm-zone-label nm-zone-marker" data-zone-id="${escapeHtml3(zoneId)}" role="button" tabindex="0" aria-label="Open details for ${text}"` : ` class="nm-zone-marker"`;
     const title = interactive ? "<title>Open zone details</title>" : "";
-    const transform = markerTransform(cx, cy, this._view?.scale);
+    const transform = presentationMarkerTransform(this, cx, cy, this._view?.scale);
     return `<g${attrs} data-marker-cx="${markerCx}" data-marker-cy="${markerCy}" opacity="${opacity.toFixed(2)}">${title}<g class="nm-zone-marker-body" transform="${transform}"><rect x="${(cx - width / 2).toFixed(1)}" y="${(cy - height / 2).toFixed(1)}" width="${width.toFixed(1)}" height="${height.toFixed(1)}" rx="${(height / 2).toFixed(1)}" fill="#eceff1" fill-opacity=".94" stroke="#b0bec5" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
       <text x="${markerCx}" y="${(cy + fontSize * 0.34).toFixed(1)}" text-anchor="middle" font-family="sans-serif" font-size="${fontSize.toFixed(1)}" font-weight="600" fill="#37474f" pointer-events="none">${text}</text></g></g>`;
   };
@@ -4948,6 +5033,7 @@ function patchCard3() {
   wrapMarkerRefresh(proto, "_applyStaticLayers");
   wrapMarkerRefresh(proto, "_renderMower");
   wrapMarkerRefresh(proto, "_renderShell");
+  wrapMarkerRefresh(proto, "_syncMapPresentationRotation");
 }
 if (globalThis.customElements) patchCard3();
 
@@ -7055,16 +7141,11 @@ function patchCustomAreas0342() {
     const opacity = clamp(finiteNumber(card._config.custom_area_fill_opacity, 0.14), 0, 1);
     const width = clamp(finiteNumber(card._config.custom_area_stroke_width, 3), 1, 12);
     const shapes = [];
-    const labels = [];
     for (const area of areas) {
       const points = card._pointString(area.polygon);
       shapes.push(`<polygon points="${points}" fill="${color}" fill-opacity="${opacity.toFixed(2)}" stroke="${color}" stroke-width="${width}" stroke-dasharray="10 6" vector-effect="non-scaling-stroke"/>`);
-      const cx = area.polygon.reduce((sum, point) => sum + card._layout.sx(point[0]), 0) / area.polygon.length;
-      const cy = area.polygon.reduce((sum, point) => sum + card._layout.sy(point[1]), 0) / area.polygon.length;
-      labels.push(card._label(cx, cy, area.name, 19));
     }
     if (card._detailsEl) card._detailsEl.insertAdjacentHTML("beforeend", `<g class="nm-custom-areas">${shapes.join("")}</g>`);
-    if (card._labelsEl) card._labelsEl.insertAdjacentHTML("beforeend", `<g class="nm-custom-area-labels">${labels.join("")}</g>`);
   }
 
   const originalRegistryResolve = proto._resolveEntitiesFromRegistry;
@@ -11450,7 +11531,8 @@ const VISUAL_DEFAULTS = Object.freeze({
     const obstacles = [];
     if (legendVisible) {
       const legendScale = clamp036(card?._config?.map_legend_scale, 0.5, 2);
-      obstacles.push({ left: 8, right: 22 + 158 * legendScale, top: 8, bottom: 22 + 112 * legendScale });
+      const legendBox = { left: 8, right: 22 + 158 * legendScale, top: 8, bottom: 22 + 112 * legendScale };
+      obstacles.push(card?._mapPresentationInverseBox?.(legendBox) || legendBox);
     }
     let arranged = sourceItems;
     if (card?._config?.avoid_zone_label_overlap === false || typeof card?._layoutZoneLabels !== "function") {
@@ -12915,6 +12997,21 @@ const VISUAL_DEFAULTS = Object.freeze({
       return false;
     }
     const gps = mapPoints(card?._mapPayload?.map || {}).map(([x, y]) => localToWgs84(geo, x, y)).filter(Boolean);
+    const sourceCorners = card?._mapPresentationSourceCorners?.() || [];
+    if (sourceCorners.length >= 4) {
+      const sx0 = finite(card._layout.sx(0));
+      const sx1 = finite(card._layout.sx(1));
+      const sy0 = finite(card._layout.sy(0));
+      const sy1 = finite(card._layout.sy(1));
+      if ([sx0, sx1, sy0, sy1].every((value) => value !== null) && Math.abs(sx1 - sx0) > 1e-9 && Math.abs(sy1 - sy0) > 1e-9) {
+        for (const [screenX, screenY] of sourceCorners) {
+          const localX = (Number(screenX) - sx0) / (sx1 - sx0);
+          const localY = (Number(screenY) - sy0) / (sy1 - sy0);
+          const point = localToWgs84(geo, localX, localY);
+          if (point) gps.push(point);
+        }
+      }
+    }
     const bounds = paddedBounds(gps);
     const markup = tileMarkup(bounds, (lat, lon) => {
       const local = wgs84ToLocal(geo, lat, lon);
@@ -12975,6 +13072,12 @@ const VISUAL_DEFAULTS = Object.freeze({
       offsetWgs84(lat0, lon0, Number(siteBox.max_east), Number(siteBox.min_north)),
       offsetWgs84(lat0, lon0, Number(siteBox.max_east), Number(siteBox.max_north)),
     ];
+    const sourceCorners = card?._mapPresentationSourceCorners?.() || [];
+    for (const [screenX, screenY] of sourceCorners) {
+      const east = (Number(screenX) - layout.offsetX) / layout.scale;
+      const north = (layout.offsetY - Number(screenY)) / layout.scale;
+      corners.push(offsetWgs84(lat0, lon0, east, north));
+    }
     const bounds = paddedBounds(corners);
     const markup = tileMarkup(bounds, (lat, lon) => {
       const { east, north } = offsetMeters(lat0, lon0, lat, lon);
@@ -13375,12 +13478,15 @@ const VISUAL_DEFAULTS = Object.freeze({
       y: (screenY - sy0) / (sy1 - sy0),
     });
     const view = viewBounds10(card);
-    const localCorners = [
-      localAt(view.left, view.top),
-      localAt(view.right, view.top),
-      localAt(view.left, view.bottom),
-      localAt(view.right, view.bottom),
-    ];
+    const sourceCorners = card?._mapPresentationSourceCorners?.() || [];
+    const localCorners = sourceCorners.length >= 4
+      ? sourceCorners.map(([x, y]) => localAt(Number(x), Number(y)))
+      : [
+          localAt(view.left, view.top),
+          localAt(view.right, view.top),
+          localAt(view.left, view.bottom),
+          localAt(view.right, view.bottom),
+        ];
     return geoBounds10(localCorners.map((point) => localToWgs8410(geo, point.x, point.y)).filter(Boolean));
   };
   const syncSingle10 = (card) => {
@@ -13423,12 +13529,15 @@ const VISUAL_DEFAULTS = Object.freeze({
       east: (screenX - layout.offsetX) / layout.scale,
       north: (layout.offsetY - screenY) / layout.scale,
     });
-    const corners = [
-      siteAt(view.left, view.top),
-      siteAt(view.right, view.top),
-      siteAt(view.left, view.bottom),
-      siteAt(view.right, view.bottom),
-    ];
+    const sourceCorners = card?._mapPresentationSourceCorners?.() || [];
+    const corners = sourceCorners.length >= 4
+      ? sourceCorners.map(([x, y]) => siteAt(Number(x), Number(y)))
+      : [
+          siteAt(view.left, view.top),
+          siteAt(view.right, view.top),
+          siteAt(view.left, view.bottom),
+          siteAt(view.right, view.bottom),
+        ];
     return geoBounds10(corners.map((point) => offsetWgs8410(lat0, lon0, point.east, point.north)));
   };
   const syncMulti10 = (card) => {

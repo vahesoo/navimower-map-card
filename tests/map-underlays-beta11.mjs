@@ -18,7 +18,7 @@ for (const runtime of [source]) {
     assert.ok(runtime.includes(label), `missing editor label ${label}`);
   }
   assert.match(runtime, /underlay_opacity/);
-  assert.match(runtime, /osm_underlay_opacity/);
+  assert.doesNotMatch(runtime, /osm_underlay_opacity/);
   assert.match(runtime, /hybriid@GMC/);
   assert.match(runtime, /EESTIFOTO,HYBRID/);
   assert.match(runtime, /tile_api_path_template/);

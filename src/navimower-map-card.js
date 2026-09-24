@@ -12568,10 +12568,10 @@ const VISUAL_DEFAULTS = Object.freeze({
     const google = metadata?.google_satellite;
     if (!google || typeof google !== "object") return metadata;
     if (typeof google.configured === "boolean") {
-      Card.__navimowerGoogleSatelliteConfigured = google.configured;
+      Card.googleSatelliteConfigured036 = google.configured;
     }
     if (typeof google.available === "boolean") {
-      Card.__navimowerGoogleSatelliteAvailable = google.available;
+      Card.googleSatelliteAvailable036 = google.available;
     }
     return metadata;
   };
@@ -13890,8 +13890,8 @@ const VISUAL_DEFAULTS = Object.freeze({
   Card.getConfigForm = (...args) => {
     const form = previousForm?.(...args) || { schema: [] };
     if (!Array.isArray(form.schema)) return form;
-    const googleAvailable = Card.__navimowerGoogleSatelliteAvailable === true;
-    const googleConfigured = Card.__navimowerGoogleSatelliteConfigured === true;
+    const googleAvailable = Card.googleSatelliteAvailable036 === true;
+    const googleConfigured = Card.googleSatelliteConfigured036 === true;
     const googleLabel = googleAvailable
       ? "Google Satellite"
       : googleConfigured

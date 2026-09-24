@@ -14,14 +14,14 @@ A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo
 - **Live mower position** — MQTT-backed mower-local position and heading with model-aware artwork for H1/H2, i-series, i2 LiDAR, X3 and X4 families.
 - **Multi mower** — optional Site API view that combines validated nearby mower maps in one site viewport while keeping each mower's controls, schedule and history correctly scoped.
 - **Map underlays** — None, OpenStreetMap, Estonia Ortofoto, Estonia Hübriid and Google Satellite, using integration-owned provider reference frames where available.
-- **Mower controls** — conditional Resume plus Mow, Pause and Dock controls.
+- **Mower controls** — integration-driven conditional Resume plus Mow, Pause and Dock controls. Mow and Resume share the primary action color; Mow spans both columns when Resume is unavailable.
 - **Mow now** — select one or more map zones and choose restart/continue semantics; the card sends Navimower's internal map zone IDs, not displayed zone numbers.
 - **Notifications** — retained Navimow notifications with unread state, per-message read action and Mark all as read; Multi mower merges member feeds while preserving mower/account targeting.
 - **Schedule** — supports both native Navimow schedule and the integration-owned Navimower Schedule, including member-scoped access in Multi mower mode.
 - **Gate areas** — renders exact mower-local gate polygons and provides a direct visual editor for creating, reshaping, renaming and deleting them.
 - **Settings** — optional quick access to selected Home Assistant entities from the mower device.
 - **Map geometry** — zones, Off-limit areas, VF-off areas, Channels, Gate areas, charging station and integration-defined Custom Areas.
-- **Visual editor** — grouped Displayed information, Appearance, Colors, Map underlay, Notifications, Schedule and Settings controls.
+- **Visual editor** — grouped Displayed information, Appearance, Colors, Map underlay, LiDAR overlay, Notifications, Schedule and Settings controls. LiDAR controls are shown only when the integration advertises LiDAR terrain support, or when an existing LiDAR overlay selection must remain editable.
 - **Error feedback** — the mower icon gets a red pulsing glow while the `lawn_mower` entity reports an error.
 - **Zoom, pan and orientation** — mouse wheel, pinch zoom, pan, initial focus and optional browser-side view memory. Map orientation can stay in the mower's native frame, use geographic North-up, or use a custom rotation. Normal pan/zoom is intentionally suspended while the gate-area editor is active.
 - **Performance-oriented rendering** — static geometry and prepared mowing-area artifacts are reused; live mower pose changes do not rebuild every site layer.
@@ -47,8 +47,10 @@ The 0.3.6 line was developed together with the Navimower 0.4.4 line. Individual 
 | Prepared static/layout render model | 0.4.5-beta21+; beta23/beta24 recommended for stabilized static identity/checkpoint behavior |
 | Prepared live-route SVG model | 0.4.5-beta21+; beta25 recommended for 30 s backbone cadence and short-tail transport |
 | Prepared History manifest/resources | 0.4.5-beta26+; beta15 consumes retained completed-session resources |
+| Backend-owned Resume availability / `navimower.continue_task` | 0.4.5-beta37+ |
+| Integration-provided LiDAR overlay capability visibility | 0.4.5-beta35+; beta37 recommended |
 
-For the current prerelease pair, use Navimower 0.4.5-beta26 or newer. Older supported integrations remain usable through the card's legacy map/trail/History fallbacks, but they do not provide the beta15 Prepared History manifest/resources.
+For the current prerelease pair, use Navimower 0.4.5-beta37 or newer. Older supported integrations remain usable through the card's legacy map/trail/History fallbacks, but they do not provide the beta15 Prepared History manifest/resources.
 
 ## Installation with HACS
 

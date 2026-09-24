@@ -24,7 +24,7 @@ assert.match(source, /set_schedule_queue/);
 assert.doesNotMatch(source, /(?:from\s+|import\s*)["']\.\/navimower-map-card-/);
 assert.match(source, /i_dark:\s*\{\s*width:\s*85,\s*height:\s*120,[^\n]*data:image\/png;base64,/);
 assert.doesNotMatch(source, /i_dark:[^\n]*data:image\/webp;base64/);
-for (const marker of ["LATEST_MAP_PAYLOAD_CACHE","daily_trails_revision","show_vf_off_areas","notification_count","mark_notification_read","mark_all_notifications_read","nm-has-resume","navimower.resume","history_days","mower_icon","i2_lidar","MOWER_ICON_SPECS_032","show_custom_areas","custom_area_color","custom_area_","custom_areas"]) assert.ok(source.includes(marker), `flattened runtime must retain ${marker}`);
+for (const marker of ["LATEST_MAP_PAYLOAD_CACHE","daily_trails_revision","show_vf_off_areas","notification_count","mark_notification_read","mark_all_notifications_read","nm-has-resume","continue_task","resumeServiceAvailable","history_days","mower_icon","i2_lidar","MOWER_ICON_SPECS_032","show_custom_areas","custom_area_color","custom_area_","custom_areas"]) assert.ok(source.includes(marker), `flattened runtime must retain ${marker}`);
 const hacs = JSON.parse(readFileSync("hacs.json", "utf8"));
 assert.equal(hacs.filename, "navimower-map-card.js");
 const build = readFileSync("scripts/build.mjs", "utf8");

@@ -6637,6 +6637,9 @@ function stateStrings(state) {
 function resumeServiceAvailable(hass) {
   return Boolean(hass?.services?.navimower?.resume);
 }
+function continueTaskServiceAvailable(hass) {
+  return Boolean(hass?.services?.navimower?.continue_task);
+}
 function resumeStateKind(state) {
   const values = stateStrings(state);
   if (values.some((value) => value === "paused" || value.includes("pause"))) {
@@ -6650,14 +6653,39 @@ function resumeStateKind(state) {
   }
   return null;
 }
-function shouldOfferResume(hass, state) {
-  return resumeServiceAvailable(hass) && resumeStateKind(state) !== null;
+function taskResumeContract(hass, frontend) {
+  const taskProgressEntity = frontend?.entities?.task_progress || null;
+  const taskProgress = taskProgressEntity ? hass?.states?.[taskProgressEntity] : null;
+  const attributes = taskProgress?.attributes || {};
+  if (typeof attributes.resume_available === "boolean") {
+    return {
+      available: attributes.resume_available,
+      strategy: attributes.resume_strategy || null,
+      reason: attributes.resume_reason || null,
+      evidence: Array.isArray(attributes.resume_evidence) ? attributes.resume_evidence : [],
+      source: "task_progress"
+    };
+  }
+  const metadata = frontend?.task_resume;
+  if (typeof metadata?.available === "boolean") {
+    return { ...metadata, source: "map_api" };
+  }
+  return null;
+}
+function shouldOfferResume(hass, state, contract = null) {
+  if (contract && typeof contract.available === "boolean") {
+    return continueTaskServiceAvailable(hass) && contract.available === true;
+  }
+  return resumeServiceAvailable(hass) && resumeStateKind(state) === "paused";
 }
 function mowerState(card) {
   const entityId = typeof card?._mowerEntity === "function" ? card._mowerEntity() : card?._resolved?.mower_entity || card?._config?.entity || null;
   if (!entityId) return null;
   if (typeof card?._state === "function") return card._state(entityId);
   return card?._hass?.states?.[entityId] || null;
+}
+function singleResumeContract(card) {
+  return taskResumeContract(card?._hass, card?._mapPayload?.frontend || null);
 }
 function ensureStyles(card) {
   if (!card?._domReady || card._beta5ResumeStylesApplied) return;
@@ -6668,10 +6696,11 @@ function ensureStyles(card) {
     .nm-control.nm-resume[hidden] { display: none; }
     .nm-control.nm-resume { color: var(--text-primary-color, #fff);
       background: var(--primary-color, #03a9f4); }
-    .nm-controls.nm-has-resume .nm-control.nm-resume { grid-column: auto; }
+    .nm-controls:not(.nm-has-resume) .nm-control.nm-mow { grid-column: 1 / -1; }
+    .nm-controls.nm-has-resume .nm-control.nm-resume,
     .nm-controls.nm-has-resume .nm-control.nm-mow { grid-column: auto;
-      color: var(--primary-text-color); background: var(--secondary-background-color);
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color, #03a9f4) 45%, transparent); }
+      color: var(--text-primary-color, #fff); background: var(--primary-color, #03a9f4);
+      box-shadow: none; }
   `;
 }
 function resumeTarget(card) {
@@ -6681,16 +6710,18 @@ function resumeTarget(card) {
 async function runResume(card) {
   if (!card?._hass?.callService || card._commandBusy) return;
   const state = mowerState(card);
-  if (!shouldOfferResume(card._hass, state)) return;
+  const contract = singleResumeContract(card);
+  if (!shouldOfferResume(card._hass, state, contract)) return;
+  const service = contract && continueTaskServiceAvailable(card._hass) ? "continue_task" : "resume";
   card._commandBusy = true;
-  card._commandStatus = { kind: "saving", text: "Resuming interrupted mowing…" };
+  card._commandStatus = { kind: "saving", text: "Continuing interrupted mowing…" };
   card._renderControls?.();
   try {
-    await card._hass.callService("navimower", "resume", resumeTarget(card));
-    card._commandStatus = { kind: "saved", text: "Resume command sent" };
+    await card._hass.callService("navimower", service, resumeTarget(card));
+    card._commandStatus = { kind: "saved", text: "Continue command sent" };
   } catch (error) {
-    card._commandStatus = { kind: "error", text: "Resume failed" };
-    console.error("[Navimower Map Card] navimower.resume failed", error);
+    card._commandStatus = { kind: "error", text: "Continue failed" };
+    console.error(`[Navimower Map Card] navimower.${service} failed`, error);
   } finally {
     card._commandBusy = false;
     card._renderControls?.();
@@ -6724,11 +6755,18 @@ function updateResumeButton(card) {
   if (!button || !card?._controlsEl) return false;
   const state = mowerState(card);
   const kind = resumeStateKind(state);
-  const visible = shouldOfferResume(card._hass, state);
+  const contract = singleResumeContract(card);
+  const visible = shouldOfferResume(card._hass, state, contract);
   const unavailable = !state || ["unknown", "unavailable"].includes(String(state.state || "").toLowerCase());
   button.hidden = !visible;
   button.disabled = !visible || unavailable || Boolean(card._commandBusy);
-  button.title = kind === "paused" ? "Resume the paused mowing task" : "Resume the vendor-retained interrupted mowing task";
+  button.title = contract?.strategy === "ordered_run"
+    ? "Continue unfinished zones in the retained mowing order"
+    : contract
+      ? "Continue the retained interrupted mowing task"
+      : kind === "paused"
+        ? "Resume the paused mowing task"
+        : "Resume interrupted mowing";
   card._controlsEl.classList.toggle("nm-has-resume", visible);
   return visible;
 }
@@ -6759,7 +6797,7 @@ function patchCard10() {
   const originalOnMowPressed = proto._onMowPressed;
   if (typeof originalOnMowPressed === "function") {
     proto._onMowPressed = async function beta5MowPressed(...args) {
-      if (resumeServiceAvailable(this._hass) && this._isPausedJob?.()) {
+      if ((continueTaskServiceAvailable(this._hass) || resumeServiceAvailable(this._hass)) && this._isPausedJob?.()) {
         openNewMowDialog(this);
         return;
       }
@@ -6770,7 +6808,7 @@ function patchCard10() {
     return runResume(this);
   };
   proto._resumeAvailable = function beta5ResumeAvailable() {
-    return shouldOfferResume(this._hass, mowerState(this));
+    return shouldOfferResume(this._hass, mowerState(this), singleResumeContract(this));
   };
 }
 if (globalThis.customElements) patchCard10();
@@ -11944,6 +11982,10 @@ const VISUAL_DEFAULTS = Object.freeze({
           state036(card, entities.mower)?.last_updated,
           state036(card, entities.current_physical_zone)?.state,
           state036(card, entities.battery)?.state,
+          state036(card, entities.task_progress)?.attributes?.resume_available,
+          state036(card, entities.task_progress)?.attributes?.resume_strategy,
+          state036(card, entities.task_progress)?.attributes?.resume_reason,
+          JSON.stringify(member?.frontend?.task_resume || memberState036(card, member.entry_id).map?.frontend?.task_resume || null),
           state036(card, entities.managed_schedule)?.state,
           state036(card, entities.native_schedule)?.state,
           JSON.stringify(memberState036(card, member.entry_id).command || null),
@@ -11960,10 +12002,14 @@ const VISUAL_DEFAULTS = Object.freeze({
       const managedOn = String(state036(card, entities.managed_schedule)?.state || "").toLowerCase() === "on";
       const nativeOn = String(state036(card, entities.native_schedule)?.state || "").toLowerCase() === "on";
       const scheduleOn = managedOn || nativeOn;
-      const canResume = typeof shouldOfferResume === "function" ? shouldOfferResume(card._hass, mower) : ["paused", "returning"].includes(String(mower?.state || "").toLowerCase());
+      const resumeFrontend = member?.frontend || memberState036(card, member.entry_id).map?.frontend || null;
+      const resumeContract = typeof taskResumeContract === "function" ? taskResumeContract(card._hass, resumeFrontend) : null;
+      const canResume = typeof shouldOfferResume === "function"
+        ? shouldOfferResume(card._hass, mower, resumeContract)
+        : String(mower?.state || "").toLowerCase() === "paused";
       const status = memberState036(card, member.entry_id).command;
       const meta = memberMeta036(card, member, mower);
-      return "<section class=\"nm-multi-control-member\" data-entry-id=\"" + esc(member.entry_id) + "\"><button type=\"button\" class=\"nm-multi-schedule" + (scheduleOn ? " active" : "") + "\" data-multi-schedule=\"" + esc(member.entry_id) + "\" title=\"Open " + esc(displayName036(member)) + " schedule\"><span>" + esc(displayName036(member)) + "</span><ha-icon icon=\"mdi:calendar-clock\"></ha-icon></button>" + meta + "<div class=\"nm-multi-command-grid\"><button type=\"button\" data-multi-command=\"mow\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:play\"></ha-icon><span>Mow</span></button>" + (canResume ? "<button type=\"button\" data-multi-command=\"resume\" data-entry-id=\"" + esc(member.entry_id) + "\"><ha-icon icon=\"mdi:play-circle-outline\"></ha-icon><span>Resume</span></button>" : "") + "<button type=\"button\" data-multi-command=\"pause\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:pause\"></ha-icon><span>Pause</span></button><button type=\"button\" data-multi-command=\"dock\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:home-map-marker\"></ha-icon><span>Home</span></button></div>" + (status ? "<div class=\"nm-multi-command-status " + esc(status.kind || "") + "\">" + esc(status.text || "") + "</div>" : "") + "</section>";
+      return "<section class=\"nm-multi-control-member\" data-entry-id=\"" + esc(member.entry_id) + "\"><button type=\"button\" class=\"nm-multi-schedule" + (scheduleOn ? " active" : "") + "\" data-multi-schedule=\"" + esc(member.entry_id) + "\" title=\"Open " + esc(displayName036(member)) + " schedule\"><span>" + esc(displayName036(member)) + "</span><ha-icon icon=\"mdi:calendar-clock\"></ha-icon></button>" + meta + "<div class=\"nm-multi-command-grid" + (canResume ? " nm-has-resume" : "") + "\"><button type=\"button\" data-multi-command=\"mow\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:play\"></ha-icon><span>Mow</span></button>" + (canResume ? "<button type=\"button\" data-multi-command=\"resume\" data-entry-id=\"" + esc(member.entry_id) + "\"><ha-icon icon=\"mdi:play-circle-outline\"></ha-icon><span>Resume</span></button>" : "") + "<button type=\"button\" data-multi-command=\"pause\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:pause\"></ha-icon><span>Pause</span></button><button type=\"button\" data-multi-command=\"dock\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:home-map-marker\"></ha-icon><span>Home</span></button></div>" + (status ? "<div class=\"nm-multi-command-status " + esc(status.kind || "") + "\">" + esc(status.text || "") + "</div>" : "") + "</section>";
     }).join("");
   }
   async function runMemberCommand036(card, member, command) {
@@ -11976,7 +12022,10 @@ const VISUAL_DEFAULTS = Object.freeze({
     try {
       if (command === "resume") {
         const deviceId = memberDevice036(member);
-        await card._hass.callService("navimower", "resume", deviceId ? { device_id: deviceId } : {});
+        const frontend = member?.frontend || memberState036(card, member.entry_id).map?.frontend || null;
+        const contract = typeof taskResumeContract === "function" ? taskResumeContract(card._hass, frontend) : null;
+        const service = contract && continueTaskServiceAvailable(card._hass) ? "continue_task" : "resume";
+        await card._hass.callService("navimower", service, deviceId ? { device_id: deviceId } : {});
       } else {
         const entityId = entities.mower;
         if (!entityId) throw new Error("Mower entity is unavailable");
@@ -12326,7 +12375,7 @@ const VISUAL_DEFAULTS = Object.freeze({
         ".nm-multi-control-member{min-width:0;padding:9px;border:1px solid var(--divider-color);border-radius:11px;background:color-mix(in srgb,var(--secondary-background-color) 65%,transparent)}",
         ".nm-multi-schedule{width:100%;min-height:32px;display:flex;align-items:center;justify-content:space-between;gap:7px;border:0;border-radius:9px;padding:5px 8px;color:var(--primary-text-color);background:transparent;font:inherit;font-weight:700;cursor:pointer}.nm-multi-schedule.active{color:#FF5A00}.nm-multi-schedule ha-icon{--mdc-icon-size:20px}",
         ".nm-multi-member-meta{display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;padding:2px 8px 7px;color:var(--secondary-text-color);font-size:.76rem}.nm-multi-meta-status{text-transform:capitalize}.nm-multi-meta-spacer{flex:1 1 auto}.nm-multi-meta-item{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}.nm-multi-meta-item ha-icon{--mdc-icon-size:15px}",
-        ".nm-multi-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.nm-multi-command-grid button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;padding:7px 8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit;font-size:.84rem;font-weight:650;cursor:pointer}.nm-multi-command-grid button:disabled{opacity:.45;cursor:default}.nm-multi-command-grid ha-icon{--mdc-icon-size:19px}",
+        ".nm-multi-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.nm-multi-command-grid button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;padding:7px 8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit;font-size:.84rem;font-weight:650;cursor:pointer}.nm-multi-command-grid:not(.nm-has-resume) [data-multi-command=mow]{grid-column:1/-1}.nm-multi-command-grid [data-multi-command=mow],.nm-multi-command-grid [data-multi-command=resume]{color:var(--text-primary-color,#fff);background:var(--primary-color,#03a9f4);box-shadow:none}.nm-multi-command-grid button:disabled{opacity:.45;cursor:default}.nm-multi-command-grid ha-icon{--mdc-icon-size:19px}",
         ".nm-multi-command-status{padding:6px 4px 0;text-align:center;color:var(--secondary-text-color);font-size:.74rem}.nm-multi-command-status.error{color:var(--error-color,#db4437)}",
         ".nm-sessions.nm-multi-sessions-active{grid-template-columns:1fr!important;gap:7px!important;width:100%}.nm-multi-session-group{display:grid;grid-template-columns:minmax(80px,auto) 1fr;align-items:start;gap:8px 12px;width:100%}.nm-multi-session-heading{padding-top:2px;color:var(--secondary-text-color);font-size:.76rem;font-weight:750}.nm-multi-session-rows{display:flex;flex-wrap:wrap;gap:5px 10px;min-width:0}.nm-multi-session-empty{color:var(--secondary-text-color);font-size:.8rem;opacity:.7}",
         ".nm-multi-selected-session{animation:nm-multi-session-pulse 720ms ease-in-out 3 forwards}@keyframes nm-multi-session-pulse{0%,100%{opacity:.1;filter:none}50%{opacity:1;filter:drop-shadow(0 0 10px var(--nm-highlight-color,#43a047))}}",
@@ -15473,6 +15522,26 @@ const VISUAL_DEFAULTS = Object.freeze({
   const SVG_NS = "http://www.w3.org/2000/svg";
   const DEFAULT_OPACITY = 0.65;
   const RETRY_MS = 15000;
+  const lidarSupportedEntities = Card.lidarSupportedEntities037 instanceof Set
+    ? Card.lidarSupportedEntities037
+    : new Set();
+  Card.lidarSupportedEntities037 = lidarSupportedEntities;
+
+  const rememberLidarFrontend = (frontend) => {
+    const entityId = frontend?.entities?.mower || null;
+    const supported = frontend?.terrain_overlay?.supported;
+    if (!entityId || typeof supported !== "boolean") return;
+    if (supported) lidarSupportedEntities.add(entityId);
+    else lidarSupportedEntities.delete(entityId);
+  };
+
+  const rememberLidarCapability = (card) => {
+    rememberLidarFrontend(card?._mapPayload?.frontend);
+    for (const member of card?._multi036Site?.members || []) {
+      rememberLidarFrontend(member?.frontend);
+      rememberLidarFrontend(multiPayload(card, member?.entry_id)?.frontend);
+    }
+  };
 
   const finite = (value, fallback = null) => {
     const parsed = Number(value);
@@ -15873,6 +15942,7 @@ const VISUAL_DEFAULTS = Object.freeze({
 
   const syncTerrain = (card) => {
     if (!card || typeof document === "undefined") return;
+    rememberLidarCapability(card);
     ensureMultiObserver(card);
     ensureBaseObserver(card);
     const kind = overlayKind(card);
@@ -15917,12 +15987,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       return true;
     });
     form.schema = strip(form.schema);
-    const rootHass = globalThis.document?.querySelector?.("home-assistant")?.hass;
-    const lidarEntities = Object.entries(rootHass?.states || {})
-      .filter(([entityId, state]) => entityId.startsWith("lawn_mower.")
-        && (String(state?.attributes?.model_family || "").toLowerCase() === "i2_lidar"
-          || autoMowerIcon032(state?.attributes?.model) === "i2_lidar"))
-      .map(([entityId]) => entityId);
+    const lidarEntities = Array.from(lidarSupportedEntities);
     const lidarVisibility = [
       ...(lidarEntities.length ? [
         { field: "entity", operator: "in", value: lidarEntities },

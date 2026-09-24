@@ -17,7 +17,7 @@ const source = await readFile(new URL("../src/navimower-map-card.js", import.met
 const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 const Card = customElements.get("navimower-map-card");
 
-assert.equal(pkg.version, "0.3.7-beta26");
+assert.match(pkg.version, /^0\.3\.7(?:-|$)/);
 assert.equal(typeof Card, "function");
 
 const findSchema = (node, name) => {

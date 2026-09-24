@@ -12564,13 +12564,24 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, finite(value, minimum)));
   const underlayProvider = (card) => String(card?._config?.map_underlay || "none").toLowerCase();
+  const rememberGoogleSatelliteAvailability = (metadata) => {
+    const google = metadata?.google_satellite;
+    if (!google || typeof google !== "object") return metadata;
+    if (typeof google.configured === "boolean") {
+      Card.__navimowerGoogleSatelliteConfigured = google.configured;
+    }
+    if (typeof google.available === "boolean") {
+      Card.__navimowerGoogleSatelliteAvailable = google.available;
+    }
+    return metadata;
+  };
   const frontendUnderlayMetadata = (card) => {
     const single = card?._mapPayload?.frontend?.map_underlays;
     const multiVisible = Boolean(card?._multi036Layer && card._multi036Layer.style.display !== "none");
-    if (!multiVisible && single && typeof single === "object") return single;
+    if (!multiVisible && single && typeof single === "object") return rememberGoogleSatelliteAvailability(single);
     const multi = card?._multi036Site?.anchor_frontend?.map_underlays;
-    if (multi && typeof multi === "object") return multi;
-    return single && typeof single === "object" ? single : {};
+    if (multi && typeof multi === "object") return rememberGoogleSatelliteAvailability(multi);
+    return rememberGoogleSatelliteAvailability(single && typeof single === "object" ? single : {});
   };
   const providerAvailable = (card, provider = underlayProvider(card)) => {
     if (provider === "openstreetmap") return true;
@@ -13879,6 +13890,13 @@ const VISUAL_DEFAULTS = Object.freeze({
   Card.getConfigForm = (...args) => {
     const form = previousForm?.(...args) || { schema: [] };
     if (!Array.isArray(form.schema)) return form;
+    const googleAvailable = Card.__navimowerGoogleSatelliteAvailable === true;
+    const googleConfigured = Card.__navimowerGoogleSatelliteConfigured === true;
+    const googleLabel = googleAvailable
+      ? "Google Satellite"
+      : googleConfigured
+        ? "Google Satellite — check Google Map Tiles API setup"
+        : "Google Satellite — requires Google Map Tiles API setup";
     const fieldNames = new Set(["map_underlay", "underlay_opacity"]);
     const strip = (items) => (Array.isArray(items) ? items : []).filter((item) => {
       if (item?.name === "map_underlay_settings" || fieldNames.has(item?.name)) return false;
@@ -13902,7 +13920,7 @@ const VISUAL_DEFAULTS = Object.freeze({
             { value: "openstreetmap", label: "OpenStreetMap" },
             { value: "estonia_orthophoto", label: "Ortofoto" },
             { value: "estonia_hybrid", label: "Hübriid" },
-            { value: "google_satellite", label: "Google Satellite" },
+            { value: "google_satellite", label: googleLabel, disabled: !googleAvailable },
           ] } } },
           { name: "underlay_opacity", selector: { number: { min: 0.1, max: 1, step: 0.05, mode: "slider" } } },
         ],

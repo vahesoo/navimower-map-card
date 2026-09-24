@@ -1223,6 +1223,18 @@ var NavimowerMapCard = class extends HTMLElement {
     const channels = Array.isArray(map.channels) ? map.channels : [];
     const gateAreas = Array.isArray(this._mapPayload?.gate_areas) ? this._mapPayload.gate_areas : [];
     const station = map.station || null;
+    const presentationOffset = Array.isArray(descriptor?.offset) ? descriptor.offset.map(Number) : null;
+    const presentationSpan = Array.isArray(descriptor?.span) ? descriptor.span.map(Number) : null;
+    const presentationBounds = presentationOffset?.length >= 2
+      && presentationSpan?.length >= 2
+      && [...presentationOffset, ...presentationSpan].every(Number.isFinite)
+      ? {
+          minX: presentationOffset[0],
+          maxX: presentationOffset[0] + presentationSpan[0] * Math.abs(matrix[0]),
+          minY: presentationOffset[1],
+          maxY: presentationOffset[1] + presentationSpan[1] * Math.abs(matrix[3])
+        }
+      : null;
     this._layout = {
       map,
       zones,
@@ -1235,17 +1247,7 @@ var NavimowerMapCard = class extends HTMLElement {
       preparedResourceId: this._preparedStaticResourceId || null,
       preparedMatrix: matrix,
       scale: Math.abs(matrix[0]),
-      presentationBounds: (() => {
-        const offset = Array.isArray(descriptor?.offset) ? descriptor.offset.map(Number) : null;
-        const span = Array.isArray(descriptor?.span) ? descriptor.span.map(Number) : null;
-        if (!offset || offset.length < 2 || !span || span.length < 2 || [...offset, ...span].some((value) => !Number.isFinite(value))) return null;
-        return {
-          minX: offset[0],
-          maxX: offset[0] + span[0] * Math.abs(matrix[0]),
-          minY: offset[1],
-          maxY: offset[1] + span[1] * Math.abs(matrix[3])
-        };
-      })(),
+      presentationBounds,
       sx: (worldX) => matrix[0] * Number(worldX) + matrix[4],
       sy: (worldY) => matrix[3] * Number(worldY) + matrix[5]
     };

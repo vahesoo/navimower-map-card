@@ -2,6 +2,42 @@
 
 This changelog lists stable releases. Detailed prerelease/beta history remains available in GitHub Releases and under `.github/release-notes/`.
 
+## 0.3.7 - 2026-09-26
+
+Stable cumulative release from the tested 0.3.7 beta line through `0.3.7-beta28`. The stable promotion keeps the tested runtime behavior and updates release metadata/documentation.
+
+### LiDAR terrain and elevation overlay
+
+- Add selectable LiDAR terrain/elevation overlays with configurable opacity for mowers that expose a validated terrain resource through Navimower.
+- Support LiDAR per mower inside the existing Multi-mower Site view, including mixed LiDAR/non-LiDAR sites.
+- Use integration-provided resource capability instead of hard-coded mower-model guesses.
+
+### Prepared backend rendering and trail semantics
+
+- Progressively consume Navimower 0.4.5 prepared static/layout, current-cycle, live-route, short-tail and retained History resources.
+- Render confirmed cutting separately from travel/transit so non-cutting movement does not paint a mowing-width trail.
+- Keep compatibility fallbacks for older supported backend responses.
+
+### History, orientation and viewport
+
+- Keep History session selection as a non-destructive highlight over the surrounding current/day mowing context.
+- Make the session glow click-driven so normal rerenders do not replay the pulse.
+- Add Native, North-up and Custom scene orientation while keeping mower-local geometry, labels, dock artwork, legend and existing underlays aligned.
+- Preserve user pan/zoom across backend map refreshes and add optional 30-second interaction-owned auto-reset.
+
+### Resume, weather and UI
+
+- Consume Navimower's backend-owned Smart Resume contract and call `navimower.continue_task` instead of inferring resumability from mower activity.
+- Show integration-composed states such as **Raining** and **Rain delay** while preserving canonical mower activity for controls.
+- Rename the user-facing Settings dialog/button to **Quick settings** while keeping existing YAML/internal keys compatible.
+
+### Runtime and compatibility
+
+- Consolidate the cumulative card runtime into one canonical source with a deterministic minified production build.
+- Existing 0.3.6 features remain: Multi-mower Site view, OpenStreetMap, Google Satellite and Maa- ja Ruumiamet Ortofoto/Hübriid.
+- Existing card YAML remains compatible.
+- Navimower integration `0.4.5` is the matching stable backend release.
+
 ## 0.3.6 - 2026-09-14
 
 Stable cumulative release from the tested 0.3.6 beta line through `0.3.6-beta23`. There is no intentional runtime behavior change from beta23.

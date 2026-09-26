@@ -322,10 +322,10 @@ The editor groups related settings so the same type of setting stays in one plac
 
 The card deliberately keeps expensive work out of the browser where possible:
 
-- with Navimower 0.4.5-beta21+, static map geometry/layout can come from the integration's content-addressed Prepared Render Model and is fetched only when its resource identity changes;
+- with Navimower 0.4.5, static map geometry/layout can come from the integration's content-addressed Prepared Render Model and is fetched only when its resource identity changes;
 - beta12 consumes the content-addressed prepared live-route SVG model;
-- beta14 completes the short-tail transport; with Navimower 0.4.5-beta25+, normal map refreshes request the prepared SVG backbone plus the explicit short live tail instead of retransferring the full raw trail;
-- beta15 consumes Navimower 0.4.5-beta26+ ready-only Prepared History manifests and immutable content-addressed completed-session resources; Single and Multi mower views share the same browser resource cache;
+- normal map refreshes can request the Navimower 0.4.5 prepared SVG backbone plus the explicit short live tail instead of retransferring the full raw trail;
+- Navimower 0.4.5 ready-only Prepared History manifests and immutable content-addressed completed-session resources are shared by Single and Multi mower views through the same browser resource cache;
 - the mower marker and newest trail points remain live from Home Assistant/MQTT between 30 s prepared-backbone publications;
 - older integrations keep the raw-geometry and raw-trail renderers as complete fallbacks;
 - current-cycle mowing area is prepared by Navimower and can be fetched independently of the base map;

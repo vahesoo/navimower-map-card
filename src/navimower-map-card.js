@@ -3612,10 +3612,7 @@ var NavimowerMapCard = class extends HTMLElement {
   _scheduleZoomReset() {
     this._cancelZoomReset();
     if (!this._config?.enable_zoom || this._config?.zoom_auto_reset === false) return;
-    this._zoomResetTimer = setTimeout(() => {
-      this._zoomResetTimer = null;
-      this._resetUserView();
-    }, ZOOM_AUTO_RESET_MS);
+    this._zoomResetTimer = setTimeout(() => this._resetUserView(), ZOOM_AUTO_RESET_MS);
   }
   _clampView() {
     const maxZoom = Math.max(1, finiteNumber(this._config?.max_zoom, 8));

@@ -28,10 +28,12 @@ assert.match(source, /function archiveHighlightSvg\(/);
 assert.match(source, /class="nm-session-selected nm-session-archive-glow"/);
 assert.match(source, /const renderArchiveGlow036 = \(render, color\) =>/);
 assert.match(source, /nm-multi-selected-session nm-session-selected/);
+assert.match(source, /nm-multi-selected-session\.nm-session-pulse/);
+assert.match(source, /classList\.add\("nm-session-pulse"\)/);
 
 // Glow is attached to the actual SVG highlight layer.
 assert.match(source, /\.nm-highlight \{ pointer-events: none; \}/);
-assert.match(source, /\.nm-highlight \.nm-session-selected/);
+assert.match(source, /\.nm-highlight \.nm-session-selected\.nm-session-pulse/);
 assert.match(source, /filter: drop-shadow\(0 0 10px var\(--nm-highlight-color\)\)/);
 
 // Base and highlight use the same configured trail tone; opacity remains on base layers.

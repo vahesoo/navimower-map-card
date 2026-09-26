@@ -19,11 +19,11 @@ A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo
 - **Notifications** — retained Navimow notifications with unread state, per-message read action and Mark all as read; Multi mower merges member feeds while preserving mower/account targeting.
 - **Schedule** — supports both native Navimow schedule and the integration-owned Navimower Schedule, including member-scoped access in Multi mower mode.
 - **Gate areas** — renders exact mower-local gate polygons and provides a direct visual editor for creating, reshaping, renaming and deleting them.
-- **Settings** — optional quick access to selected Home Assistant entities from the mower device.
+- **Quick settings** — optional quick access to selected Home Assistant entities from the mower device.
 - **Map geometry** — zones, Off-limit areas, VF-off areas, Channels, Gate areas, charging station and integration-defined Custom Areas.
 - **Visual editor** — grouped Displayed information, Appearance, Colors, Map underlay, LiDAR overlay, Notifications, Schedule and Settings controls. LiDAR controls are shown only when the integration advertises LiDAR terrain support, or when an existing LiDAR overlay selection must remain editable.
 - **Error feedback** — the mower icon gets a red pulsing glow while the `lawn_mower` entity reports an error.
-- **Zoom, pan and orientation** — mouse wheel, pinch zoom, pan, initial focus and optional browser-side view memory. Map orientation can stay in the mower's native frame, use geographic North-up, or use a custom rotation. Normal pan/zoom is intentionally suspended while the gate-area editor is active.
+- **Zoom, pan and orientation** — mouse wheel, pinch zoom, pan, initial focus and optional browser-side view memory. By default, a user-adjusted view returns to the configured initial view after 30 seconds of inactivity; **Auto-reset zoom after 30 seconds** can be disabled in the card editor. Map orientation can stay in the mower's native frame, use geographic North-up, or use a custom rotation. Normal pan/zoom is intentionally suspended while the gate-area editor is active.
 - **Performance-oriented rendering** — static geometry and prepared mowing-area artifacts are reused; live mower pose changes do not rebuild every site layer.
 
 ## Requirements and compatibility
@@ -208,9 +208,9 @@ The map uses Navimow/Navimower terminology:
 
 Custom Areas can be shown or hidden independently. Their fill opacity, border width and color are configured under the same Appearance/Colors groups as the other mower-local geometry.
 
-## Settings button
+## Quick settings
 
-The optional Settings button opens the Home Assistant entities selected in the card editor. Use it for the mower settings you want available directly from the dashboard without duplicating their logic in the card.
+The optional Quick settings button opens the Home Assistant entities selected in the card editor. Use it for mower settings you want available directly from the dashboard without duplicating their logic in the card.
 
 ## Visual defaults
 
@@ -259,6 +259,7 @@ show_map_legend: true
 show_session_legend: true
 
 enable_zoom: true
+zoom_auto_reset: true
 initial_zoom: 1
 initial_focus: map
 map_orientation: native
@@ -315,7 +316,7 @@ The editor groups related settings so the same type of setting stays in one plac
 - **Map underlay** — provider, opacity and presentation-only East/North/Rotation adjustment.
 - **Notifications** — retained-notification display options.
 - **Schedule button** — choose Automatic, Navimower or Native schedule view behavior.
-- **Settings** — choose mower-device entities exposed by the Settings button.
+- **Quick settings** — choose mower-device entities exposed by the Quick settings button.
 
 ## Frontend performance and lifecycle
 

@@ -16,9 +16,9 @@ Older Gate areas may expose only `x_min`, `x_max`, `y_min`, `y_max`. Those recta
 
 ## Opening the editor
 
-A compact pencil button appears in the map's upper-right corner when Gate-area editing is available.
+A compact **Gate Area Edit** icon appears in the card header when Gate-area editing is available.
 
-Before pressing the pencil button, position and zoom the map to the view you want. Normal map pan/zoom is intentionally disabled while the Gate editor is active so tap/drag gestures cannot simultaneously move the map and edit a polygon.
+Before opening the editor, position and zoom the map to the view you want. Normal map pan/zoom is intentionally disabled while the Gate editor is active so tap/drag gestures cannot simultaneously move the map and edit a polygon.
 
 In Multi mower view the editor keeps the selected area's points in that mower's own local X/Y coordinate system even though the member is displayed inside a common-site transform.
 

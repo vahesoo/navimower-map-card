@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-assert.equal(pkg.version, "0.3.7-beta28");
+assert.match(pkg.version, /^0\.3\.7(?:-beta28)?$/, "beta28 feature contract must remain on beta28 or stable 0.3.7");
 
 assert.ok(source.includes("var ZOOM_AUTO_RESET_MS = 30_000;"));
 assert.ok(source.includes("zoom_auto_reset: true"));

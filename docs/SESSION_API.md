@@ -101,7 +101,7 @@ See [MULTI_MOWER_AND_UNDERLAYS.md](MULTI_MOWER_AND_UNDERLAYS.md).
 
 ## Request lifecycle
 
-Current 0.3.6 code generation-checks asynchronous Site, member-map, session-index, current-cycle and selected-session responses. If the card disconnects or its configured mower changes, a late response from the earlier generation is ignored.
+Current 0.3.7 code generation-checks asynchronous Site, member-map, session-index, current-cycle and selected-session responses. If the card disconnects or its configured mower changes, a late response from the earlier generation is ignored.
 
 The base map and primary mower controls are intentionally useful before optional History/current-cycle details finish loading.
 

@@ -62,7 +62,7 @@ Notifications may be merged for display, but read actions remain routed to the o
 
 ## Prioritized and phased loading
 
-The current 0.3.6 runtime is designed to show a useful map before optional/heavy data finishes loading.
+The current 0.3.7 runtime is designed to show a useful map before optional/heavy data finishes loading.
 
 With a compatible Navimower integration the card requests the lightweight base map with `include_current_cycle=0`, then requests the compact current-cycle artifact with `current_cycle_only=1`. Older supported integrations that include current-cycle data in the normal map response remain compatible.
 

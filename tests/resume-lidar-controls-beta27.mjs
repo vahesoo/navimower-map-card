@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 const source = await readFile(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-assert.match(pkg.version, /^0\.3\.7-beta(?:2[7-9]|[3-9]\d+)$/, "beta27 feature contract must remain on beta27 or newer 0.3.7 prereleases");
+assert.match(pkg.version, /^0\.3\.7(?:-beta(?:2[7-9]|[3-9]\d+))?$/, "beta27 feature contract must remain on 0.3.7 beta27+ or stable");
 
 for (const needle of [
   "function continueTaskServiceAvailable(hass)",

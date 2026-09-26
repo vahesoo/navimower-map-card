@@ -21,10 +21,12 @@ notification_mark_read_on_open: false
 notification_count: 5
 
 enable_zoom: true
+zoom_auto_reset: true
 initial_zoom: 1.25
 initial_focus: map
 remember_view: true
 max_zoom: 8
+map_orientation: native
 
 map_background_color: "#e6e6e6"
 map_legend_opacity: 0.58

@@ -30,10 +30,10 @@ A Home Assistant dashboard card for the [`Navimower`](https://github.com/vahesoo
 
 - Home Assistant 2026.6 or newer
 - [`Navimower`](https://github.com/vahesoo/NaviMower) integration **0.4.3 or newer** for the 0.3.5-era Single mower feature set
-- **Navimower 0.4.5-beta24 or newer is recommended for the current 0.3.7 prerelease line and Prepared Render Model path**
+- **Navimower 0.4.5 is the recommended matching backend for Map Card 0.3.7**
 - HACS is recommended for installation and updates
 
-The 0.3.6 line was developed together with the Navimower 0.4.4 line. Individual additions have narrower backend boundaries:
+The 0.3.7 stable line is designed together with Navimower 0.4.5. Historical feature boundaries are listed below for users who intentionally run an older backend:
 
 | Card feature | Integration support |
 | --- | --- |
@@ -44,13 +44,13 @@ The 0.3.6 line was developed together with the Navimower 0.4.4 line. Individual 
 | Phased base/current-cycle Map API | 0.4.4-beta28+; older supported responses still fall back to the combined payload |
 | Exact polygon Gate areas | 0.4.4-beta32+ |
 | Visual Gate area Save/Delete | 0.4.4-beta34+ |
-| Prepared static/layout render model | 0.4.5-beta21+; beta23/beta24 recommended for stabilized static identity/checkpoint behavior |
-| Prepared live-route SVG model | 0.4.5-beta21+; beta25 recommended for 30 s backbone cadence and short-tail transport |
-| Prepared History manifest/resources | 0.4.5-beta26+; beta15 consumes retained completed-session resources |
-| Backend-owned Resume availability / `navimower.continue_task` | 0.4.5-beta37+ |
-| Integration-provided LiDAR overlay capability visibility | 0.4.5-beta35+; beta37 recommended |
+| Prepared static/layout render model | Navimower 0.4.5 stable (introduced during the 0.4.5 beta line) |
+| Prepared live-route SVG + short-tail model | Navimower 0.4.5 stable |
+| Prepared History manifest/resources | Navimower 0.4.5 stable |
+| Backend-owned Resume availability / `navimower.continue_task` | Navimower 0.4.5 stable |
+| Integration-provided LiDAR overlay capability visibility | Navimower 0.4.5 stable |
 
-For the current prerelease pair, use Navimower 0.4.5-beta37 or newer. Older supported integrations remain usable through the card's legacy map/trail/History fallbacks, but they do not provide the beta15 Prepared History manifest/resources.
+For the stable pair, use **Navimower 0.4.5 + Navimower Map Card 0.3.7**. Older supported integrations remain usable through legacy map/trail/History fallbacks, but they do not provide the full stable prepared-resource, Smart Resume and LiDAR capability contracts.
 
 ## Installation with HACS
 
@@ -109,7 +109,7 @@ The card does not reconstruct completed mowing swaths from Home Assistant Record
 
 ### Resume
 
-When the installed Navimower integration reports a resumable retained task, **Resume** calls `navimower.resume`. It does not create a new mowing cycle.
+When the installed Navimower 0.4.5 integration reports a resumable retained task, **Resume** calls the preferred `navimower.continue_task` action. The integration decides whether to continue an unfinished ordered run or use the low-level vendor Resume command; the card does not create a new mowing cycle.
 
 ### Mow
 

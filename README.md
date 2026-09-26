@@ -180,7 +180,7 @@ See [`docs/MULTI_MOWER_AND_UNDERLAYS.md`](docs/MULTI_MOWER_AND_UNDERLAYS.md) for
 
 Gate areas are mower-local safety/interlock geometry. Exact polygons are preferred; legacy `x_min/x_max/y_min/y_max` rectangles still render as a compatibility fallback.
 
-With a compatible Navimower integration, use the pencil button on the map to edit Gate areas directly:
+With a compatible Navimower integration, use the **Gate Area Edit** icon in the card header to edit Gate areas directly:
 
 - the first three points of a new polygon are placed freely;
 - every later normal tap is inserted into the **nearest existing polygon edge**, with no distance limit;

@@ -1,5 +1,6 @@
 // src/navimower-map-card-core.js
 var VIEW_SIZE = 1e3;
+var ZOOM_AUTO_RESET_MS = 30_000;
 var MAP_CACHE_LIMIT = 10;
 var MAP_CACHE_FRESH_MS = 45e3;
 var MAP_PAYLOAD_CACHE = /* @__PURE__ */ new Map();
@@ -152,6 +153,7 @@ var DEFAULTS = Object.freeze({
   show_map_legend: true,
   show_session_legend: true,
   enable_zoom: true,
+  zoom_auto_reset: true,
   initial_zoom: 1,
   initial_focus: "map",
   map_orientation: "native",
@@ -194,6 +196,7 @@ var LABELS = Object.freeze({
   history_days: "History days",
   mower_icon: "Mower icon",
   enable_zoom: "Enable zoom and pan",
+  zoom_auto_reset: "Auto-reset zoom after 30 seconds",
   initial_zoom: "Initial zoom",
   initial_focus: "Initial focus",
   map_orientation: "Map orientation",
@@ -277,6 +280,7 @@ var NavimowerMapCard = class extends HTMLElement {
       show_map_legend: DEFAULTS.show_map_legend,
       show_session_legend: DEFAULTS.show_session_legend,
       enable_zoom: DEFAULTS.enable_zoom,
+      zoom_auto_reset: DEFAULTS.zoom_auto_reset,
       initial_zoom: DEFAULTS.initial_zoom,
       initial_focus: DEFAULTS.initial_focus,
       map_orientation: DEFAULTS.map_orientation,
@@ -364,6 +368,7 @@ var NavimowerMapCard = class extends HTMLElement {
               column_min_width: "200px",
               schema: [
                 { name: "enable_zoom", selector: { boolean: {} } },
+                { name: "zoom_auto_reset", selector: { boolean: {} } },
                 { name: "initial_zoom", selector: { number: { min: 1, max: 8, step: 0.1, mode: "box" } } },
                 {
                   name: "initial_focus",
@@ -479,6 +484,7 @@ var NavimowerMapCard = class extends HTMLElement {
     this._pointers = /* @__PURE__ */ new Map();
     this._panStart = null;
     this._pinchStart = null;
+    this._zoomResetTimer = null;
     this._selectedZoneId = null;
     this._pulseTimer = null;
     this._historyMenuOpen = false;
@@ -527,6 +533,11 @@ var NavimowerMapCard = class extends HTMLElement {
     const incoming = { ...config };
     this._config = { ...DEFAULTS, ...incoming };
     this._config.auto_entities = normalizeBoolean(incoming.auto_entities, DEFAULTS.auto_entities);
+    this._config.zoom_auto_reset = normalizeBoolean(incoming.zoom_auto_reset, DEFAULTS.zoom_auto_reset);
+    if (!this._config.zoom_auto_reset && this._zoomResetTimer) {
+      clearTimeout(this._zoomResetTimer);
+      this._zoomResetTimer = null;
+    }
     const mapOrientation = String(incoming.map_orientation ?? DEFAULTS.map_orientation).trim().toLowerCase();
     this._config.map_orientation = ["native", "north_up", "custom"].includes(mapOrientation)
       ? mapOrientation
@@ -621,6 +632,8 @@ var NavimowerMapCard = class extends HTMLElement {
     this._interactivePointer = null;
     if (this._pulseTimer) clearTimeout(this._pulseTimer);
     this._pulseTimer = null;
+    if (this._zoomResetTimer) clearTimeout(this._zoomResetTimer);
+    this._zoomResetTimer = null;
     for (const timer of Object.values(this._scheduleStatusTimers || {})) clearTimeout(timer);
     this._scheduleStatusTimers = {};
     if (this._renderHandle !== null) {
@@ -878,7 +891,7 @@ var NavimowerMapCard = class extends HTMLElement {
         .nm-session-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
         .nm-session-note { opacity: .75; }
         .nm-highlight { pointer-events: none; }
-        .nm-highlight .nm-session-selected {
+        .nm-highlight .nm-session-selected.nm-session-pulse {
           animation: nm-session-glow-pulse 720ms ease-in-out 3 forwards;
           transform-box: fill-box;
           transform-origin: center;
@@ -1790,8 +1803,7 @@ var NavimowerMapCard = class extends HTMLElement {
     this._historyRenderKey = null;
     this._trailRenderKey = null;
     this._sessionsRenderKey = null;
-    this._initialViewApplied = false;
-    this._applyInitialView(false);
+    if (!this._initialViewApplied) this._applyInitialView(false);
     this._mapPostV030?.(sourcePayload);
     void this._maybeLoadPreparedStatic?.();
     void this._maybeLoadPreparedLive?.(
@@ -2254,6 +2266,7 @@ var NavimowerMapCard = class extends HTMLElement {
     ).join("");
     if (!paths) return;
     this._highlightEl.innerHTML = `<g class="nm-session-selected" style="--nm-highlight-color:${color};--nm-highlight-width:${width.toFixed(1)}px;--nm-highlight-pulse-width:${pulseWidth.toFixed(1)}px">${paths}</g>`;
+    this._highlightEl.querySelector?.(".nm-session-selected")?.classList.add("nm-session-pulse");
     const button = [...this._sessionsEl?.querySelectorAll(".nm-session[data-session-id]") || []].find((item) => String(item.dataset.sessionId) === String(sessionId2));
     button?.classList.add("nm-session-pulsing");
     this._pulseTimer = null;
@@ -3509,6 +3522,7 @@ var NavimowerMapCard = class extends HTMLElement {
     this.dispatchEvent(event);
   }
   _applyInitialView(force) {
+    if (force) this._cancelZoomReset?.();
     if (!this._layout || !force && this._initialViewApplied) return;
     if (!force && this._config.remember_view) {
       const restored = this._restoreView();
@@ -3572,6 +3586,36 @@ var NavimowerMapCard = class extends HTMLElement {
       localStorage.setItem(key, JSON.stringify(this._view));
     } catch (_error) {
     }
+  }
+  _cancelZoomReset() {
+    if (!this._zoomResetTimer) return;
+    clearTimeout(this._zoomResetTimer);
+    this._zoomResetTimer = null;
+  }
+  _resetUserView() {
+    this._cancelZoomReset();
+    if (!this._layout) return;
+    if (this._multiMapPresentationActive()) {
+      const scale = clamp(
+        finiteNumber(this._config?.initial_zoom, 1),
+        1,
+        finiteNumber(this._config?.max_zoom, 8)
+      );
+      this._view = { scale, cx: VIEW_SIZE / 2, cy: VIEW_SIZE / 2 };
+      this._initialViewApplied = true;
+      this._applyViewBox();
+      this._saveView();
+      return;
+    }
+    this._applyInitialView(true);
+  }
+  _scheduleZoomReset() {
+    this._cancelZoomReset();
+    if (!this._config?.enable_zoom || this._config?.zoom_auto_reset === false) return;
+    this._zoomResetTimer = setTimeout(() => {
+      this._zoomResetTimer = null;
+      this._resetUserView();
+    }, ZOOM_AUTO_RESET_MS);
   }
   _clampView() {
     const maxZoom = Math.max(1, finiteNumber(this._config?.max_zoom, 8));
@@ -3826,6 +3870,7 @@ var NavimowerMapCard = class extends HTMLElement {
     if (!this._config?.enable_zoom || !this._layout) return;
     event.preventDefault();
     this._zoomAtClientPoint(event.deltaY < 0 ? 1.18 : 1 / 1.18, event.clientX, event.clientY);
+    this._scheduleZoomReset();
   }
   _onPointerDown(event) {
     const interactive = event.target?.closest?.(".nm-zone-label");
@@ -3909,6 +3954,7 @@ var NavimowerMapCard = class extends HTMLElement {
       this._panStart = null;
       this._pinchStart = null;
       this._saveView();
+      this._scheduleZoomReset();
     }
   }
 };
@@ -4583,6 +4629,7 @@ function patchCard() {
       Math.min(trailWidth034(this) * 1.35, 12)
     );
     this._highlightEl.innerHTML = svg;
+    this._highlightEl.querySelector?.(".nm-session-selected")?.classList.add("nm-session-pulse");
     const button = [...this._sessionsEl?.querySelectorAll(".nm-session[data-session-id]") || []].find((item) => String(item.dataset.sessionId) === String(requestedId));
     button?.classList.add("nm-session-pulsing");
     this._pulseTimer = null;
@@ -7225,7 +7272,7 @@ if (globalThis.customElements) patchCustomAreas0342();
   Card.getConfigForm = () => {
     const form = originalForm?.() || { schema: [] };
     const schema = Array.isArray(form.schema) ? [...form.schema] : [];
-    schema.push({ type: "expandable", name: "settings_dialog", title: "Settings dialog", flatten: true, schema: [
+    schema.push({ type: "expandable", name: "settings_dialog", title: "Quick settings", flatten: true, schema: [
       { type: "constant", name: "settings_dialog_hint" },
       { type: "grid", name: "settings_dialog_grid", flatten: true, column_min_width: "200px", schema: slots.map((name) => ({ name, selector: { entity: {} } })) }
     ] });
@@ -7233,7 +7280,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     return { ...form, schema, computeLabel: (item) => {
       if (item?.name === "settings_dialog_hint") return "Choose up to 12 entities shown behind the gear button.";
       const match = String(item?.name || "").match(/^settings_entity_(\d+)$/);
-      if (match) return `Settings slot ${match[1]}`;
+      if (match) return `Quick settings slot ${match[1]}`;
       return label?.(item) || item?.name || "";
     }};
   };
@@ -7263,7 +7310,7 @@ if (globalThis.customElements) patchCustomAreas0342();
     if (!card?._domReady) return;
     const header = card.querySelector?.(".nm-header-actions") || card.querySelector?.(".nm-header");
     if (header && !card.querySelector?.(".nm-settings-button")) {
-      const button = document.createElement("button"); button.type = "button"; button.className = "nm-settings-button"; button.title = "Settings"; button.setAttribute("aria-label", "Open mower settings"); button.innerHTML = '<ha-icon icon="mdi:cog"></ha-icon>';
+      const button = document.createElement("button"); button.type = "button"; button.className = "nm-settings-button"; button.title = "Quick settings"; button.setAttribute("aria-label", "Open quick settings"); button.innerHTML = '<ha-icon icon="mdi:cog"></ha-icon>';
       button.addEventListener("click", () => { card._mowDialogOpen = false; card._scheduleDialogOpen = false; card._notificationDialogOpen = false; card._beta5ManagedScheduleOpen = false; card._beta5SettingsOpen = true; card._renderDialog?.(); });
       header.appendChild(button);
     }
@@ -7291,8 +7338,8 @@ if (globalThis.customElements) patchCustomAreas0342();
   function renderSettings(card) {
     const host = card._modalHostEl; if (!host) return;
     const entities = slots.map((key) => card._config?.[key]).filter(Boolean);
-    const rows = entities.length ? entities.map((entityId) => `<button type="button" class="nm-settings-tile" data-settings-entity="${esc(entityId)}"><div class="nm-settings-name">${esc(friendly(card, entityId))}</div><div class="nm-settings-value">${esc(value(card, entityId))}</div></button>`).join("") : '<div class="nm-managed-empty">No settings selected. Add entities in the card visual editor → Settings dialog.</div>';
-    host.innerHTML = `<div class="nm-backdrop nm-settings-backdrop"><div class="nm-dialog" role="dialog" aria-modal="true" aria-label="Settings"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Settings</div><button type="button" class="nm-schedule-close" data-settings-close aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-settings-grid">${rows}</div></div></div>`;
+    const rows = entities.length ? entities.map((entityId) => `<button type="button" class="nm-settings-tile" data-settings-entity="${esc(entityId)}"><div class="nm-settings-name">${esc(friendly(card, entityId))}</div><div class="nm-settings-value">${esc(value(card, entityId))}</div></button>`).join("") : '<div class="nm-managed-empty">No settings selected. Add entities in the card visual editor → Quick settings.</div>';
+    host.innerHTML = `<div class="nm-backdrop nm-settings-backdrop"><div class="nm-dialog" role="dialog" aria-modal="true" aria-label="Quick settings"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Quick settings</div><button type="button" class="nm-schedule-close" data-settings-close aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-settings-grid">${rows}</div></div></div>`;
     const backdrop = host.querySelector(".nm-settings-backdrop"); backdrop?.addEventListener("click", (event) => { if (event.target === backdrop) { card._beta5SettingsOpen = false; card._renderDialog(); } });
     host.querySelector("[data-settings-close]")?.addEventListener("click", () => { card._beta5SettingsOpen = false; card._renderDialog(); });
     host.querySelectorAll("[data-settings-entity]").forEach((button) => button.addEventListener("click", () => card.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: button.dataset.settingsEntity } }))));
@@ -7337,7 +7384,7 @@ if (globalThis.customElements) patchCustomAreas0342();
   const state=(c,id)=>id?c._hass?.states?.[id]:null; const friendly=(c,id)=>state(c,id)?.attributes?.friendly_name||id; const domain=id=>String(id||'').split('.')[0];
   const call=async(c,d,s,data)=>c._hass.callService(d,s,data);
   function settingControl(c,id){const st=state(c,id),d=domain(id);if(!st)return '<div class="nm-setting-value">Unavailable</div>';if(d==='switch'||d==='input_boolean')return `<label class="nm-inline-switch"><input type="checkbox" data-setting-switch="${esc(id)}" ${st.state==='on'?'checked':''}><span>${st.state==='on'?'On':'Off'}</span></label>`;if(d==='select'||d==='input_select'){const opts=st.attributes?.options||[];return `<select data-setting-select="${esc(id)}">${opts.map(o=>`<option ${String(o)===st.state?'selected':''}>${esc(o)}</option>`).join('')}</select>`;}if(d==='number'||d==='input_number'){const min=st.attributes?.min??0,max=st.attributes?.max??100,step=st.attributes?.step??1;return `<div class="nm-number-control"><input type="range" min="${min}" max="${max}" step="${step}" value="${esc(st.state)}" data-setting-number="${esc(id)}"><span>${esc(st.state)}${esc(st.attributes?.unit_of_measurement||'')}</span></div>`;}if(d==='time'||d==='input_datetime')return `<input type="time" value="${esc(String(st.state).slice(0,5))}" data-setting-time="${esc(id)}">`;return `<button type="button" class="nm-setting-more" data-setting-more="${esc(id)}">${esc(st.state)}${st.attributes?.unit_of_measurement?' '+esc(st.attributes.unit_of_measurement):''}</button>`;}
-  function renderSettings(c){const h=c._modalHostEl;if(!h)return;const entities=slots.map(k=>c._config?.[k]).filter(Boolean);h.innerHTML=`<div class="nm-backdrop nm-beta6-settings"><div class="nm-dialog nm-beta6-dialog"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Settings</div><button class="nm-schedule-close" data-beta6-settings-close><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-beta6-settings-grid">${entities.length?entities.map(id=>`<div class="nm-setting-row"><div class="nm-settings-name">${esc(friendly(c,id))}</div>${settingControl(c,id)}</div>`).join(''):'<div class="nm-managed-empty">No settings selected in the visual editor.</div>'}</div></div></div>`;h.querySelector('[data-beta6-settings-close]')?.addEventListener('click',()=>{c._beta6SettingsOpen=false;c._renderDialog();});h.querySelectorAll('[data-setting-switch]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingSwitch;await call(c,domain(id),x.checked?'turn_on':'turn_off',{entity_id:id});}));h.querySelectorAll('[data-setting-select]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingSelect;await call(c,domain(id),'select_option',{entity_id:id,option:x.value});}));h.querySelectorAll('[data-setting-number]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingNumber;await call(c,domain(id),'set_value',{entity_id:id,value:Number(x.value)});}));h.querySelectorAll('[data-setting-time]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingTime;const d=domain(id);await call(c,d,d==='time'?'set_value':'set_datetime',d==='time'?{entity_id:id,time:x.value}:{entity_id:id,time:x.value});}));h.querySelectorAll('[data-setting-more]').forEach(x=>x.addEventListener('click',()=>c.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:x.dataset.settingMore}}))));}
+  function renderSettings(c){const h=c._modalHostEl;if(!h)return;const entities=slots.map(k=>c._config?.[k]).filter(Boolean);h.innerHTML=`<div class="nm-backdrop nm-beta6-settings"><div class="nm-dialog nm-beta6-dialog"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Quick settings</div><button class="nm-schedule-close" data-beta6-settings-close><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-beta6-settings-grid">${entities.length?entities.map(id=>`<div class="nm-setting-row"><div class="nm-settings-name">${esc(friendly(c,id))}</div>${settingControl(c,id)}</div>`).join(''):'<div class="nm-managed-empty">No settings selected in the visual editor.</div>'}</div></div></div>`;h.querySelector('[data-beta6-settings-close]')?.addEventListener('click',()=>{c._beta6SettingsOpen=false;c._renderDialog();});h.querySelectorAll('[data-setting-switch]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingSwitch;await call(c,domain(id),x.checked?'turn_on':'turn_off',{entity_id:id});}));h.querySelectorAll('[data-setting-select]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingSelect;await call(c,domain(id),'select_option',{entity_id:id,option:x.value});}));h.querySelectorAll('[data-setting-number]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingNumber;await call(c,domain(id),'set_value',{entity_id:id,value:Number(x.value)});}));h.querySelectorAll('[data-setting-time]').forEach(x=>x.addEventListener('change',async()=>{const id=x.dataset.settingTime;const d=domain(id);await call(c,d,d==='time'?'set_value':'set_datetime',d==='time'?{entity_id:id,time:x.value}:{entity_id:id,time:x.value});}));h.querySelectorAll('[data-setting-more]').forEach(x=>x.addEventListener('click',()=>c.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:x.dataset.settingMore}}))));}
   function queueFrom(c,attrs){const q=Array.isArray(attrs.custom_queue)?attrs.custom_queue:[];if(q.length)return q.map(Number);return (attrs.queue||[]).filter(z=>z.status!=='completed').map(z=>Number(z.id)).filter(Number.isFinite);}
   async function saveQueue(c,queue){const id=c._mowerDeviceId?.();const data={zones:queue};if(id)data.device_id=id;await call(c,'navimower','set_schedule_queue',data);}
   function renderManaged(c){const h=c._modalHostEl;if(!h)return;const ids=c._beta6SchedulerEntities||{};const st=state(c,ids.status),a=st?.attributes||{};let queue=queueFrom(c,a);const names=new Map((a.queue||[]).map(z=>[Number(z.id),z.name||`Zone ${z.id}`]));const order=a.order_mode||'automatic';const editable=order==='custom';const rows=queue.map((id,i)=>`<div class="nm-managed-zone"><span class="nm-queue-index">${i+1}</span><span class="nm-queue-name">${esc(names.get(id)||`Zone ${id}`)}</span>${editable?`<button data-queue-up="${i}" title="Move up">↑</button><button data-queue-down="${i}" title="Move down">↓</button><button data-queue-add="${i}" title="Repeat zone">＋</button><button data-queue-remove="${i}" title="Remove">×</button>`:''}</div>`).join('');h.innerHTML=`<div class="nm-backdrop nm-managed-backdrop"><div class="nm-dialog nm-schedule-dialog"><div class="nm-schedule-dialog-head"><div class="nm-schedule-dialog-title">Navimower schedule</div><button class="nm-schedule-close" data-managed-close><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nm-managed-summary"><span>${esc(a.start||'—')}–${esc(a.end||'—')}</span><span>${esc(order==='custom'?'Custom order':'Automatic order')}</span><span>${esc(st?.state||'Unavailable')}</span></div><div class="nm-managed-queue">${rows||'<div class="nm-managed-empty">No queue available.</div>'}</div>${editable?'<div class="nm-dialog-hint">Use arrows to reorder, + to repeat a zone, and × to remove it. Saving the queue does not enable or start the scheduler.</div>':''}</div></div>`;h.querySelector('[data-managed-close]')?.addEventListener('click',()=>{c._beta6ManagedOpen=false;c._renderDialog();});const change=async(type,i)=>{if(type==='up'&&i>0)[queue[i-1],queue[i]]=[queue[i],queue[i-1]];if(type==='down'&&i<queue.length-1)[queue[i+1],queue[i]]=[queue[i],queue[i+1]];if(type==='add')queue.splice(i+1,0,queue[i]);if(type==='remove'&&queue.length>1)queue.splice(i,1);await saveQueue(c,queue);renderManaged(c);};for(const t of ['up','down','add','remove'])h.querySelectorAll(`[data-queue-${t}]`).forEach(b=>b.addEventListener('click',()=>change(t,Number(b.dataset[`queue${t[0].toUpperCase()+t.slice(1)}`]))));}
@@ -7403,7 +7450,7 @@ if (globalThis.customElements) patchCustomAreas0342();
             '.nm-native-loading,.nm-native-empty{padding:20px 12px;color:var(--secondary-text-color);}' +
           '</style>' +
           '<div class="nm-schedule-dialog-head">' +
-            '<div class="nm-schedule-dialog-title">Settings</div>' +
+            '<div class="nm-schedule-dialog-title">Quick settings</div>' +
             '<button class="nm-schedule-close" type="button" data-beta8-settings-close><ha-icon icon="mdi:close"></ha-icon></button>' +
           '</div>' +
           '<div class="nm-beta8-settings-list" data-beta8-settings-list>' +
@@ -9667,7 +9714,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     show_history_button: "History",
     show_notifications_button: "Notifications",
     show_schedule_button: "Schedule",
-    show_settings_button: "Settings",
+    show_settings_button: "Quick settings",
     show_custom_areas: "Custom areas",
     custom_area_fill_opacity: "Custom area fill opacity",
     custom_area_stroke_width: "Custom area border width",
@@ -12165,6 +12212,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     card._multi036SessionsRenderKey = null;
     renderMultiSessions036(card);
     renderMultiMap036(card, true);
+    card._multi036Layer?.querySelector?.(".nm-multi-selected-session")?.classList.add("nm-session-pulse");
     if (card._multi036PulseTimer) clearTimeout(card._multi036PulseTimer);
     card._multi036PulseTimer = null;
   }
@@ -12282,6 +12330,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     card._historyRenderKey = null;
     card._sessionsRenderKey = null;
     card._multi036MapRenderKey = null;
+    card._cancelZoomReset?.();
     card._view = { scale: Math.max(1, finite036(card?._config?.initial_zoom, 1)), cx: 500, cy: 500 };
     card._initialViewApplied = true;
     card._applyViewBox?.();
@@ -12378,7 +12427,7 @@ const VISUAL_DEFAULTS = Object.freeze({
         ".nm-multi-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.nm-multi-command-grid button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;padding:7px 8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit;font-size:.84rem;font-weight:650;cursor:pointer}.nm-multi-command-grid:not(.nm-has-resume) [data-multi-command=mow]{grid-column:1/-1}.nm-multi-command-grid [data-multi-command=mow],.nm-multi-command-grid [data-multi-command=resume]{color:var(--text-primary-color,#fff);background:var(--primary-color,#03a9f4);box-shadow:none}.nm-multi-command-grid button:disabled{opacity:.45;cursor:default}.nm-multi-command-grid ha-icon{--mdc-icon-size:19px}",
         ".nm-multi-command-status{padding:6px 4px 0;text-align:center;color:var(--secondary-text-color);font-size:.74rem}.nm-multi-command-status.error{color:var(--error-color,#db4437)}",
         ".nm-sessions.nm-multi-sessions-active{grid-template-columns:1fr!important;gap:7px!important;width:100%}.nm-multi-session-group{display:grid;grid-template-columns:minmax(80px,auto) 1fr;align-items:start;gap:8px 12px;width:100%}.nm-multi-session-heading{padding-top:2px;color:var(--secondary-text-color);font-size:.76rem;font-weight:750}.nm-multi-session-rows{display:flex;flex-wrap:wrap;gap:5px 10px;min-width:0}.nm-multi-session-empty{color:var(--secondary-text-color);font-size:.8rem;opacity:.7}",
-        ".nm-multi-selected-session{animation:nm-multi-session-pulse 720ms ease-in-out 3 forwards}@keyframes nm-multi-session-pulse{0%,100%{opacity:.1;filter:none}50%{opacity:1;filter:drop-shadow(0 0 10px var(--nm-highlight-color,#43a047))}}",
+        ".nm-multi-selected-session.nm-session-pulse{animation:nm-multi-session-pulse 720ms ease-in-out 3 forwards}@keyframes nm-multi-session-pulse{0%,100%{opacity:.1;filter:none}50%{opacity:1;filter:drop-shadow(0 0 10px var(--nm-highlight-color,#43a047))}}",
         ".nm-multi-mower-error{filter:drop-shadow(0 0 7px var(--error-color,#db4437))}.nm-multi-notification-mower{flex:0 0 auto;padding:1px 6px;border-radius:10px;background:var(--secondary-background-color);color:var(--primary-text-color);font-weight:700}",
         "@media(max-width:620px){.nm-multi-controls{grid-template-columns:1fr}.nm-multi-session-group{grid-template-columns:1fr;gap:2px}.nm-multi-session-heading{padding-left:4px}.nm-multi-command-grid button span{font-size:.8rem}}"
       ].join("\n");

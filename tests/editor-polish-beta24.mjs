@@ -24,7 +24,7 @@ for (const needle of [
   'show_history_button: "History"',
   'show_notifications_button: "Notifications"',
   'show_schedule_button: "Schedule"',
-  'show_settings_button: "Settings"',
+  'show_settings_button: "Quick settings"',
   'type: "constant", name: group.heading',
 ]) {
   assert.ok(source.includes(needle), `Missing beta24 editor grouping contract: ${needle}`);

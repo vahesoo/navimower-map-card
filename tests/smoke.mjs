@@ -279,8 +279,9 @@ assert.equal(scheduleCard._scheduleEnabled(), null);
 assert.equal(scheduleCard._scheduleStatusText(), "Configured");
 
 
-// An active backend session continues collecting live positions while the mower
-// returns to the dock, matching the integration's include_return_trail option.
+// Return-to-dock positions are session/travel metadata, not Mowed geometry.
+// Even when include_return_trail is enabled for History, the current card trail
+// records only active cutting positions.
 const returnCard = new Card();
 returnCard._config = { show_position: false, show_status: true, show_zone: true, show_battery: true, trail_length: 1000 };
 returnCard._resolved = {
@@ -307,14 +308,14 @@ returnCard._hass = { states: {
 } };
 returnCard._queueRender = () => {};
 returnCard._updateLive(true);
-assert.deepEqual(returnCard._trail, [[4, 5]]);
+assert.deepEqual(returnCard._trail, []);
 returnCard._hass.states["sensor.return_x"] = { state: "4.5", attributes: {} };
 returnCard._updateLive(false);
-assert.deepEqual(returnCard._trail, [[4, 5], [4.5, 5]]);
+assert.deepEqual(returnCard._trail, []);
 returnCard._hass.states["sensor.return_map"].attributes.include_return_trail = false;
 returnCard._hass.states["sensor.return_x"] = { state: "5", attributes: {} };
 returnCard._updateLive(false);
-assert.deepEqual(returnCard._trail, [[4, 5], [4.5, 5]]);
+assert.deepEqual(returnCard._trail, []);
 
 if (runtimeRoot === "src") {
   assert.ok(sourceText.includes("LATEST_MAP_PAYLOAD_CACHE"));

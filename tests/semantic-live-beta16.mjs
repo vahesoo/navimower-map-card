@@ -94,15 +94,11 @@ assert.deepEqual(
 
 card._renderTrail();
 assert.match(card._trailEl.innerHTML, /nm-semantic-live-cutting/);
-assert.match(card._trailEl.innerHTML, /nm-semantic-live-travel/);
+assert.doesNotMatch(card._trailEl.innerHTML, /nm-semantic-live-travel/);
 assert.match(card._trailEl.innerHTML, /stroke-opacity="0\.55"/);
 assert.match(card._trailEl.innerHTML, /stroke-width="6\.3"/);
-assert.match(card._trailEl.innerHTML, /stroke-width="2\.0"/);
-assert.ok(
-  card._trailEl.innerHTML.indexOf("nm-semantic-live-cutting")
-    < card._trailEl.innerHTML.indexOf("nm-semantic-live-travel"),
-  "cutting and travel must be separate semantic route classes",
-);
+assert.doesNotMatch(card._trailEl.innerHTML, /M1 0L1 1/);
+assert.doesNotMatch(card._trailEl.innerHTML, /M3 0L4 0/);
 
 const calls = [];
 const loader = makeCard();
@@ -148,8 +144,9 @@ assert.match(source, /PREPARED_SEMANTIC_LIVE_RESOURCE_CACHE/);
 assert.match(source, /prepared_live_semantic_tail_only=1/);
 assert.match(source, /live_semantic_route/);
 assert.match(source, /nm-semantic-live-cutting/);
-assert.match(source, /nm-semantic-live-travel/);
+assert.doesNotMatch(source, /nm-semantic-live-travel/);
+assert.match(source, /const recordTrail = cuttingTrailActive;/);
 assert.match(source, /memberPreparedSemanticLive036/);
 assert.match(source, /preparedSemanticTailRows036/);
 
-console.log("Semantic live beta16: opt-in resource, short tail, cutting/travel composition, opacity and fallback guards passed");
+console.log("Semantic live: Mowed layer renders cutting-only geometry; travel remains metadata");

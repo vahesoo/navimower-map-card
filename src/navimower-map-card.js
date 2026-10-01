@@ -3376,6 +3376,20 @@ var NavimowerMapCard = class extends HTMLElement {
     this._openZoneInfo(label.dataset.zoneId);
   }
   _zoneStateRecord(zoneId) {
+    const contractV2 = Number(this._mapPayload?.contract?.version) >= 2;
+    const canonicalRows = this._mapPayload?.canonical?.cycles?.rows;
+    if (contractV2 && Array.isArray(canonicalRows)) {
+      const row = canonicalRows.find((item) => Number(item?.zone_id ?? item?.id) === Number(zoneId));
+      if (row) {
+        return {
+          ...row,
+          id: row.zone_id ?? row.id,
+          coverage_pct: row.progress_pct ?? row.coverage_pct,
+          progress: row.progress_pct ?? row.progress,
+          source: row.progress_source ?? row.source,
+        };
+      }
+    }
     const states = this._mapPayload?.zone_states;
     if (!Array.isArray(states)) return {};
     return states.find((item) => Number(item?.id ?? item?.zone_id) === Number(zoneId)) || {};
@@ -11584,6 +11598,23 @@ const VISUAL_DEFAULTS = Object.freeze({
       : "";
   };
 
+  const canonicalZoneState036 = (payload, zoneId) => {
+    const contractV2 = Number(payload?.contract?.version) >= 2;
+    const rows = payload?.canonical?.cycles?.rows;
+    if (contractV2 && Array.isArray(rows)) {
+      const row = rows.find((item) => Number(item?.zone_id ?? item?.id) === Number(zoneId));
+      if (row) {
+        return {
+          ...row,
+          id: row.zone_id ?? row.id,
+          coverage_pct: row.progress_pct ?? row.coverage_pct,
+          progress: row.progress_pct ?? row.progress,
+        };
+      }
+    }
+    return (payload?.zone_states || []).find((item) => Number(item?.id ?? item?.zone_id) === Number(zoneId)) || {};
+  };
+
   const zoneLabelItem036 = (card, member, matrix, zone, coverageMap, payload) => {
     const polygon = Array.isArray(zone?.polygon) ? zone.polygon : [];
     const valid = polygon.filter((point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
@@ -11592,7 +11623,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     const anchorX = screenPolygon.reduce((sum, point) => sum + Number(point[0]), 0) / screenPolygon.length;
     const anchorY = screenPolygon.reduce((sum, point) => sum + Number(point[1]), 0) / screenPolygon.length;
     const zoneId = Number(zone?.id);
-    const state = (payload?.zone_states || []).find((item) => Number(item?.id ?? item?.zone_id) === zoneId) || {};
+    const state = canonicalZoneState036(payload, zoneId);
     const rawDetails = payload?.zone_details || payload?.zone_history || [];
     const detail = Array.isArray(rawDetails)
       ? rawDetails.find((item) => Number(item?.id ?? item?.zone_id) === zoneId) || {}
@@ -11654,7 +11685,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     const numericZoneId = Number(zoneId);
     const zone = (map?.zones || []).find((item) => Number(item?.id) === numericZoneId) || {};
     const coverage = (payload?.coverage?.zones || []).find((item) => Number(item?.id) === numericZoneId) || {};
-    const state = (payload?.zone_states || []).find((item) => Number(item?.id ?? item?.zone_id) === numericZoneId) || {};
+    const state = canonicalZoneState036(payload, numericZoneId);
     const rawDetails = payload?.zone_details || payload?.zone_history || [];
     const detail = Array.isArray(rawDetails)
       ? rawDetails.find((item) => Number(item?.id ?? item?.zone_id) === numericZoneId) || {}

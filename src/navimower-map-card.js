@@ -2294,7 +2294,10 @@ var NavimowerMapCard = class extends HTMLElement {
     const activeSessionId = mapAttrs.active_session_id ?? this._mapPayload?.active_session?.id ?? this._mapPayload?.current_cycle_session_id ?? null;
     const includeReturnTrail = mapAttrs.include_return_trail !== false && this._mapPayload?.include_return_trail !== false;
     const cuttingTrailActive = mapAttrs.trail_active === true || this._mapPayload?.trail_active === true || normalizedStatus === "mowing" || normalizedStatus.includes("edge mow");
-    const recordTrail = cuttingTrailActive || Boolean(activeSessionId) && !docked && (!returning || includeReturnTrail);
+    // The Mowed layer is cutting geometry only. Return-to-dock and other travel
+    // remain available as session metadata but are never appended to the live
+    // mowed path.
+    const recordTrail = cuttingTrailActive;
     return {
       x: this._number(this._resolved.x_entity),
       y: this._number(this._resolved.y_entity),
@@ -2403,16 +2406,11 @@ var NavimowerMapCard = class extends HTMLElement {
         ...(Array.isArray(semantic.cutting_segments) ? semantic.cutting_segments : []),
         ...semanticTail.cutting,
       ].filter((row) => String(row?.path_d || "").trim());
-      const travel = [
-        ...(Array.isArray(semantic.travel_segments) ? semantic.travel_segments : []),
-        ...semanticTail.travel,
-      ].filter((row) => String(row?.path_d || "").trim());
       const semanticSignature = [
         this._preparedSemanticLiveResourceId || "",
         this._preparedSemanticLiveTailPayload?.current_point_count ?? "",
         this._preparedSemanticLiveTailPayload?.point_count ?? "",
         cutting.length,
-        travel.length,
       ].join(":");
       const renderKey = [
         this._historyDayOffset ?? "today",
@@ -2427,7 +2425,6 @@ var NavimowerMapCard = class extends HTMLElement {
       this._trailRenderKey = renderKey;
 
       const width = trailWidth034(this);
-      const travelWidth = Math.max(2, Math.min(width, finiteNumber(this._layout?.scale, 1) * 0.08));
       const opacity = clamp(finiteNumber(this._config.trail_opacity, 0.55), 0, 1).toFixed(2);
       const sessionId2 = semantic.session_id ?? this._trailSession ?? 0;
       const sessionAttr = escapeHtml(String(sessionId2));
@@ -2436,8 +2433,7 @@ var NavimowerMapCard = class extends HTMLElement {
         (row) => `<path class="nm-session-path ${cssClass}" data-session-id="${sessionAttr}" d="${escapeHtml(String(row.path_d))}" transform="${semanticTransform}" fill="none" stroke="${color}" stroke-width="${strokeWidth.toFixed(1)}" stroke-opacity="${opacity}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`
       ).join("");
       this._trailEl.innerHTML =
-        pathMarkup(cutting, "nm-semantic-live-cutting", width)
-        + pathMarkup(travel, "nm-semantic-live-travel", travelWidth);
+        pathMarkup(cutting, "nm-semantic-live-cutting", width);
       return;
     }
 
@@ -7075,7 +7071,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.4.0-beta2";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.4.0-beta3";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -11533,9 +11529,7 @@ const VISUAL_DEFAULTS = Object.freeze({
     if (semantic && semanticTail) {
       const rows = [
         ...semantic.cutting_segments,
-        ...semantic.travel_segments,
         ...semanticTail.cutting,
-        ...semanticTail.travel,
       ];
       return [
         "semantic",
@@ -11823,15 +11817,9 @@ const VISUAL_DEFAULTS = Object.freeze({
         const semanticTail = semanticLive ? preparedSemanticTailRows036(card, member, payload) : null;
         if (semanticLive && semanticTail) {
           const cuttingRows = [...semanticLive.cutting_segments, ...semanticTail.cutting];
-          const travelRows = [...semanticLive.travel_segments, ...semanticTail.travel];
           for (const row of cuttingRows) {
             const path = String(row?.path_d || "");
             if (path) local.push("<path class=\"nm-multi-live-trail nm-semantic-live-cutting\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
-          }
-          const travelWidth = Math.min(liveTrailWidth, 0.08);
-          for (const row of travelRows) {
-            const path = String(row?.path_d || "");
-            if (path) local.push("<path class=\"nm-multi-live-trail nm-semantic-live-travel\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + travelWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
           }
         } else {
           const rawLiveSegments = liveTrailSegments036(card, member, payload);
@@ -17002,4 +16990,4 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
 })();
 
-console.info("[Navimower Map Card] v0.4.0-beta2 loaded");
+console.info("[Navimower Map Card] v0.4.0-beta3 loaded");

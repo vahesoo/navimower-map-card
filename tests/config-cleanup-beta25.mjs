@@ -6,7 +6,7 @@ const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
 const manual = await readFile(new URL("../examples/manual-entities.yaml", import.meta.url), "utf8");
 const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-assert.match(pkg.version, /^0\.3\.7(?:-|$)/);
+assert.match(pkg.version, /^(?:0\.3\.7(?:-|$)|0\.4\.)/);
 
 for (const obsolete of [
   "osm_underlay_opacity",

@@ -5,7 +5,7 @@ const runtime = await readFile(new URL("../scripts/runtime-v037-beta4.js.txt", i
 const sync = await readFile(new URL("../scripts/sync-version.mjs", import.meta.url), "utf8");
 const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-assert.match(pkg.version, /^0\.3\.7(?:-|$)/);
+assert.match(pkg.version, /^(?:0\.3\.7(?:-|$)|0\.4\.)/);
 assert.match(runtime, /vendor backbone with short live MQTT tail/);
 assert.match(runtime, /MAX_TAIL_DISTANCE_M = 8\.0/);
 assert.match(runtime, /backend_tail_authoritative/);

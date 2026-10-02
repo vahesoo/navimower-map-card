@@ -2465,7 +2465,7 @@ var NavimowerMapCard = class extends HTMLElement {
     const preparedMarkup = preparedSegments.length && transform
       ? preparedSegments.map((row) => `<path class="nm-session-path nm-prepared-live-route" data-session-id="${sessionAttr}" d="${escapeHtml(String(row.path_d))}" transform="${transform}" fill="none" stroke="${color}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`).join("")
       : "";
-    const tailMarkup = tailSegments.map((segment) => `<polyline class="nm-session-path nm-live-tail" data-session-id="${sessionAttr}" points="${this._pointString(segment)}" fill="none" stroke="${color}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`).join("");
+    const tailMarkup = tailSegments.map((segment) => `<polyline class="nm-session-path nm-live-tail" data-session-id="${sessionAttr}" points="${this._pointString(segment)}" fill="none" stroke="${color}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`).join("");
     this._trailEl.innerHTML = preparedMarkup + tailMarkup;
   }
   _renderMower() {
@@ -11841,7 +11841,7 @@ const VISUAL_DEFAULTS = Object.freeze({
           const cuttingRows = [...semanticLive.cutting_segments, ...semanticTail.cutting];
           for (const row of cuttingRows) {
             const path = String(row?.path_d || "");
-            if (path) local.push("<path class=\"nm-multi-live-trail nm-semantic-live-cutting\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+            if (path) local.push("<path class=\"nm-multi-live-trail nm-semantic-live-cutting\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
           }
         } else {
           const rawLiveSegments = liveTrailSegments036(card, member, payload);
@@ -11849,16 +11849,16 @@ const VISUAL_DEFAULTS = Object.freeze({
           if (preparedLive && Array.isArray(preparedLive.segments)) {
             for (const row of preparedLive.segments) {
               const path = String(row?.path_d || "");
-              if (path) local.push("<path class=\"nm-multi-live-trail nm-prepared-live-route\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+              if (path) local.push("<path class=\"nm-multi-live-trail nm-prepared-live-route\" d=\"" + esc(path) + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
             }
             for (const segment of preparedLiveTailSegments036(card, member, payload, preparedLive, rawLiveSegments)) {
               const points = rawPoints036(segment);
-              if (points) local.push("<polyline class=\"nm-multi-live-trail nm-live-tail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+              if (points) local.push("<polyline class=\"nm-multi-live-trail nm-live-tail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
             }
           } else {
             for (const segment of rawLiveSegments) {
               const points = rawPoints036(segment);
-              if (points) local.push("<polyline class=\"nm-multi-live-trail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+              if (points) local.push("<polyline class=\"nm-multi-live-trail\" points=\"" + points + "\" fill=\"none\" stroke=\"" + esc(trailColor) + "\" stroke-width=\"" + liveTrailWidth.toFixed(3) + "\" stroke-opacity=\"" + trailOpacity.toFixed(2) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
             }
           }
         }
@@ -17008,4 +17008,4 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
 })();
 
-console.info("[Navimower Map Card] v0.4.0-beta6 loaded");
+console.info("[Navimower Map Card] v0.4.0-beta7 loaded");

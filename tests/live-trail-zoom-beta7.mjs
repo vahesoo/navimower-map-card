@@ -6,21 +6,26 @@ const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.ur
 
 assert.equal(pkg.version, "0.4.0-beta7");
 
-const liveNeedles = [
-  'class="nm-session-path nm-live-tail"',
-  'class="nm-multi-live-trail nm-semantic-live-cutting"',
-  'class="nm-multi-live-trail nm-prepared-live-route"',
-  'class="nm-multi-live-trail nm-live-tail"',
-  'class="nm-multi-live-trail"',
+const singleTail = source.indexOf('class="nm-session-path nm-live-tail"');
+assert.ok(singleTail >= 0, "missing Single live tail");
+const singleClose = source.indexOf("/>", singleTail);
+assert.match(source.slice(singleTail, singleClose), /vector-effect="non-scaling-stroke"/);
+
+const multiClasses = [
+  "nm-multi-live-trail nm-semantic-live-cutting",
+  "nm-multi-live-trail nm-prepared-live-route",
+  "nm-multi-live-trail nm-live-tail",
+  "nm-multi-live-trail",
 ];
 
-for (const needle of liveNeedles) {
-  const index = source.indexOf(needle);
-  assert.ok(index >= 0, `missing live trail markup: ${needle}`);
-  const close = source.indexOf('/>', index);
+for (const cssClass of multiClasses) {
+  const marker = 'class=\\\"' + cssClass + '\\\"';
+  const index = source.indexOf(marker);
+  assert.ok(index >= 0, `missing Multi live trail markup: ${cssClass}`);
+  const close = source.indexOf('/>");', index);
   assert.ok(close > index);
   const markup = source.slice(index, close);
-  assert.match(markup, /vector-effect=.*non-scaling-stroke/);
+  assert.match(markup, /vector-effect=\\\"non-scaling-stroke\\\"/);
 }
 
 assert.match(source, /v0\.4\.0-beta7 loaded/);

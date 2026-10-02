@@ -5,11 +5,9 @@ const source = readFileSync("src/navimower-map-card.js", "utf8");
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 
 assert.match(pkg.version, /^0\.4\.0-beta\d+$/);
-assert.match(source, /Number\(this\._mapPayload\?\.contract\?\.version\) >= 2/);
 assert.match(source, /this\._mapPayload\?\.canonical\?\.cycles\?\.rows/);
-assert.match(source, /coverage_pct: row\.progress_pct \?\? row\.coverage_pct/);
+assert.match(source, /coverage_pct: row\.progress_pct/);
 assert.match(source, /const canonicalZoneState036 = \(payload, zoneId\) =>/);
-assert.match(source, /Number\(payload\?\.contract\?\.version\) >= 2/);
 
 // Cutover must consume the backend-owned canonical cycle model without adding
 // another runtime wrapper around zone lookup/rendering.

@@ -1900,8 +1900,7 @@ var NavimowerMapCard = class extends HTMLElement {
       station: map.station || null,
       gateAreas: payload?.gate_areas || [],
       coverage: payload?.coverage?.zones || [],
-      zoneDetails: payload?.zone_details || payload?.zone_history || [],
-      zoneStates: payload?.zone_states || []
+      zoneDetails: payload?.zone_details || payload?.zone_history || []
     }));
   }
   _staticCacheKey() {
@@ -3376,23 +3375,18 @@ var NavimowerMapCard = class extends HTMLElement {
     this._openZoneInfo(label.dataset.zoneId);
   }
   _zoneStateRecord(zoneId) {
-    const contractV2 = Number(this._mapPayload?.contract?.version) >= 2;
+    if (Number(this._mapPayload?.contract?.version) < 3) return {};
     const canonicalRows = this._mapPayload?.canonical?.cycles?.rows;
-    if (contractV2 && Array.isArray(canonicalRows)) {
-      const row = canonicalRows.find((item) => Number(item?.zone_id ?? item?.id) === Number(zoneId));
-      if (row) {
-        return {
-          ...row,
-          id: row.zone_id ?? row.id,
-          coverage_pct: row.progress_pct ?? row.coverage_pct,
-          progress: row.progress_pct ?? row.progress,
-          source: row.progress_source ?? row.source,
-        };
-      }
-    }
-    const states = this._mapPayload?.zone_states;
-    if (!Array.isArray(states)) return {};
-    return states.find((item) => Number(item?.id ?? item?.zone_id) === Number(zoneId)) || {};
+    if (!Array.isArray(canonicalRows)) return {};
+    const row = canonicalRows.find((item) => Number(item?.zone_id ?? item?.id) === Number(zoneId));
+    if (!row) return {};
+    return {
+      ...row,
+      id: row.zone_id ?? row.id,
+      coverage_pct: row.progress_pct,
+      progress: row.progress_pct,
+      source: row.progress_source,
+    };
   }
   _zoneDetailRecord(zoneId) {
     const raw = this._mapPayload?.zone_details || this._mapPayload?.zone_history;
@@ -11599,20 +11593,17 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
 
   const canonicalZoneState036 = (payload, zoneId) => {
-    const contractV2 = Number(payload?.contract?.version) >= 2;
+    if (Number(payload?.contract?.version) < 3) return {};
     const rows = payload?.canonical?.cycles?.rows;
-    if (contractV2 && Array.isArray(rows)) {
-      const row = rows.find((item) => Number(item?.zone_id ?? item?.id) === Number(zoneId));
-      if (row) {
-        return {
-          ...row,
-          id: row.zone_id ?? row.id,
-          coverage_pct: row.progress_pct ?? row.coverage_pct,
-          progress: row.progress_pct ?? row.progress,
-        };
-      }
-    }
-    return (payload?.zone_states || []).find((item) => Number(item?.id ?? item?.zone_id) === Number(zoneId)) || {};
+    if (!Array.isArray(rows)) return {};
+    const row = rows.find((item) => Number(item?.zone_id ?? item?.id) === Number(zoneId));
+    if (!row) return {};
+    return {
+      ...row,
+      id: row.zone_id ?? row.id,
+      coverage_pct: row.progress_pct,
+      progress: row.progress_pct,
+    };
   };
 
   const zoneLabelItem036 = (card, member, matrix, zone, coverageMap, payload) => {
@@ -16229,11 +16220,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       ? coverage.find((item) => Number(item?.id) === Number(zoneId))
       : null;
     if (row?.pct !== null && row?.pct !== undefined) return row.pct;
-    const states = card?._mapPayload?.zone_states;
-    const state = Array.isArray(states)
-      ? states.find((item) => Number(item?.id) === Number(zoneId))
-      : null;
-    return state?.coverage_pct ?? null;
+    return null;
   };
 
   const syncZoneLabels = (card) => {
@@ -17021,4 +17008,4 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
 })();
 
-console.info("[Navimower Map Card] v0.4.0-beta5 loaded");
+console.info("[Navimower Map Card] v0.4.0-beta6 loaded");

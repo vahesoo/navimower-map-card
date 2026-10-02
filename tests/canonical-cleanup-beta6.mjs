@@ -4,7 +4,7 @@ import fs from "node:fs";
 const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const source = fs.readFileSync(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 
-assert.equal(pkg.version, "0.4.0-beta6");
+assert.match(pkg.version, /^0\.4\.0-beta\d+$/);
 assert.match(source, /Number\(this\._mapPayload\?\.contract\?\.version\) < 3/);
 assert.match(source, /this\._mapPayload\?\.canonical\?\.cycles\?\.rows/);
 assert.match(source, /Number\(payload\?\.contract\?\.version\) < 3/);

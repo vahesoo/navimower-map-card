@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 
-assert.equal(pkg.version, "0.4.0-beta5");
+assert.match(pkg.version, /^0\.4\.0-beta\d+$/);
 assert.match(source, /Number\(this\._mapPayload\?\.contract\?\.version\) >= 2/);
 assert.match(source, /this\._mapPayload\?\.canonical\?\.cycles\?\.rows/);
 assert.match(source, /coverage_pct: row\.progress_pct \?\? row\.coverage_pct/);

@@ -23,5 +23,5 @@ assert.match(src, /!canMow \|\| unavailable \? " disabled"/);
 assert.match(src, /!canPause \|\| unavailable \? " disabled"/);
 assert.match(src, /!canDock \|\| unavailable \? " disabled"/);
 assert.match(src, /"navimower", service, resumeTarget\(card\)/);
-assert.match(src, /"disabled-color"/);
+assert.match(src, /var\\(--disabled-color/);
 console.log("beta8: controls always shown, command permissions follow mower state");

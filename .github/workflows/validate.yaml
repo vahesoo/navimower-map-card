@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   javascript:
@@ -32,25 +31,7 @@ jobs:
       - name: Snapshot prepared tree
         run: git status --porcelain=v1 > /tmp/status-before-tests
       - name: Run read-only regression suite
-        shell: bash
-        run: |
-          set -o pipefail
-          npm test 2>&1 | tee /tmp/navimower-test-output.txt
-      - name: Report beta9 test failure for diagnosis
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        shell: bash
-        run: |
-          {
-            echo '### Temporary beta9 CI failure trace (second pass)'
-            echo '```'
-            tail -n 70 /tmp/navimower-test-output.txt || true
-            echo '```'
-          } > /tmp/navimower-failure-comment.txt
-          gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" -f body="$(cat /tmp/navimower-failure-comment.txt)"
-
+        run: npm test
       - name: Ensure tests are read-only
         run: |
           git status --porcelain=v1 > /tmp/status-after-tests

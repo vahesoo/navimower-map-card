@@ -28,8 +28,9 @@ assert.match(source, /_v034sScheduleCloseTimer/, "schedule close timer cleanup m
 // Upper bounds for the consolidated runtime. Normalize only the release
 // version text so beta number width cannot look like production code growth.
 // beta28 adds viewport auto-reset ownership and click-only History pulse state without
-// adding another runtime wrapper.
-assert.ok(normalizedSource.length <= 903000, `runtime grew beyond beta28 feature budget: ${normalizedSource.length} normalized chars`);
+// adding another runtime wrapper. beta8 keeps all four buttons visible and adds
+// state-aware gating in both single and multi modes without a new wrapper.
+assert.ok(normalizedSource.length <= 905000, `runtime grew beyond beta28 feature budget: ${normalizedSource.length} normalized chars`);
 assert.ok(sourceSections.length <= 12, `source section count grew: ${sourceSections.length}`);
 assert.ok(patchMarkers.size <= 43, `runtime patch marker count grew: ${patchMarkers.size}`);
 assert.ok(iifes.length <= 50, `runtime patch IIFE count grew: ${iifes.length}`);

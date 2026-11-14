@@ -4,7 +4,7 @@ import fs from "node:fs";
 const source = fs.readFileSync(new URL("../src/navimower-map-card.js", import.meta.url), "utf8");
 const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
-assert.equal(pkg.version, "0.4.0-beta7");
+assert.match(pkg.version, /^0\.4\.0-beta(?:[7-9]|[1-9]\d+)$/);
 
 const singleTail = source.indexOf('class="nm-session-path nm-live-tail"');
 assert.ok(singleTail >= 0, "missing Single live tail");
@@ -28,5 +28,5 @@ for (const cssClass of multiClasses) {
   assert.match(markup, /vector-effect=\\\"non-scaling-stroke\\\"/);
 }
 
-assert.match(source, /v0\.4\.0-beta7 loaded/);
+assert.match(source, /v0\.4\.0-beta(?:[7-9]|[1-9]\d+) loaded/);
 console.log("beta7 live trail zoom contract OK");

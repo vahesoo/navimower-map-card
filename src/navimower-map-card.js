@@ -6720,6 +6720,17 @@ function taskResumeContract(hass, frontend) {
   }
   return null;
 }
+function mowerControlMode(state) {
+  const primary = String(state?.state ?? "").trim().toLowerCase();
+  const secondary = stateStrings(state).slice(1);
+  const value = primary || secondary[0] || "";
+  if (!value || ["unknown", "unavailable"].includes(value)) return "unavailable";
+  if (value.includes("pause")) return "paused";
+  if (value.includes("return") || value.includes("docking")) return "returning";
+  if (value.includes("mow") || value.includes("running")) return "mowing";
+  if (value.includes("dock") || value.includes("charg") || value.includes("idle") || value === "ready") return "docked";
+  return "unavailable";
+}
 function shouldOfferResume(hass, state, contract = null) {
   if (contract && typeof contract.available === "boolean") {
     return continueTaskServiceAvailable(hass) && contract.available === true;
@@ -6744,6 +6755,11 @@ function ensureStyles(card) {
     .nm-control.nm-resume[hidden] { display: none; }
     .nm-control.nm-resume { color: var(--text-primary-color, #fff);
       background: var(--primary-color, #03a9f4); }
+    .nm-controls.nm-has-resume .nm-control:disabled {
+      opacity: 1; color: var(--disabled-text-color, var(--secondary-text-color));
+      background: var(--disabled-color, var(--secondary-background-color));
+      box-shadow: none; cursor: default;
+    }
     .nm-controls:not(.nm-has-resume) .nm-control.nm-mow { grid-column: 1 / -1; }
     .nm-controls.nm-has-resume .nm-control.nm-resume,
     .nm-controls.nm-has-resume .nm-control.nm-mow { grid-column: auto;
@@ -6802,21 +6818,41 @@ function updateResumeButton(card) {
   const button = ensureResumeButton(card);
   if (!button || !card?._controlsEl) return false;
   const state = mowerState(card);
-  const kind = resumeStateKind(state);
+  const kind = mowerControlMode(state);
   const contract = singleResumeContract(card);
-  const visible = shouldOfferResume(card._hass, state, contract);
-  const unavailable = !state || ["unknown", "unavailable"].includes(String(state.state || "").toLowerCase());
-  button.hidden = !visible;
-  button.disabled = !visible || unavailable || Boolean(card._commandBusy);
-  button.title = contract?.strategy === "ordered_run"
-    ? "Continue unfinished zones in the retained mowing order"
-    : contract
-      ? "Continue the retained interrupted mowing task"
-      : kind === "paused"
-        ? "Resume the paused mowing task"
-        : "Resume interrupted mowing";
-  card._controlsEl.classList.toggle("nm-has-resume", visible);
-  return visible;
+  const resumeAvailable = (kind === "paused" || kind === "docked")
+    && shouldOfferResume(card._hass, state, contract);
+  // All four controls remain visible in a stable 2 x 2 layout.
+  // Never enable a command from an old cloud attribute over fresh mower state.
+  const allowed = {
+    resume: resumeAvailable,
+    mow: kind === "docked",
+    pause: kind === "mowing",
+    dock: kind === "mowing" || kind === "paused"
+  };
+  for (const command of ["resume", "mow", "pause", "dock"]) {
+    const item = card._controlsEl.querySelector?.(`[data-command="${command}"]`);
+    if (!item) continue;
+    const usable = allowed[command] && !card._commandBusy;
+    item.hidden = false;
+    item.disabled = !usable;
+    item.setAttribute?.("aria-disabled", String(!usable));
+    if (command === "resume") {
+      item.title = usable
+        ? contract?.strategy === "ordered_run"
+          ? "Continue unfinished zones in the retained mowing order"
+          : "Resume the interrupted mowing task"
+        : "No resumable mowing task is currently confirmed";
+    } else if (command === "mow") {
+      item.title = usable ? "Start a new mowing task" : "New mowing is available when the mower is idle or docked";
+    } else if (command === "pause") {
+      item.title = usable ? "Pause mowing" : "Pause is only available while mowing";
+    } else {
+      item.title = usable ? "Return to dock" : "Return to dock is available while mowing or paused";
+    }
+  }
+  card._controlsEl.classList.add("nm-has-resume");
+  return resumeAvailable;
 }
 function openNewMowDialog(card) {
   const zones = typeof card?._availableMowZones === "function" ? card._availableMowZones() : [];
@@ -12058,12 +12094,15 @@ const VISUAL_DEFAULTS = Object.freeze({
       const scheduleOn = managedOn || nativeOn;
       const resumeFrontend = member?.frontend || memberState036(card, member.entry_id).map?.frontend || null;
       const resumeContract = typeof taskResumeContract === "function" ? taskResumeContract(card._hass, resumeFrontend) : null;
-      const canResume = typeof shouldOfferResume === "function"
-        ? shouldOfferResume(card._hass, mower, resumeContract)
-        : String(mower?.state || "").toLowerCase() === "paused";
+      const controlMode = mowerControlMode(mower);
+      const canResume = (controlMode === "paused" || controlMode === "docked")
+        && shouldOfferResume(card._hass, mower, resumeContract);
+      const canMow = controlMode === "docked";
+      const canPause = controlMode === "mowing";
+      const canDock = controlMode === "mowing" || controlMode === "paused";
       const status = memberState036(card, member.entry_id).command;
       const meta = memberMeta036(card, member, mower);
-      return "<section class=\"nm-multi-control-member\" data-entry-id=\"" + esc(member.entry_id) + "\"><button type=\"button\" class=\"nm-multi-schedule" + (scheduleOn ? " active" : "") + "\" data-multi-schedule=\"" + esc(member.entry_id) + "\" title=\"Open " + esc(displayName036(member)) + " schedule\"><span>" + esc(displayName036(member)) + "</span><ha-icon icon=\"mdi:calendar-clock\"></ha-icon></button>" + meta + "<div class=\"nm-multi-command-grid" + (canResume ? " nm-has-resume" : "") + "\"><button type=\"button\" data-multi-command=\"mow\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:play\"></ha-icon><span>Mow</span></button>" + (canResume ? "<button type=\"button\" data-multi-command=\"resume\" data-entry-id=\"" + esc(member.entry_id) + "\"><ha-icon icon=\"mdi:play-circle-outline\"></ha-icon><span>Resume</span></button>" : "") + "<button type=\"button\" data-multi-command=\"pause\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:pause\"></ha-icon><span>Pause</span></button><button type=\"button\" data-multi-command=\"dock\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:home-map-marker\"></ha-icon><span>Home</span></button></div>" + (status ? "<div class=\"nm-multi-command-status " + esc(status.kind || "") + "\">" + esc(status.text || "") + "</div>" : "") + "</section>";
+      return "<section class=\"nm-multi-control-member\" data-entry-id=\"" + esc(member.entry_id) + "\"><button type=\"button\" class=\"nm-multi-schedule" + (scheduleOn ? " active" : "") + "\" data-multi-schedule=\"" + esc(member.entry_id) + "\" title=\"Open " + esc(displayName036(member)) + " schedule\"><span>" + esc(displayName036(member)) + "</span><ha-icon icon=\"mdi:calendar-clock\"></ha-icon></button>" + meta + "<div class=\"nm-multi-command-grid nm-has-resume" + "\"><button type=\"button\" data-multi-command=\"mow\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (!canMow || unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:play\"></ha-icon><span>Mow</span></button>" + "<button type=\"button\" data-multi-command=\"resume\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (!canResume || unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:play-circle-outline\"></ha-icon><span>Resume</span></button>" + "<button type=\"button\" data-multi-command=\"pause\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (!canPause || unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:pause\"></ha-icon><span>Pause</span></button><button type=\"button\" data-multi-command=\"dock\" data-entry-id=\"" + esc(member.entry_id) + "\"" + (!canDock || unavailable ? " disabled" : "") + "><ha-icon icon=\"mdi:home-map-marker\"></ha-icon><span>Home</span></button></div>" + (status ? "<div class=\"nm-multi-command-status " + esc(status.kind || "") + "\">" + esc(status.text || "") + "</div>" : "") + "</section>";
     }).join("");
   }
   async function runMemberCommand036(card, member, command) {
@@ -12431,7 +12470,7 @@ const VISUAL_DEFAULTS = Object.freeze({
         ".nm-multi-control-member{min-width:0;padding:9px;border:1px solid var(--divider-color);border-radius:11px;background:color-mix(in srgb,var(--secondary-background-color) 65%,transparent)}",
         ".nm-multi-schedule{width:100%;min-height:32px;display:flex;align-items:center;justify-content:space-between;gap:7px;border:0;border-radius:9px;padding:5px 8px;color:var(--primary-text-color);background:transparent;font:inherit;font-weight:700;cursor:pointer}.nm-multi-schedule.active{color:#FF5A00}.nm-multi-schedule ha-icon{--mdc-icon-size:20px}",
         ".nm-multi-member-meta{display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;padding:2px 8px 7px;color:var(--secondary-text-color);font-size:.76rem}.nm-multi-meta-status{text-transform:capitalize}.nm-multi-meta-spacer{flex:1 1 auto}.nm-multi-meta-item{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}.nm-multi-meta-item ha-icon{--mdc-icon-size:15px}",
-        ".nm-multi-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.nm-multi-command-grid button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;padding:7px 8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit;font-size:.84rem;font-weight:650;cursor:pointer}.nm-multi-command-grid:not(.nm-has-resume) [data-multi-command=mow]{grid-column:1/-1}.nm-multi-command-grid [data-multi-command=mow],.nm-multi-command-grid [data-multi-command=resume]{color:var(--text-primary-color,#fff);background:var(--primary-color,#03a9f4);box-shadow:none}.nm-multi-command-grid button:disabled{opacity:.45;cursor:default}.nm-multi-command-grid ha-icon{--mdc-icon-size:19px}",
+        ".nm-multi-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.nm-multi-command-grid button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;padding:7px 8px;color:var(--primary-text-color);background:var(--secondary-background-color);font:inherit;font-size:.84rem;font-weight:650;cursor:pointer}.nm-multi-command-grid:not(.nm-has-resume) [data-multi-command=mow]{grid-column:1/-1}.nm-multi-command-grid [data-multi-command=mow],.nm-multi-command-grid [data-multi-command=resume]{color:var(--text-primary-color,#fff);background:var(--primary-color,#03a9f4);box-shadow:none}.nm-multi-command-grid button:disabled{opacity:1;color:var(--disabled-text-color,var(--secondary-text-color))!important;background:var(--disabled-color,var(--secondary-background-color))!important;box-shadow:none;cursor:default}.nm-multi-command-grid ha-icon{--mdc-icon-size:19px}",
         ".nm-multi-command-status{padding:6px 4px 0;text-align:center;color:var(--secondary-text-color);font-size:.74rem}.nm-multi-command-status.error{color:var(--error-color,#db4437)}",
         ".nm-sessions.nm-multi-sessions-active{grid-template-columns:1fr!important;gap:7px!important;width:100%}.nm-multi-session-group{display:grid;grid-template-columns:minmax(80px,auto) 1fr;align-items:start;gap:8px 12px;width:100%}.nm-multi-session-heading{padding-top:2px;color:var(--secondary-text-color);font-size:.76rem;font-weight:750}.nm-multi-session-rows{display:flex;flex-wrap:wrap;gap:5px 10px;min-width:0}.nm-multi-session-empty{color:var(--secondary-text-color);font-size:.8rem;opacity:.7}",
         ".nm-multi-selected-session.nm-session-pulse{animation:nm-multi-session-pulse 720ms ease-in-out 3 forwards}@keyframes nm-multi-session-pulse{0%,100%{opacity:.1;filter:none}50%{opacity:1;filter:drop-shadow(0 0 10px var(--nm-highlight-color,#43a047))}}",

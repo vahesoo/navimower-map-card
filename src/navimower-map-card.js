@@ -973,7 +973,7 @@ var NavimowerMapCard = class extends HTMLElement {
       const command = button.dataset.command;
       if (command === "mow") this._onMowPressed();
       else if (command === "pause") this._runMowerCommand("pause", "Pausing…", "Pause command sent");
-      else if (command === "dock") this._runMowerCommand("dock", "Returning to dock…", "Dock command sent");
+      else if (command === "dock") void this._dockWithCancellationDialog();
     });
     this._sessionsEl?.addEventListener("click", (event) => {
       const sessionButton = event.target?.closest?.(".nm-session[data-session-id]");
@@ -2594,6 +2594,12 @@ var NavimowerMapCard = class extends HTMLElement {
       this._commandBusy = false;
       this._renderControls();
     }
+  }
+  async _dockWithCancellationDialog() {
+    if (this._commandBusy) return;
+    if (!await confirmCancelMowingTask(this, () => mowerState(this))) return;
+    if (!["mowing", "paused"].includes(mowerControlMode(mowerState(this)))) return;
+    await this._runMowerCommand("dock", "Returning to dock…", "Dock command sent");
   }
   _renderDialog() {
     if (!this._modalHostEl) return;
@@ -6826,7 +6832,7 @@ function updateResumeButton(card) {
   // Never enable a command from an old cloud attribute over fresh mower state.
   const allowed = {
     resume: resumeAvailable,
-    mow: kind === "docked",
+    mow: kind === "docked" || kind === "returning",
     pause: kind === "mowing",
     dock: kind === "mowing" || kind === "paused"
   };
@@ -12097,7 +12103,7 @@ const VISUAL_DEFAULTS = Object.freeze({
       const controlMode = mowerControlMode(mower);
       const canResume = (controlMode === "paused" || controlMode === "docked")
         && shouldOfferResume(card._hass, mower, resumeContract);
-      const canMow = controlMode === "docked";
+      const canMow = controlMode === "docked" || controlMode === "returning";
       const canPause = controlMode === "mowing";
       const canDock = controlMode === "mowing" || controlMode === "paused";
       const status = memberState036(card, member.entry_id).command;
@@ -12107,6 +12113,11 @@ const VISUAL_DEFAULTS = Object.freeze({
   }
   async function runMemberCommand036(card, member, command) {
     if (!member || !card?._hass?.callService) return;
+    if (command === "dock") {
+      const getMower = () => state036(card, memberEntities036(member)?.mower);
+      if (!await confirmCancelMowingTask(card, getMower, displayName036(member))) return;
+      if (!["mowing", "paused"].includes(mowerControlMode(getMower()))) return;
+    }
     const state = memberState036(card, member.entry_id);
     const entities = memberEntities036(member);
     card._multi036ActionMember = member;
@@ -17048,3 +17059,78 @@ const VISUAL_DEFAULTS = Object.freeze({
 })();
 
 console.info("[Navimower Map Card] v0.4.0-beta8 loaded");
+
+// 0.4.0-beta9: native-app-style Cancel mowing task confirmation.
+// Opening this modal never calls a mower service. Only Yes submits the
+// existing Dock action; No, Escape, backdrop or a changed state submit nothing.
+function confirmCancelMowingTask(card, stateSnapshot, mowerLabel = null) {
+  if (!card?._modalHostEl || card._commandBusy || card._dockCancelTaskDialog) {
+    return Promise.resolve(false);
+  }
+  if (!["mowing", "paused"].includes(mowerControlMode(stateSnapshot()))) {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    card._dockCancelTaskDialog = { resolve, stateSnapshot, mowerLabel };
+    card._renderDialog?.();
+  });
+}
+
+function renderCancelMowingTaskDialog(card) {
+  const request = card?._dockCancelTaskDialog;
+  const host = card?._modalHostEl;
+  if (!request || !host) return;
+  const detail = request.mowerLabel ? " for " + escapeHtml(String(request.mowerLabel)) : "";
+  host.innerHTML = `
+    <div class="nm-backdrop" data-cancel-task-action="backdrop">
+      <div class="nm-dialog" role="alertdialog" aria-modal="true"
+           aria-labelledby="nm-cancel-task-title" aria-describedby="nm-cancel-task-desc">
+        <div class="nm-dialog-title" id="nm-cancel-task-title">Cancel mowing task?</div>
+        <div class="nm-dialog-hint" id="nm-cancel-task-desc">
+          Cancel the current mowing task${detail} and return to dock?
+          You can select a new mowing area while the mower is returning.
+        </div>
+        <div class="nm-dialog-actions">
+          <button type="button" class="nm-dialog-cancel" data-cancel-task-action="no">No</button>
+          <button type="button" class="nm-dialog-start" data-cancel-task-action="yes">Yes, cancel task</button>
+        </div>
+      </div>
+    </div>`;
+  const close = (confirmed) => {
+    if (card._dockCancelTaskDialog !== request) return;
+    card._dockCancelTaskDialog = null;
+    const now = mowerControlMode(request.stateSnapshot());
+    request.resolve(confirmed && ["mowing", "paused"].includes(now));
+    card._renderDialog?.();
+  };
+  const backdrop = host.querySelector('[data-cancel-task-action="backdrop"]');
+  backdrop?.addEventListener("click", (event) => {
+    if (event.target === backdrop) close(false);
+  });
+  backdrop?.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    close(false);
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  host.querySelector('[data-cancel-task-action="no"]')?.addEventListener("click", () => close(false));
+  host.querySelector('[data-cancel-task-action="yes"]')?.addEventListener("click", () => close(true));
+  host.querySelector('[data-cancel-task-action="yes"]')?.focus?.();
+}
+
+function patchCancelMowingTaskDialogBeta9() {
+  const Card = globalThis.customElements?.get?.("navimower-map-card");
+  if (!Card || Card._cancelMowingTaskDialogBeta9) return;
+  Card._cancelMowingTaskDialogBeta9 = true;
+  const proto = Card.prototype;
+  const previousRenderDialog = proto._renderDialog;
+  proto._renderDialog = function (...args) {
+    if (this._dockCancelTaskDialog) {
+      renderCancelMowingTaskDialog(this);
+      return;
+    }
+    return previousRenderDialog?.apply(this, args);
+  };
+}
+patchCancelMowingTaskDialogBeta9();
+

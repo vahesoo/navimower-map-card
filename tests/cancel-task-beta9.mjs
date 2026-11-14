@@ -4,7 +4,7 @@ import vm from "node:vm";
 
 const source = readFileSync("src/navimower-map-card.js", "utf8");
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-assert.equal(pkg.version, "0.4.0-beta9");
+assert.equal(pkg.version, "0.4.0-beta10");
 assert.match(source, /else if \(command === "dock"\) void this\._dockWithCancellationDialog\(\)/);
 assert.match(source, /if \(command === "dock"\) \{\s*const getMower =/);
 assert.match(source, /async _dockWithCancellationDialog\(\)/);

@@ -7115,7 +7115,7 @@ this._mowerModel032 = this._mowerModel032 || "";
 if (globalThis.customElements) patchCard032Beta1();
 
 // src/navimower-map-card.js
-var NAVIMOWER_MAP_CARD_VERSION2 = "0.4.0-beta7";
+var NAVIMOWER_MAP_CARD_VERSION2 = "0.4.0-beta8";
 var registration = globalThis.window?.customCards?.find?.(
   (card) => card.type === "navimower-map-card"
 );
@@ -17047,4 +17047,4 @@ const VISUAL_DEFAULTS = Object.freeze({
   };
 })();
 
-console.info("[Navimower Map Card] v0.4.0-beta7 loaded");
+console.info("[Navimower Map Card] v0.4.0-beta8 loaded");

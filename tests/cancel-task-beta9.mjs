@@ -32,7 +32,7 @@ function fixture(initial = "mowing") {
     click() { listeners.get(id)?.({ target: this }); },
   }]));
   const backdrop = {
-    addEventListener(_type, cb) { listeners.set("backdrop", cb); },
+    addEventListener(type, cb) { listeners.set(type === "keydown" ? "backdrop-keydown" : "backdrop", cb); },
   };
   const host = {
     innerHTML: "",
@@ -79,6 +79,16 @@ function fixture(initial = "mowing") {
   const pending = context.confirmCancelMowingTask(f.card, f.getState);
   f.listeners.get("backdrop")({ target: f.backdrop });
   assert.equal(await pending, false, "backdrop cancels");
+}
+{
+  const f = fixture();
+  const pending = context.confirmCancelMowingTask(f.card, f.getState);
+  let prevented = false;
+  f.listeners.get("backdrop-keydown")?.({ key: "Escape", preventDefault() { prevented = true; }, stopPropagation() {} });
+  // The fixture binds both click and keydown to the same backdrop; the key
+  // handler must cancel without reaching the Dock command callback.
+  assert.equal(await pending, false, "Escape cancels");
+  assert.equal(prevented, true);
 }
 {
   const f = fixture("returning");

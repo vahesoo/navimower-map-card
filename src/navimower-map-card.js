@@ -17120,8 +17120,8 @@ function renderCancelMowingTaskDialog(card) {
 
 function patchCancelMowingTaskDialogBeta9() {
   const Card = globalThis.customElements?.get?.("navimower-map-card");
-  if (!Card || Card.__navimowerCancelTaskBeta9) return;
-  Card.__navimowerCancelTaskBeta9 = true;
+  if (!Card || Card._cancelMowingTaskDialogBeta9) return;
+  Card._cancelMowingTaskDialogBeta9 = true;
   const proto = Card.prototype;
   const previousRenderDialog = proto._renderDialog;
   proto._renderDialog = function (...args) {

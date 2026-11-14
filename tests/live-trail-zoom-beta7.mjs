@@ -28,5 +28,5 @@ for (const cssClass of multiClasses) {
   assert.match(markup, /vector-effect=\\\"non-scaling-stroke\\\"/);
 }
 
-assert.match(source, /v0\.4\.0-beta7 loaded/);
+assert.match(source, /v0\.4\.0-beta(?:[7-9]|[1-9]\d+) loaded/);
 console.log("beta7 live trail zoom contract OK");

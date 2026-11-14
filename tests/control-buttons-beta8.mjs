@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 const src = readFileSync("src/navimower-map-card.js", "utf8");
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-assert.equal(pkg.version, "0.4.0-beta9");
+assert.equal(pkg.version, "0.4.0-beta10");
 
 // Both single-mower and multi-mower always show all four controls.
 // No hidden Resume button even when the backend returns unavailable.
@@ -23,5 +23,5 @@ assert.match(src, /!canMow \|\| unavailable \? " disabled"/);
 assert.match(src, /!canPause \|\| unavailable \? " disabled"/);
 assert.match(src, /!canDock \|\| unavailable \? " disabled"/);
 assert.match(src, /"navimower", service, resumeTarget\(card\)/);
-assert.ok(src.includes("var(--disabled-color"));
+assert.ok(!src.includes("var(--disabled-color"));
 console.log("beta8: controls always shown, command permissions follow mower state");

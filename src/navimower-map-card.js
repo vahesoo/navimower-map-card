@@ -17107,6 +17107,12 @@ function renderCancelMowingTaskDialog(card) {
   backdrop?.addEventListener("click", (event) => {
     if (event.target === backdrop) close(false);
   });
+  backdrop?.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    close(false);
+    event.preventDefault();
+    event.stopPropagation();
+  });
   host.querySelector('[data-cancel-task-action="no"]')?.addEventListener("click", () => close(false));
   host.querySelector('[data-cancel-task-action="yes"]')?.addEventListener("click", () => close(true));
   host.querySelector('[data-cancel-task-action="yes"]')?.focus?.();
@@ -17124,22 +17130,6 @@ function patchCancelMowingTaskDialogBeta9() {
       return;
     }
     return previousRenderDialog?.apply(this, args);
-  };
-  const previousEnsureDom = proto._ensureDom;
-  proto._ensureDom = function (...args) {
-    const result = previousEnsureDom?.apply(this, args);
-    if (!this._cancelTaskEscapeInstalled) {
-      this._cancelTaskEscapeInstalled = true;
-      this.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && this._dockCancelTaskDialog) {
-          const no = this._modalHostEl?.querySelector?.('[data-cancel-task-action="no"]');
-          no?.click?.();
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      });
-    }
-    return result;
   };
 }
 patchCancelMowingTaskDialogBeta9();
